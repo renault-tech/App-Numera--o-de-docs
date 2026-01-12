@@ -1,0 +1,158 @@
+/* ===== ESTILOS PARA SISTEMA AVANÇADO DE USUÁRIOS ===== */
+
+/* Modal grande para formulário expandido */
+.modal-large {
+    max-width: 750px;
+}
+
+/* Seções do formulário */
+.form-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.form-section h4 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 1.25rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Form row (2 campos lado a lado) */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Checkboxes de documentos */
+.documents-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 0.75rem;
+    max-height: 350px;
+    overflow-y: auto;
+    padding: 1rem;
+    background: var(--bg-hover);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.document-checkbox {
+    padding: 0.75rem;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.document-checkbox:hover {
+    background: white;
+    border-color: #2563eb;
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.document-checkbox input[type="checkbox"] {
+    margin-right: 0.5rem;
+}
+
+.document-checkbox span {
+    font-weight: 500;
+}
+
+.checkbox-actions {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.btn-link {
+    background: none;
+    border: none;
+    color: #2563eb;
+    cursor: pointer;
+    font-weight: 500;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-link:hover {
+    background: rgba(37, 99, 235, 0.1);
+    text-decoration: underline;
+}
+
+.badge-disabled {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-left: 0.5rem;
+}
+
+/* Descrição da permissão */
+#roleDescription {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: rgba(37, 99, 235, 0.05);
+    border-left: 3px solid #2563eb;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+}
+
+/* Scrollbar personalizada para lista de documentos */
+.documents-checkboxes::-webkit-scrollbar {
+    width: 8px;
+}
+
+.documents-checkboxes::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+    border-radius: 4px;
+}
+
+.documents-checkboxes::-webkit-scrollbar-thumb {
+    background: #2563eb;
+    border-radius: 4px;
+}
+
+.documents-checkboxes::-webkit-scrollbar-thumb:hover {
+    background: #1e40af;
+}
+
+/* Melhorar visualização de usuários no admin */
+.admin-doc-item .admin-doc-details {
+    line-height: 1.6;
+}
+
+.admin-doc-item .admin-doc-details strong {
+    color: #2563eb;
+}
+
+/* Botão de reserva desabilitado */
+.reserve-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed !important;
+    background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%) !important;
+}
+
+.reserve-btn:disabled:hover {
+    transform: none !important;
+    box-shadow: none !important;
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Numeração de Documentos</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- App gerado dinamicamente -->
+
+    <script>
+        function resetAppData() {
+            if (confirm('Resetar dados do aplicativo?')) {
+                localStorage.clear();
+                location.reload();
+            }
+        }
+        window.resetAppData = resetAppData;
+    </script>
+
+    <script src="autocomplete.js"></script>
+    <script src="admin-views.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

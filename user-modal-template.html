@@ -1,0 +1,131 @@
+<!-- ===== TEMPLATE HTML - MODAL DE USUÁRIO EXPANDIDO ===== -->
+<!-- 
+    Este template deve SUBSTITUIR o modal userModal existente na função showMainApp()
+    Procure por: <div id="userModal" class="modal">
+-->
+
+<div id="userModal" class="modal">
+    <div class="modal-content modal-large">
+        <div class="modal-header">
+            <h3 id="userModalTitle">Adicionar Usuário</h3>
+            <button class="close-btn" id="closeUserModal">&times;</button>
+        </div>
+        <form id="userForm">
+            <!-- Seção: Informações Pessoais -->
+            <div class="form-section">
+                <h4>📋 Informações Pessoais</h4>
+
+                <div class="form-group">
+                    <label for="userName">Nome Completo *</label>
+                    <input type="text" id="userName" required placeholder="Ex: João Silva Santos">
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="userCargo">Cargo *</label>
+                        <input type="text" id="userCargo" required placeholder="Ex: Assistente Administrativo">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="userSetor">Setor *</label>
+                        <input type="text" id="userSetor" required placeholder="Ex: Recursos Humanos">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="userSecretaria">Secretaria *</label>
+                    <input type="text" id="userSecretaria" required placeholder="Ex: Secretaria de Administração">
+                </div>
+            </div>
+
+            <!-- Seção: Credenciais -->
+            <div class="form-section">
+                <h4>🔐 Credenciais de Acesso</h4>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="userUsername">Usuário (login) *</label>
+                        <input type="text" id="userUsername" required placeholder="Ex: joao.silva">
+                        <p class="help-text">Nome de usuário para fazer login no sistema</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="userPassword">Senha *</label>
+                        <input type="password" id="userPassword" required placeholder="Mínimo 6 caracteres">
+                        <p class="help-text">Senha de acesso ao sistema</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção: Permissões -->
+            <div class="form-section">
+                <h4>🔑 Nível de Permissão</h4>
+
+                <div class="form-group">
+                    <label for="userRole">Permissão do Usuário *</label>
+                    <select id="userRole" required onchange="handleRoleChange()">
+                        <option value="user_restricted">Usuário Restrito</option>
+                        <option value="user_full">Usuário Completo</option>
+                        <option value="user_readonly">Somente Leitura</option>
+                        <option value="admin">Administrador</option>
+                    </select>
+                    <p class="help-text" id="roleDescription">Acesso apenas a documentos específicos</p>
+                </div>
+            </div>
+
+            <!-- Seção: Documentos Permitidos (condicional) -->
+            <div class="form-section" id="documentsSection" style="display: block;">
+                <h4>📄 Documentos Permitidos</h4>
+                <p class="help-text">Selecione quais documentos este usuário poderá visualizar e reservar números</p>
+
+                <div class="checkbox-actions">
+                    <button type="button" class="btn-link" onclick="selectAllDocuments()">
+                        ☑ Selecionar Todos
+                    </button>
+                    <button type="button" class="btn-link" onclick="deselectAllDocuments()">
+                        ☐ Desmarcar Todos
+                    </button>
+                </div>
+
+                <div id="documentsList" class="documents-checkboxes">
+                    <!-- Checkboxes serão gerados dinamicamente -->
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn-secondary" id="cancelUserBtn">Cancelar</button>
+                <button type="submit" class="btn-primary">Salvar Usuário</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ===== NOTAS DE INTEGRAÇÃO ===== -->
+<!--
+1. Este template substitui completamente o modal userModal existente
+
+2. Adicionar no <head> do index.html ou antes do </body>:
+   <script src="user-permissions.js"></script>
+
+3. O CSS já foi adicionado ao styles.css principal
+
+4. Eventos que já funcionam automaticamente:
+   - handleRoleChange() - Chamado quando muda a permissão
+   - selectAllDocuments() - Seleciona todos os checkboxes
+   - deselectAllDocuments() - Desmarca todos os checkboxes
+   - handleUserFormSubmit() - Processa o formulário (já atualizado)
+
+5. As funções openAddUserModal() e openEditUserModal() foram atualizadas
+   para funcionar com o novo modal
+
+6. A função renderAdminUsers() foi atualizada para mostrar os novos campos
+
+7. IMPORTANTE: Atualizar a função renderDocuments() para usar:
+   const visibleDocs = filterDocumentsByUserPermission();
+
+8. IMPORTANTE: Atualizar o botão de reservar para verificar permissão:
+   ${canReserveNumber(doc.id) ? 
+       `<button class="reserve-btn" onclick="reserveNumber('${doc.id}')">Reservar Número</button>` :
+       `<button class="reserve-btn" disabled>Sem Permissão</button>`
+   }
+-->

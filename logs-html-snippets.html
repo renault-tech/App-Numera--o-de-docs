@@ -1,0 +1,62 @@
+<!-- HTML para Sistema de Logs - Adicionar na seção admin do showMainApp() -->
+
+<!-- Adicionar nova seção após "Gerenciar Usuários" -->
+<section class="manage-section logs-section">
+    <div class="section-header">
+        <h2>📊 Logs do Sistema</h2>
+    </div>
+
+    <div class="logs-filters">
+        <button class="log-filter-btn active" data-filter="todos" onclick="filterLogs('todos')">
+            📋 Todos
+        </button>
+        <button class="log-filter-btn" data-filter="cadastro" onclick="filterLogs('cadastro')">
+            📝 Cadastros
+        </button>
+        <button class="log-filter-btn" data-filter="reserva" onclick="filterLogs('reserva')">
+            🔢 Reservas
+        </button>
+
+        <div class="logs-search">
+            <input type="text" id="logsSearch" placeholder="Buscar nos logs..." oninput="handleLogsSearch()">
+        </div>
+    </div>
+
+    <div id="logsList" class="logs-list"></div>
+</section>
+
+<!-- ========================================= -->
+<!-- HTML para Campos Expandidos de Usuário -->
+<!-- Modificar o modal de usuário (userModal) -->
+<!-- ========================================= -->
+
+<!-- Adicionar APÓS o campo "Nome Completo" e ANTES do campo "Usuário (login)" -->
+
+<div class="form-group">
+    <label for="userCargo">Cargo</label>
+    <input type="text" id="userCargo" required placeholder="Ex: Secretário, Assistente, Coordenador...">
+</div>
+
+<div class="form-group">
+    <label for="userSetor">Setor</label>
+    <input type="text" id="userSetor" required placeholder="Ex: Financeiro, RH, Jurídico...">
+</div>
+
+<div class="form-group">
+    <label for="userSecretaria">Secretaria</label>
+    <input type="text" id="userSecretaria" required placeholder="Ex: Secretaria de Saúde, Educação...">
+</div>
+
+<!-- ========================================= -->
+<!-- Atualizar renderAdminUsers para mostrar novos campos -->
+<!-- ========================================= -->
+
+<!-- No JavaScript, modificar a div admin-doc-details para incluir: -->
+<div class="admin-doc-details">
+    Usuário: ${user.username} |
+    Cargo: ${user.cargo || 'N/A'} |
+    Setor: ${user.setor || 'N/A'} |
+    Secretaria: ${user.secretaria || 'N/A'} |
+    Permissão: ${user.role === 'admin' ? '🔑 Administrador' : '👤 Usuário'} |
+    Criado em: ${formatDate(new Date(user.createdAt))}
+</div>

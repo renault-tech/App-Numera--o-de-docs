@@ -1,0 +1,110 @@
+/* Estilos para cards de navegação e views do admin */
+
+.admin-nav-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.admin-nav-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.15);
+    border-color: #2563eb;
+}
+
+.admin-nav-card.active {
+    background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+    border-color: #2563eb;
+    color: white;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.3);
+}
+
+.admin-nav-card.active .stat-label,
+.admin-nav-card.active .help-text {
+    color: white !important;
+}
+
+.admin-nav-card .stat-icon {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(37, 99, 235, 0.1);
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+.admin-nav-card.active .stat-icon {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.admin-nav-card .stat-icon svg {
+    color: #2563eb;
+}
+
+.admin-nav-card.active .stat-icon svg {
+    color: white;
+}
+
+.admin-sub-view {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.admin-sub-view.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.view-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.view-header h2 {
+    font-size: 1.75rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.view-header p {
+    color: var(--text-secondary);
+}
+
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-bottom: 1rem;
+}
+
+.back-btn:hover {
+    background: var(--bg-hover);
+    border-color: #2563eb;
+}
