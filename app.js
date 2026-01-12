@@ -154,7 +154,7 @@ function handleLogin(e) {
         addLog('sistema', 'Login realizado', `${user.name} acessou o sistema`);
         showMainApp();
     } else {
-        alert('Usuário ou senha incorretos!');
+        showAlertModal('❌ Erro de Login', 'Usuário ou senha incorretos!');
     }
 }
 
@@ -239,6 +239,7 @@ function showMainApp() {
             ${isAdmin ? `
             <main id="adminView" class="view">
                 <div class="admin-content">
+                    <!-- Estatísticas -->
                     <section class="stats-section">
                         <h2>Estatísticas</h2>
                         <div class="stats-grid">
@@ -261,24 +262,153 @@ function showMainApp() {
                         </div>
                     </section>
 
-                    <section class="manage-section">
-                        <div class="section-header">
-                            <h2>Gerenciar Documentos</h2>
-                            <button class="btn-primary" onclick="openAddDocModal()">➕ Adicionar Documento</button>
+                    <!-- Cards de Navegação -->
+                    <section class="nav-section">
+                        <h2>Gerenciamento</h2>
+                        <div class="nav-cards-grid">
+                            <div class="nav-card" onclick="showAdminSection('documentos')">
+                                <div class="nav-card-icon">📄</div>
+                                <div class="nav-card-title">Documentos</div>
+                                <div class="nav-card-desc">Gerenciar tipos de documentos</div>
+                            </div>
+                            <div class="nav-card" onclick="showAdminSection('usuarios')">
+                                <div class="nav-card-icon">👥</div>
+                                <div class="nav-card-title">Usuários</div>
+                                <div class="nav-card-desc">Gerenciar usuários e permissões</div>
+                            </div>
+                            <div class="nav-card" onclick="showAdminSection('logs')">
+                                <div class="nav-card-icon">📊</div>
+                                <div class="nav-card-title">Logs</div>
+                                <div class="nav-card-desc">Visualizar logs do sistema</div>
+                            </div>
                         </div>
+                    </section>
+
+                    <!-- View: Documentos -->
+                    <div id="adminSectionDocumentos" class="admin-section" style="display: none;">
+                        <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
+                        <h2>📄 Gerenciar Documentos</h2>
+                        <button class="btn-primary" onclick="toggleDocForm()" style="margin-bottom: 1.5rem;">➕ Adicionar Documento</button>
+                        
+                        <!-- Formulário Inline -->
+                        <div id="docFormInline" class="inline-form" style="display: none;">
+                            <h3 id="docFormTitle">Adicionar Documento</h3>
+                            <form id="docForm" onsubmit="handleDocFormSubmit(event)">
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="docName">Nome do Documento *</label>
+                                        <input type="text" id="docName" required placeholder="Ex: Ofício">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="docPrefix">Prefixo</label>
+                                        <input type="text" id="docPrefix" placeholder="Ex: Of.">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label for="startNumber">Número Inicial *</label>
+                                        <input type="number" id="startNumber" value="1" min="1" required>
+                                    </div>
+                                    <div class="checkbox-group">
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" id="yearlyReset">
+                                            <span>Resetar numeração anualmente</span>
+                                        </label>
+                                        <label class="checkbox-label">
+                                            <input type="checkbox" id="docEnabled" checked>
+                                            <span>Documento habilitado</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" onclick="toggleDocForm()">Cancelar</button>
+                                    <button type="submit" class="btn-primary">Salvar</button>
+                                </div>
+                            </form>
+                        </div>
+                        
                         <div id="adminDocsList" class="admin-docs-list"></div>
-                    </section>
+                    </div>
 
-                    <section class="manage-section">
-                        <div class="section-header">
-                            <h2>Gerenciar Usuários</h2>
-                            <button class="btn-primary" onclick="openAddUserModal()">➕ Adicionar Usuário</button>
+                    <!-- View: Usuários -->
+                    <div id="adminSectionUsuarios" class="admin-section" style="display: none;">
+                        <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
+                        <h2>👥 Gerenciar Usuários</h2>
+                        <button class="btn-primary" onclick="toggleUserForm()" style="margin-bottom: 1.5rem;">➕ Adicionar Usuário</button>
+                        
+                        <!-- Formulário Inline -->
+                        <div id="userFormInline" class="inline-form" style="display: none;">
+                            <h3 id="userFormTitle">Adicionar Usuário</h3>
+                            <form id="userForm" onsubmit="handleUserFormSubmit(event)">
+                                <div class="form-section-inline">
+                                    <h4>📋 Informações Pessoais</h4>
+                                    <div class="form-group">
+                                        <label for="userName">Nome Completo *</label>
+                                        <input type="text" id="userName" required>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="userCargo">Cargo *</label>
+                                            <input type="text" id="userCargo" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="userSetor">Setor *</label>
+                                            <input type="text" id="userSetor" required>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="userSecretaria">Secretaria *</label>
+                                        <input type="text" id="userSecretaria" required>
+                                    </div>
+                                </div>
+                                <div class="form-section-inline">
+                                    <h4>🔐 Credenciais</h4>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label for="userUsername">Usuário (login) *</label>
+                                            <input type="text" id="userUsername" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label for="userPassword">Senha *</label>
+                                            <input type="password" id="userPassword" required>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-section-inline">
+                                    <h4>🔑 Permissão</h4>
+                                    <div class="form-group">
+                                        <label for="userRole">Nível de Permissão *</label>
+                                        <select id="userRole" required onchange="handleRoleChange()">
+                                            <option value="user_restricted">Usuário Restrito</option>
+                                            <option value="user_full">Usuário Completo</option>
+                                            <option value="user_readonly">Somente Leitura</option>
+                                            <option value="admin">Administrador</option>
+                                        </select>
+                                        <p class="help-text" id="roleDescription">Acesso apenas a documentos específicos</p>
+                                    </div>
+                                </div>
+                                <div class="form-section-inline" id="documentsSection">
+                                    <h4>📄 Documentos Permitidos</h4>
+                                    <div class="checkbox-actions">
+                                        <button type="button" class="btn-link" onclick="selectAllDocs()">☑ Todos</button>
+                                        <button type="button" class="btn-link" onclick="deselectAllDocs()">☐ Nenhum</button>
+                                    </div>
+                                    <div id="documentsList" class="documents-checkboxes"></div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="button" class="btn-secondary" onclick="toggleUserForm()">Cancelar</button>
+                                    <button type="submit" class="btn-primary">Salvar Usuário</button>
+                                </div>
+                            </form>
                         </div>
+                        
                         <div id="adminUsersList" class="admin-docs-list"></div>
-                    </section>
+                    </div>
 
-                    <section class="manage-section logs-section">
-                        <div class="section-header"><h2>📊 Logs do Sistema</h2></div>
+                    <!-- View: Logs -->
+                    <div id="adminSectionLogs" class="admin-section" style="display: none;">
+                        <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
+                        <h2>📊 Logs do Sistema</h2>
                         <div class="logs-filters">
                             <button class="log-filter-btn active" onclick="filterLogs('todos')">📋 Todos</button>
                             <button class="log-filter-btn" onclick="filterLogs('cadastro')">📝 Cadastros</button>
@@ -288,117 +418,39 @@ function showMainApp() {
                             </div>
                         </div>
                         <div id="logsList" class="logs-list"></div>
-                    </section>
+                    </div>
                 </div>
             </main>
             ` : ''}
 
-            <!-- Modal Documento -->
-            <div id="docModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 id="modalTitle">Adicionar Documento</h3>
-                        <button class="close-btn" onclick="closeDocModal()">&times;</button>
+            <!-- Custom Modal: Confirmação -->
+            <div id="customConfirmModal" class="custom-modal-overlay">
+                <div class="custom-modal">
+                    <div class="custom-modal-header">
+                        <h3 id="confirmModalTitle">Confirmar</h3>
                     </div>
-                    <form id="docForm" onsubmit="handleDocFormSubmit(event)">
-                        <div class="form-group">
-                            <label for="docName">Nome do Documento *</label>
-                            <input type="text" id="docName" required placeholder="Ex: Ofício">
-                        </div>
-                        <div class="form-group">
-                            <label for="docPrefix">Prefixo</label>
-                            <input type="text" id="docPrefix" placeholder="Ex: Of.">
-                        </div>
-                        <div class="form-group">
-                            <label for="startNumber">Número Inicial *</label>
-                            <input type="number" id="startNumber" value="1" min="1" required>
-                        </div>
-                        <div class="checkbox-group">
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="yearlyReset">
-                                <span>Resetar numeração anualmente</span>
-                            </label>
-                            <label class="checkbox-label">
-                                <input type="checkbox" id="docEnabled" checked>
-                                <span>Documento habilitado</span>
-                            </label>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn-secondary" onclick="closeDocModal()">Cancelar</button>
-                            <button type="submit" class="btn-primary">Salvar</button>
-                        </div>
-                    </form>
+                    <div class="custom-modal-body">
+                        <p id="confirmModalMessage"></p>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button id="cancelBtn" class="modal-btn modal-btn-cancel">Cancelar</button>
+                        <button id="confirmBtn" class="modal-btn modal-btn-confirm">Confirmar</button>
+                    </div>
                 </div>
             </div>
 
-            <!-- Modal Usuário -->
-            <div id="userModal" class="modal">
-                <div class="modal-content modal-large">
-                    <div class="modal-header">
-                        <h3 id="userModalTitle">Adicionar Usuário</h3>
-                        <button class="close-btn" onclick="closeUserModal()">&times;</button>
+            <!-- Custom Modal: Alerta -->
+            <div id="customAlertModal" class="custom-modal-overlay">
+                <div class="custom-modal">
+                    <div class="custom-modal-header">
+                        <h3 id="alertModalTitle">Aviso</h3>
                     </div>
-                    <form id="userForm" onsubmit="handleUserFormSubmit(event)">
-                        <div class="form-section">
-                            <h4>📋 Informações Pessoais</h4>
-                            <div class="form-group">
-                                <label for="userName">Nome Completo *</label>
-                                <input type="text" id="userName" required>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="userCargo">Cargo *</label>
-                                    <input type="text" id="userCargo" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="userSetor">Setor *</label>
-                                    <input type="text" id="userSetor" required>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label for="userSecretaria">Secretaria *</label>
-                                <input type="text" id="userSecretaria" required>
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <h4>🔐 Credenciais</h4>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="userUsername">Usuário (login) *</label>
-                                    <input type="text" id="userUsername" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="userPassword">Senha *</label>
-                                    <input type="password" id="userPassword" required>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="form-section">
-                            <h4>🔑 Permissão</h4>
-                            <div class="form-group">
-                                <label for="userRole">Nível de Permissão *</label>
-                                <select id="userRole" required onchange="handleRoleChange()">
-                                    <option value="user_restricted">Usuário Restrito</option>
-                                    <option value="user_full">Usuário Completo</option>
-                                    <option value="user_readonly">Somente Leitura</option>
-                                    <option value="admin">Administrador</option>
-                                </select>
-                                <p class="help-text" id="roleDescription">Acesso apenas a documentos específicos</p>
-                            </div>
-                        </div>
-                        <div class="form-section" id="documentsSection">
-                            <h4>📄 Documentos Permitidos</h4>
-                            <div class="checkbox-actions">
-                                <button type="button" class="btn-link" onclick="selectAllDocs()">☑ Todos</button>
-                                <button type="button" class="btn-link" onclick="deselectAllDocs()">☐ Nenhum</button>
-                            </div>
-                            <div id="documentsList" class="documents-checkboxes"></div>
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" class="btn-secondary" onclick="closeUserModal()">Cancelar</button>
-                            <button type="submit" class="btn-primary">Salvar Usuário</button>
-                        </div>
-                    </form>
+                    <div class="custom-modal-body">
+                        <p id="alertModalMessage"></p>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button id="alertOkBtn" class="modal-btn modal-btn-ok">OK</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -474,7 +526,6 @@ function renderDocuments() {
         <div class="doc-card">
             <div class="doc-card-header">
                 <div class="doc-icon">📄</div>
-                <div class="doc-badge">#${String(doc.currentNumber).padStart(3, '0')}</div>
             </div>
             <div class="doc-name">${doc.name}</div>
             <div class="doc-prefix">${doc.prefix || 'Sem prefixo'}</div>
@@ -499,31 +550,43 @@ function reserveNumber(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
 
-    const reservation = {
-        id: generateId(),
-        docId: doc.id,
-        docName: doc.name,
-        number: doc.currentNumber,
-        formattedNumber: formatNumber(doc),
-        userId: state.currentUser.id,
-        userName: state.currentUser.name,
-        timestamp: new Date().toISOString()
-    };
+    // Modal de confirmação customizado
+    const nextNumber = formatNumber(doc);
+    const confirmMessage = `Deseja realmente reservar o número?\n\nDocumento: ${doc.name}\nNúmero: ${nextNumber}`;
 
-    doc.currentNumber++;
-    state.reservations.unshift(reservation);
+    showConfirmModal(
+        '⚠️ Confirmação de Reserva',
+        confirmMessage,
+        () => {
+            // Confirmado - reservar número
+            const reservation = {
+                id: generateId(),
+                docId: doc.id,
+                docName: doc.name,
+                number: doc.currentNumber,
+                formattedNumber: formatNumber(doc),
+                userId: state.currentUser.id,
+                userName: state.currentUser.name,
+                timestamp: new Date().toISOString()
+            };
 
-    saveData();
-    addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber}`);
+            doc.currentNumber++;
+            state.reservations.unshift(reservation);
 
-    renderDocuments();
-    renderHistory();
-    if (state.currentUser.role === 'admin') {
-        renderAdminDocs();
-        updateStats();
-    }
+            saveData();
+            addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber}`);
 
-    alert(`Número reservado: ${reservation.formattedNumber}`);
+            renderDocuments();
+            renderHistory();
+            if (state.currentUser.role === 'admin') {
+                renderAdminDocs();
+                updateStats();
+            }
+
+            // Modal de sucesso
+            showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}`);
+        }
+    );
 }
 
 // Renderizar histórico
@@ -671,12 +734,55 @@ function updateStats() {
     document.getElementById('todayReservations').textContent = todayCount;
 }
 
-// Modals - Documento
-function openAddDocModal() {
-    state.editingDocId = null;
-    document.getElementById('modalTitle').textContent = 'Adicionar Documento';
-    document.getElementById('docForm').reset();
-    document.getElementById('docModal').classList.add('active');
+// Navegação Admin
+function showAdminSection(section) {
+    // Esconder todos
+    document.querySelectorAll('.admin-section').forEach(el => el.style.display = 'none');
+    const navSection = document.querySelector('.nav-section');
+    if (navSection) navSection.style.display = 'none';
+
+    // Mostrar seção específica
+    const sectionEl = document.getElementById(`adminSection${section.charAt(0).toUpperCase() + section.slice(1)}`);
+    if (sectionEl) {
+        sectionEl.style.display = 'block';
+
+        // Renderizar conteúdo
+        if (section === 'documentos') renderAdminDocs();
+        if (section === 'usuarios') {
+            renderAdminUsers();
+            renderDocCheckboxes();
+        }
+        if (section === 'logs') renderLogs();
+    }
+}
+
+function hideAdminSections() {
+    document.querySelectorAll('.admin-section').forEach(el => {
+        el.style.display = 'none';
+        // Fechar formulários abertos
+        const docForm = document.getElementById('docFormInline');
+        const userForm = document.getElementById('userFormInline');
+        if (docForm) docForm.style.display = 'none';
+        if (userForm) userForm.style.display = 'none';
+    });
+    const navSection = document.querySelector('.nav-section');
+    if (navSection) navSection.style.display = 'block';
+}
+
+// Modals - Documento (INLINE)
+function toggleDocForm() {
+    const form = document.getElementById('docFormInline');
+    const isVisible = form.style.display !== 'none';
+
+    if (isVisible) {
+        form.style.display = 'none';
+        state.editingDocId = null;
+    } else {
+        form.style.display = 'block';
+        document.getElementById('docFormTitle').textContent = 'Adicionar Documento';
+        document.getElementById('docForm').reset();
+        document.getElementById('docEnabled').checked = true;
+    }
 }
 
 function openEditDocModal(docId) {
@@ -684,17 +790,16 @@ function openEditDocModal(docId) {
     if (!doc) return;
 
     state.editingDocId = docId;
-    document.getElementById('modalTitle').textContent = 'Editar Documento';
+    document.getElementById('docFormTitle').textContent = 'Editar Documento';
     document.getElementById('docName').value = doc.name;
     document.getElementById('docPrefix').value = doc.prefix || '';
     document.getElementById('startNumber').value = doc.startNumber;
     document.getElementById('yearlyReset').checked = doc.yearlyReset;
     document.getElementById('docEnabled').checked = doc.enabled;
-    document.getElementById('docModal').classList.add('active');
-}
+    document.getElementById('docFormInline').style.display = 'block';
 
-function closeDocModal() {
-    document.getElementById('docModal').classList.remove('active');
+    // Scroll to form
+    document.getElementById('docFormInline').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function handleDocFormSubmit(e) {
@@ -726,7 +831,7 @@ function handleDocFormSubmit(e) {
     renderAdminDocs();
     renderDocuments();
     updateStats();
-    closeDocModal();
+    toggleDocForm(); // Fecha o formulário inline
 }
 
 function toggleDocStatus(docId) {
@@ -739,24 +844,36 @@ function toggleDocStatus(docId) {
 }
 
 function deleteDocument(docId) {
-    if (!confirm('Excluir este documento?')) return;
     const doc = state.documents.find(d => d.id === docId);
-    state.documents = state.documents.filter(d => d.id !== docId);
-    saveData();
-    addLog('cadastro', 'Excluiu documento', doc.name);
-    renderAdminDocs();
-    renderDocuments();
-    updateStats();
+    showConfirmModal(
+        '⚠️ Confirmar Exclusão',
+        `Tem certeza que deseja excluir o documento "${doc.name}"?`,
+        () => {
+            state.documents = state.documents.filter(d => d.id !== docId);
+            saveData();
+            addLog('cadastro', 'Excluiu documento', doc.name);
+            renderAdminDocs();
+            renderDocuments();
+            updateStats();
+        }
+    );
 }
 
-// Modals - Usuário
-function openAddUserModal() {
-    state.editingUserId = null;
-    document.getElementById('userModalTitle').textContent = 'Adicionar Usuário';
-    document.getElementById('userForm').reset();
-    document.getElementById('userRole').value = 'user_restricted';
-    handleRoleChange();
-    document.getElementById('userModal').classList.add('active');
+// Modals - Usuário (INLINE)
+function toggleUserForm() {
+    const form = document.getElementById('userFormInline');
+    const isVisible = form.style.display !== 'none';
+
+    if (isVisible) {
+        form.style.display = 'none';
+        state.editingUserId = null;
+    } else {
+        form.style.display = 'block';
+        document.getElementById('userFormTitle').textContent = 'Adicionar Usuário';
+        document.getElementById('userForm').reset();
+        document.getElementById('userRole').value = 'user_restricted';
+        handleRoleChange();
+    }
 }
 
 function openEditUserModal(userId) {
@@ -764,7 +881,7 @@ function openEditUserModal(userId) {
     if (!user) return;
 
     state.editingUserId = userId;
-    document.getElementById('userModalTitle').textContent = 'Editar Usuário';
+    document.getElementById('userFormTitle').textContent = 'Editar Usuário';
     document.getElementById('userName').value = user.name;
     document.getElementById('userCargo').value = user.cargo || '';
     document.getElementById('userSetor').value = user.setor || '';
@@ -784,11 +901,10 @@ function openEditUserModal(userId) {
         }, 100);
     }
 
-    document.getElementById('userModal').classList.add('active');
-}
+    document.getElementById('userFormInline').style.display = 'block';
 
-function closeUserModal() {
-    document.getElementById('userModal').classList.remove('active');
+    // Scroll to form
+    document.getElementById('userFormInline').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function handleRoleChange() {
@@ -807,7 +923,9 @@ function handleRoleChange() {
 }
 
 function renderDocCheckboxes() {
-    const container = document.querySelector('#userModal #documentsList');
+    const container = document.querySelector('#userFormInline #documentsList');
+    if (!container) return;
+
     container.innerHTML = state.documents
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(doc => `
@@ -838,7 +956,7 @@ function handleUserFormSubmit(e) {
     if (role === 'user_restricted' || role === 'user_readonly') {
         allowedDocuments = Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => cb.value);
         if (allowedDocuments.length === 0) {
-            alert('Selecione pelo menos um documento!');
+            showAlertModal('⚠️ Aviso', 'Selecione pelo menos um documento!');
             return;
         }
     }
@@ -856,7 +974,7 @@ function handleUserFormSubmit(e) {
 
     const existing = state.users.find(u => u.username === formData.username && u.id !== state.editingUserId);
     if (existing) {
-        alert('Este nome de usuário já existe!');
+        showAlertModal('⚠️ Aviso', 'Este nome de usuário já existe!');
         return;
     }
 
@@ -876,17 +994,22 @@ function handleUserFormSubmit(e) {
     saveUsers();
     renderAdminUsers();
     updateStats();
-    closeUserModal();
+    toggleUserForm(); // Fecha o formulário inline
 }
 
 function deleteUser(userId) {
-    if (!confirm('Excluir este usuário?')) return;
     const user = state.users.find(u => u.id === userId);
-    state.users = state.users.filter(u => u.id !== userId);
-    saveUsers();
-    addLog('cadastro', 'Excluiu usuário', user.name);
-    renderAdminUsers();
-    updateStats();
+    showConfirmModal(
+        '⚠️ Confirmar Exclusão',
+        `Tem certeza que deseja excluir o usuário "${user.name}"?`,
+        () => {
+            state.users = state.users.filter(u => u.id !== userId);
+            saveUsers();
+            addLog('cadastro', 'Excluiu usuário', user.name);
+            renderAdminUsers();
+            updateStats();
+        }
+    );
 }
 
 // Utilitários
@@ -901,3 +1024,59 @@ function formatDate(date) {
 function formatTime(date) {
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
+
+// Custom Modal Functions
+function showConfirmModal(title, message, onConfirm, onCancel) {
+    const overlay = document.getElementById('customConfirmModal');
+    document.getElementById('confirmModalTitle').innerHTML = title;
+    document.getElementById('confirmModalMessage').textContent = message;
+
+    const confirmBtn = document.getElementById('confirmBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+
+    // Remove event listeners antigos
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    const newCancelBtn = cancelBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+
+    // Adicionar novos event listeners
+    document.getElementById('confirmBtn').addEventListener('click', () => {
+        hideCustomModal();
+        if (onConfirm) onConfirm();
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', () => {
+        hideCustomModal();
+        if (onCancel) onCancel();
+    });
+
+    overlay.classList.add('active');
+}
+
+function showAlertModal(title, message, onOk) {
+    const overlay = document.getElementById('customAlertModal');
+    document.getElementById('alertModalTitle').innerHTML = title;
+    document.getElementById('alertModalMessage').textContent = message;
+
+    const okBtn = document.getElementById('alertOkBtn');
+
+    // Remove event listener antigo
+    const newOkBtn = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOkBtn, okBtn);
+
+    // Adicionar novo event listener
+    document.getElementById('alertOkBtn').addEventListener('click', () => {
+        hideCustomModal();
+        if (onOk) onOk();
+    });
+
+    overlay.classList.add('active');
+}
+
+function hideCustomModal() {
+    document.getElementById('customConfirmModal')?.classList.remove('active');
+    document.getElementById('customAlertModal')?.classList.remove('active');
+}
+
+// Cache buster: 20260112200732

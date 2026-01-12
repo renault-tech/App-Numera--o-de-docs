@@ -170,15 +170,15 @@ body {
 /* Documents Grid */
 .documents-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1.25rem;
 }
 
 .doc-card {
     background: var(--bg-card);
     border: 2px solid var(--border-color);
-    border-radius: 16px;
-    padding: 2rem;
+    border-radius: 12px;
+    padding: 1.2rem;
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
@@ -209,13 +209,13 @@ body {
 
 .doc-card-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: flex-start;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .doc-icon {
-    font-size: 2rem;
+    font-size: 1.2rem;
 }
 
 .doc-badge {
@@ -228,35 +228,36 @@ body {
 }
 
 .doc-name {
-    font-size: 1.25rem;
+    font-size: 1rem;
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.4rem;
 }
 
 .doc-prefix {
     color: var(--text-secondary);
-    font-size: 0.875rem;
-    margin-bottom: 1rem;
+    font-size: 0.8rem;
+    margin-bottom: 0.75rem;
 }
 
 .doc-number {
-    font-size: 2rem;
+    font-size: 1.25rem;
     font-weight: 700;
     background: var(--primary-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .reserve-btn {
     width: 100%;
-    padding: 0.75rem;
+    padding: 0.65rem;
     background: var(--primary-gradient);
     color: white;
     border: none;
-    border-radius: 12px;
+    border-radius: 8px;
     font-weight: 600;
+    font-size: 0.9rem;
     cursor: pointer;
     transition: all 0.3s ease;
 }
@@ -349,6 +350,10 @@ body {
 .admin-content {
     display: grid;
     gap: 2rem;
+}
+
+.stats-section {
+    margin-bottom: 2rem;
 }
 
 .stats-grid {
@@ -796,7 +801,144 @@ select:focus {
     .login-card {
         padding: 2rem;
     }
-}/* Estilos para Sistema de Logs - Adicionar ao styles.css */
+}
+
+/* Custom Modals (Confirm & Alert) */
+.custom-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.8);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(8px);
+    animation: fadeIn 0.2s ease;
+}
+
+.custom-modal-overlay.active {
+    display: flex;
+}
+
+.custom-modal {
+    background: var(--bg-secondary);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.3s ease;
+}
+
+.custom-modal-header {
+    padding: 1.5rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.custom-modal-header h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.custom-modal-body {
+    padding: 1.5rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+.custom-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 2px solid var(--border-color);
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.modal-btn {
+    padding: 0.65rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.modal-btn-cancel {
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--border-color);
+}
+
+.modal-btn-cancel:hover {
+    background: var(--bg-hover);
+    border-color: #2563eb;
+}
+
+.modal-btn-confirm {
+    background: var(--primary-gradient);
+    color: white;
+}
+
+.modal-btn-confirm:hover {
+    transform: scale(1.02);
+    box-shadow: var(--glow-blue);
+}
+
+.modal-btn-ok {
+    background: var(--primary-gradient);
+    color: white;
+    min-width: 100px;
+}
+
+.modal-btn-ok:hover {
+    transform: scale(1.02);
+    box-shadow: var(--glow-blue);
+}
+
+/* Admin Cards */
+.admin-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease;
+}
+
+.admin-card:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: #3b82f6;
+}
+
+.admin-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.admin-card-header h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-primary);
+}
+
+/* Estilos para Sistema de Logs - Adicionar ao styles.css */
 
 /* Seção de Logs */
 .logs-section {
@@ -914,20 +1056,21 @@ select:focus {
         flex-direction: column;
         align-items: stretch;
     }
-    
+
     .logs-search {
         max-width: 100%;
     }
-    
+
     .log-header {
         flex-wrap: wrap;
     }
-    
+
     .log-time {
         margin-left: 0;
         width: 100%;
     }
 }
+
 /* ===== ESTILOS PARA SISTEMA AVANÇADO DE USUÁRIOS ===== */
 
 /* Modal grande para formulário expandido */
@@ -1086,6 +1229,7 @@ select:focus {
     transform: none !important;
     box-shadow: none !important;
 }
+
 /* Estilos para cards de navegação e views do admin */
 
 .admin-nav-card {
