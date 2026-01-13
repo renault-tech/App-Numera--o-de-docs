@@ -281,6 +281,11 @@ function showMainApp() {
                                 <div class="nav-card-title">Logs</div>
                                 <div class="nav-card-desc">Visualizar logs do sistema</div>
                             </div>
+                            <div class="nav-card" onclick="showAdminSection('backup')">
+                                <div class="nav-card-icon">💾</div>
+                                <div class="nav-card-title">Backup</div>
+                                <div class="nav-card-desc">Exportar e importar dados</div>
+                            </div>
                         </div>
                     </section>
 
@@ -419,6 +424,48 @@ function showMainApp() {
                         </div>
                         <div id="logsList" class="logs-list"></div>
                     </div>
+
+                    <!-- View: Backup -->
+                    <div id="adminSectionBackup" class="admin-section" style="display: none;">
+                        <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
+                        <h2>💾 Backup de Dados</h2>
+                        
+                        <div class="backup-section">
+                            <div class="backup-card">
+                                <div class="backup-card-content">
+                                    <div class="backup-icon">📥</div>
+                                    <h3>Exportar Dados</h3>
+                                    <p>Baixar todos os dados do sistema em formato JSON. Use este arquivo para fazer backup ou transferir para outro computador.</p>
+                                    <button class="btn-primary" onclick="exportData()" style="margin-top: 1rem;">📥 Exportar Dados</button>
+                                </div>
+                            </div>
+                            
+                            <div class="backup-card">
+                                <div class="backup-card-content">
+                                    <div class="backup-icon">📤</div>
+                                    <h3>Importar Dados</h3>
+                                    <p>Carregar dados de um arquivo de backup. <strong>Atenção:</strong> Esta ação substituirá todos os dados atuais!</p>
+                                    <button class="btn-secondary" onclick="importData()" style="margin-top: 1rem; background: var(--warning-gradient); color: white;">📤 Importar Dados</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="backup-info">
+                            <h3>ℹ️ Informações Importantes</h3>
+                            <ul>
+                                <li><strong>O que é exportado:</strong> Documentos, reservas, usuários e logs</li>
+                                <li><strong>Formato:</strong> Arquivo JSON</li>
+                                <li><strong>Como usar:</strong> 
+                                    <ol>
+                                        <li>Exporte os dados neste computador</li>
+                                        <li>Copie o arquivo para o outro computador</li>
+                                        <li>Importe o arquivo no outro computador</li>
+                                    </ol>
+                                </li>
+                                <li><strong>Atenção:</strong> Ao importar, todos os dados atuais serão substituídos</li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </main>
             ` : ''}
@@ -524,9 +571,6 @@ function renderDocuments() {
 
     container.innerHTML = docs.map(doc => `
         <div class="doc-card">
-            <div class="doc-card-header">
-                <div class="doc-icon">📄</div>
-            </div>
             <div class="doc-name">${doc.name}</div>
             <div class="doc-prefix">${doc.prefix || 'Sem prefixo'}</div>
             <div class="doc-number">${formatNumber(doc)}</div>
@@ -550,9 +594,17 @@ function reserveNumber(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
 
+    // Solicitar assunto do documento
+    const subject = prompt('Digite o assunto do documento:');
+
+    // Se cancelou ou não digitou nada, não prossegue
+    if (subject === null || subject.trim() === '') {
+        return;
+    }
+
     // Modal de confirmação customizado
     const nextNumber = formatNumber(doc);
-    const confirmMessage = `Deseja realmente reservar o número?\n\nDocumento: ${doc.name}\nNúmero: ${nextNumber}`;
+    const confirmMessage = `Deseja realmente reservar o número?\n\nDocumento: ${doc.name}\nNúmero: ${nextNumber}\nAssunto: ${subject}`;
 
     showConfirmModal(
         '⚠️ Confirmação de Reserva',
@@ -565,6 +617,7 @@ function reserveNumber(docId) {
                 docName: doc.name,
                 number: doc.currentNumber,
                 formattedNumber: formatNumber(doc),
+                subject: subject.trim(),
                 userId: state.currentUser.id,
                 userName: state.currentUser.name,
                 timestamp: new Date().toISOString()
@@ -574,7 +627,7 @@ function reserveNumber(docId) {
             state.reservations.unshift(reservation);
 
             saveData();
-            addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber}`);
+            addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber} - Assunto: ${subject.trim()}`);
 
             renderDocuments();
             renderHistory();
@@ -584,7 +637,7 @@ function reserveNumber(docId) {
             }
 
             // Modal de sucesso
-            showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}`);
+            showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}\nAssunto: ${subject.trim()}`);
         }
     );
 }
@@ -597,7 +650,8 @@ function renderHistory() {
     let filtered = state.reservations.filter(r =>
         r.docName.toLowerCase().includes(search) ||
         r.formattedNumber.toLowerCase().includes(search) ||
-        r.userName.toLowerCase().includes(search)
+        r.userName.toLowerCase().includes(search) ||
+        (r.subject && r.subject.toLowerCase().includes(search))
     );
 
     if (filtered.length === 0) {
@@ -610,6 +664,7 @@ function renderHistory() {
             <div class="history-info">
                 <div class="history-type">${r.docName}</div>
                 <div class="history-details">${formatDate(new Date(r.timestamp))} às ${formatTime(new Date(r.timestamp))} - ${r.userName}</div>
+                ${r.subject ? `<div class="history-details" style="color: #3b82f6; font-weight: 500;">Assunto: ${r.subject}</div>` : ''}
             </div>
             <div class="history-number">${r.formattedNumber}</div>
         </div>
@@ -1077,6 +1132,101 @@ function showAlertModal(title, message, onOk) {
 function hideCustomModal() {
     document.getElementById('customConfirmModal')?.classList.remove('active');
     document.getElementById('customAlertModal')?.classList.remove('active');
+}
+
+// Exportar/Importar Dados
+function exportData() {
+    const dataToExport = {
+        documents: state.documents,
+        reservations: state.reservations,
+        users: state.users,
+        logs: state.logs,
+        exportDate: new Date().toISOString(),
+        version: '1.0'
+    };
+
+    const jsonString = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup-numeracao-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    addLog('cadastro', 'Exportou dados do sistema', `${state.documents.length} documentos, ${state.reservations.length} reservas`);
+    showAlertModal('✅ Sucesso!', 'Dados exportados com sucesso!\n\nO arquivo foi baixado para a pasta de Downloads.');
+}
+
+function importData() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const importedData = JSON.parse(event.target.result);
+
+                // Validar estrutura
+                if (!importedData.documents || !importedData.reservations || !importedData.users) {
+                    showAlertModal('❌ Erro', 'Arquivo inválido! O backup não contém os dados necessários.');
+                    return;
+                }
+
+                showConfirmModal(
+                    '⚠️ Confirmar Importação',
+                    `Tem certeza que deseja importar os dados?\n\nEsta ação irá SUBSTITUIR todos os dados atuais:\n• ${importedData.documents.length} documentos\n• ${importedData.reservations.length} reservas\n• ${importedData.users.length} usuários\n• ${importedData.logs?.length || 0} logs\n\nBackup de: ${new Date(importedData.exportDate).toLocaleString('pt-BR')}`,
+                    () => {
+                        // Importar dados
+                        state.documents = importedData.documents;
+                        state.reservations = importedData.reservations;
+                        state.users = importedData.users;
+                        state.logs = importedData.logs || [];
+
+                        // Salvar no localStorage
+                        saveData();
+                        saveUsers();
+                        saveLogs();
+
+                        // Verificar se usuário atual ainda existe
+                        const currentUserExists = state.users.find(u => u.id === state.currentUser.id);
+                        if (!currentUserExists) {
+                            showAlertModal('⚠️ Atenção', 'Seu usuário não existe nos dados importados.\n\nVocê será desconectado.', () => {
+                                handleLogout();
+                            });
+                        } else {
+                            // Atualizar interface
+                            renderDocuments();
+                            renderHistory();
+                            if (state.currentUser.role === 'admin') {
+                                renderAdminDocs();
+                                renderAdminUsers();
+                                renderLogs();
+                                updateStats();
+                            }
+
+                            addLog('cadastro', 'Importou dados do sistema', `${importedData.documents.length} documentos, ${importedData.reservations.length} reservas`);
+                            showAlertModal('✅ Sucesso!', 'Dados importados com sucesso!\n\nO sistema foi atualizado.');
+                        }
+                    }
+                );
+            } catch (error) {
+                showAlertModal('❌ Erro', 'Erro ao importar arquivo!\n\nVerifique se o arquivo é um backup válido.');
+                console.error('Erro ao importar:', error);
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    input.click();
 }
 
 // Cache buster: 20260112200732

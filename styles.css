@@ -170,15 +170,15 @@ body {
 /* Documents Grid */
 .documents-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 300px));
+    gap: 1rem;
 }
 
 .doc-card {
     background: var(--bg-card);
     border: 2px solid var(--border-color);
-    border-radius: 12px;
-    padding: 1.2rem;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
     cursor: pointer;
     transition: all 0.3s ease;
     position: relative;
@@ -1339,4 +1339,85 @@ select:focus {
 .back-btn:hover {
     background: var(--bg-hover);
     border-color: #2563eb;
+}
+
+/* Backup Section */
+.backup-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.backup-card {
+    background: var(--bg-card);
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all 0.3s ease;
+}
+
+.backup-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+    border-color: #2563eb;
+}
+
+.backup-card-content {
+    text-align: center;
+}
+
+.backup-icon {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+}
+
+.backup-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.backup-card p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.backup-info {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border: 2px solid #3b82f6;
+    border-radius: 12px;
+    padding: 2rem;
+}
+
+.backup-info h3 {
+    color: #1e40af;
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+
+.backup-info ul {
+    list-style: none;
+    padding: 0;
+}
+
+.backup-info li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #bfdbfe;
+}
+
+.backup-info li:last-child {
+    border-bottom: none;
+}
+
+.backup-info ol {
+    margin-top: 0.5rem;
+    margin-left: 1.5rem;
+    color: var(--text-secondary);
+}
+
+.backup-info ol li {
+    border-bottom: none;
+    padding: 0.25rem 0;
 }
