@@ -208,6 +208,11 @@ function showMainApp() {
                     </nav>
                     <div class="header-actions">
                         <span class="user-info">${state.currentUser.name} (${PERMISSION_LEVELS[state.currentUser.role].label})</span>
+                        <div class="font-zoom-controls">
+                            <button class="zoom-btn" onclick="decreaseFontZoom()" title="Diminuir fonte">A-</button>
+                            <span id="fontZoomIndicator" class="zoom-indicator">100%</span>
+                            <button class="zoom-btn" onclick="increaseFontZoom()" title="Aumentar fonte">A+</button>
+                        </div>
                         <button class="btn-secondary" onclick="handleLogout()">Sair</button>
                     </div>
                 </div>
@@ -239,48 +244,29 @@ function showMainApp() {
             ${isAdmin ? `
             <main id="adminView" class="view">
                 <div class="admin-content">
-                    <!-- Estatísticas -->
+                    <!-- Gerenciamento e Estatísticas -->
                     <section class="stats-section">
-                        <h2>Estatísticas</h2>
+                        <h2>Gerenciamento e Estatísticas</h2>
                         <div class="stats-grid">
-                            <div class="stat-card">
+                            <div class="stat-card stat-card-clickable" onclick="showAdminSection('documentos')">
                                 <div class="stat-icon">📄</div>
-                                <div><div class="stat-value" id="totalDocTypes">0</div><div class="stat-label">Tipos de Documentos</div></div>
+                                <div><div class="stat-value" id="totalDocTypes">0</div><div class="stat-label">Documentos</div></div>
                             </div>
-                            <div class="stat-card">
+                            <div class="stat-card stat-card-clickable" onclick="showAdminSection('logs')">
                                 <div class="stat-icon">🔢</div>
-                                <div><div class="stat-value" id="totalReservations">0</div><div class="stat-label">Total Reservas</div></div>
+                                <div><div class="stat-value" id="totalReservations">0</div><div class="stat-label">Histórico</div></div>
                             </div>
-                            <div class="stat-card">
-                                <div class="stat-icon">📅</div>
-                                <div><div class="stat-value" id="todayReservations">0</div><div class="stat-label">Reservas Hoje</div></div>
-                            </div>
-                            <div class="stat-card">
+                            <div class="stat-card stat-card-clickable" onclick="showAdminSection('usuarios')">
                                 <div class="stat-icon">👥</div>
                                 <div><div class="stat-value" id="totalUsers">0</div><div class="stat-label">Usuários</div></div>
                             </div>
                         </div>
                     </section>
 
-                    <!-- Cards de Navegação -->
+                    <!-- Ferramentas -->
                     <section class="nav-section">
-                        <h2>Gerenciamento</h2>
+                        <h2>Ferramentas</h2>
                         <div class="nav-cards-grid">
-                            <div class="nav-card" onclick="showAdminSection('documentos')">
-                                <div class="nav-card-icon">📄</div>
-                                <div class="nav-card-title">Documentos</div>
-                                <div class="nav-card-desc">Gerenciar tipos de documentos</div>
-                            </div>
-                            <div class="nav-card" onclick="showAdminSection('usuarios')">
-                                <div class="nav-card-icon">👥</div>
-                                <div class="nav-card-title">Usuários</div>
-                                <div class="nav-card-desc">Gerenciar usuários e permissões</div>
-                            </div>
-                            <div class="nav-card" onclick="showAdminSection('logs')">
-                                <div class="nav-card-icon">📊</div>
-                                <div class="nav-card-title">Logs</div>
-                                <div class="nav-card-desc">Visualizar logs do sistema</div>
-                            </div>
                             <div class="nav-card" onclick="showAdminSection('backup')">
                                 <div class="nav-card-icon">💾</div>
                                 <div class="nav-card-title">Backup</div>
@@ -413,7 +399,24 @@ function showMainApp() {
                     <!-- View: Logs -->
                     <div id="adminSectionLogs" class="admin-section" style="display: none;">
                         <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
-                        <h2>📊 Logs do Sistema</h2>
+                        <h2>📊 Histórico do Sistema</h2>
+                        
+                        <!-- Botões de Exportação -->
+                        <div class="export-toolbar">
+                            <button class="export-btn export-pdf" onclick="exportHistoryToPDF()" title="Exportar para PDF">
+                                <span class="export-icon">📄</span>
+                                <span>Exportar PDF</span>
+                            </button>
+                            <button class="export-btn export-excel" onclick="exportHistoryToExcel()" title="Exportar para Excel">
+                                <span class="export-icon">📊</span>
+                                <span>Exportar Excel</span>
+                            </button>
+                            <button class="export-btn export-word" onclick="exportHistoryToWord()" title="Exportar para Word">
+                                <span class="export-icon">📝</span>
+                                <span>Exportar Word</span>
+                            </button>
+                        </div>
+                        
                         <div class="logs-filters">
                             <button class="log-filter-btn active" onclick="filterLogs('todos')">📋 Todos</button>
                             <button class="log-filter-btn" onclick="filterLogs('cadastro')">📝 Cadastros</button>
@@ -482,6 +485,34 @@ function showMainApp() {
                     <div class="custom-modal-footer">
                         <button id="cancelBtn" class="modal-btn modal-btn-cancel">Cancelar</button>
                         <button id="confirmBtn" class="modal-btn modal-btn-confirm">Confirmar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Custom Modal: Assunto e Ementa -->
+            <div id="subjectEmentaModal" class="custom-modal-overlay">
+                <div class="custom-modal modal-large">
+                    <div class="custom-modal-header">
+                        <h3>📝 Informações do Documento</h3>
+                    </div>
+                    <div class="custom-modal-body">
+                        <div class="form-group">
+                            <label for="reservationSubject">Assunto *</label>
+                            <input type="text" id="reservationSubject" placeholder="Digite o assunto do documento" class="modal-input">
+                        </div>
+                        <div class="form-group">
+                            <label for="reservationEmenta">Ementa *</label>
+                            <textarea id="reservationEmenta" maxlength="300" rows="4" 
+                                      placeholder="Digite a ementa do documento (máximo 300 caracteres)" 
+                                      class="modal-textarea"></textarea>
+                            <div class="char-counter">
+                                <span id="ementaCounter">0</span>/300 caracteres
+                            </div>
+                        </div>
+                    </div>
+                    <div class="custom-modal-footer">
+                        <button id="cancelSubjectBtn" class="modal-btn modal-btn-cancel">Cancelar</button>
+                        <button id="continueSubjectBtn" class="modal-btn modal-btn-confirm">Continuar</button>
                     </div>
                 </div>
             </div>
@@ -594,52 +625,155 @@ function reserveNumber(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
 
-    // Solicitar assunto do documento
-    const subject = prompt('Digite o assunto do documento:');
+    // Abrir modal de assunto e ementa
+    showSubjectEmentaModal((data) => {
+        if (!data) return; // Cancelado
 
-    // Se cancelou ou não digitou nada, não prossegue
-    if (subject === null || subject.trim() === '') {
-        return;
+        // Modal de confirmação customizado
+        const nextNumber = formatNumber(doc);
+        const confirmMessage = `Deseja realmente reservar o número?\n\nDocumento: ${doc.name}\nNúmero: ${nextNumber}\nAssunto: ${data.subject}\n\nEmenta:\n${data.ementa}`;
+
+        showConfirmModal(
+            '⚠️ Confirmação de Reserva',
+            confirmMessage,
+            () => {
+                // Confirmado - reservar número
+                const reservation = {
+                    id: generateId(),
+                    docId: doc.id,
+                    docName: doc.name,
+                    number: doc.currentNumber,
+                    formattedNumber: formatNumber(doc),
+                    subject: data.subject,
+                    ementa: data.ementa,
+                    userId: state.currentUser.id,
+                    userName: state.currentUser.name,
+                    userCargo: state.currentUser.cargo || '',
+                    userSetor: state.currentUser.setor || '',
+                    userSecretaria: state.currentUser.secretaria || '',
+                    timestamp: new Date().toISOString()
+                };
+
+                doc.currentNumber++;
+                state.reservations.unshift(reservation);
+
+                saveData();
+                addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber} - Assunto: ${data.subject}`);
+
+                renderDocuments();
+                renderHistory();
+                if (state.currentUser.role === 'admin') {
+                    renderAdminDocs();
+                    updateStats();
+                }
+
+                // Modal de sucesso
+                showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}\nAssunto: ${data.subject}`);
+            }
+        );
+    });
+}
+
+// Mostrar modal de assunto e ementa
+function showSubjectEmentaModal(callback) {
+    const modal = document.getElementById('subjectEmentaModal');
+    const subjectInput = document.getElementById('reservationSubject');
+    const ementaInput = document.getElementById('reservationEmenta');
+    const ementaCounter = document.getElementById('ementaCounter');
+    const cancelBtn = document.getElementById('cancelSubjectBtn');
+    const continueBtn = document.getElementById('continueSubjectBtn');
+
+    // Limpar campos
+    subjectInput.value = '';
+    ementaInput.value = '';
+    ementaCounter.textContent = '0';
+    ementaCounter.parentElement.classList.remove('warning', 'limit');
+
+    // Mostrar modal
+    modal.classList.add('active');
+    subjectInput.focus();
+
+    // Atualizar contador de caracteres
+    function updateCounter() {
+        const length = ementaInput.value.length;
+        ementaCounter.textContent = length;
+
+        const counterEl = ementaCounter.parentElement;
+        counterEl.classList.remove('warning', 'limit');
+
+        if (length > 250) {
+            counterEl.classList.add('warning');
+        }
+        if (length >= 290) {
+            counterEl.classList.add('limit');
+        }
     }
 
-    // Modal de confirmação customizado
-    const nextNumber = formatNumber(doc);
-    const confirmMessage = `Deseja realmente reservar o número?\n\nDocumento: ${doc.name}\nNúmero: ${nextNumber}\nAssunto: ${subject}`;
+    ementaInput.addEventListener('input', updateCounter);
 
-    showConfirmModal(
-        '⚠️ Confirmação de Reserva',
-        confirmMessage,
-        () => {
-            // Confirmado - reservar número
-            const reservation = {
-                id: generateId(),
-                docId: doc.id,
-                docName: doc.name,
-                number: doc.currentNumber,
-                formattedNumber: formatNumber(doc),
-                subject: subject.trim(),
-                userId: state.currentUser.id,
-                userName: state.currentUser.name,
-                timestamp: new Date().toISOString()
-            };
+    // Validar e continuar
+    function handleContinue() {
+        const subject = subjectInput.value.trim();
+        const ementa = ementaInput.value.trim();
 
-            doc.currentNumber++;
-            state.reservations.unshift(reservation);
-
-            saveData();
-            addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber} - Assunto: ${subject.trim()}`);
-
-            renderDocuments();
-            renderHistory();
-            if (state.currentUser.role === 'admin') {
-                renderAdminDocs();
-                updateStats();
-            }
-
-            // Modal de sucesso
-            showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}\nAssunto: ${subject.trim()}`);
+        if (!subject) {
+            showAlertModal('⚠️ Atenção', 'Por favor, preencha o assunto do documento.');
+            subjectInput.focus();
+            return;
         }
-    );
+
+        if (!ementa) {
+            showAlertModal('⚠️ Atenção', 'Por favor, preencha a ementa do documento.');
+            ementaInput.focus();
+            return;
+        }
+
+        if (ementa.length > 300) {
+            showAlertModal('⚠️ Atenção', 'A ementa não pode ter mais de 300 caracteres.');
+            ementaInput.focus();
+            return;
+        }
+
+        // Fechar modal e retornar dados
+        modal.classList.remove('active');
+        cleanup();
+        callback({ subject, ementa });
+    }
+
+    // Cancelar
+    function handleCancel() {
+        modal.classList.remove('active');
+        cleanup();
+        callback(null);
+    }
+
+    // Cleanup
+    function cleanup() {
+        ementaInput.removeEventListener('input', updateCounter);
+        cancelBtn.removeEventListener('click', handleCancel);
+        continueBtn.removeEventListener('click', handleContinue);
+        modal.removeEventListener('click', handleModalClick);
+    }
+
+    // Click fora do modal fecha
+    function handleModalClick(e) {
+        if (e.target === modal) {
+            handleCancel();
+        }
+    }
+
+    // Event listeners
+    cancelBtn.addEventListener('click', handleCancel);
+    continueBtn.addEventListener('click', handleContinue);
+    modal.addEventListener('click', handleModalClick);
+
+    // Enter no subject vai para ementa, Enter na ementa submete
+    subjectInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            ementaInput.focus();
+        }
+    });
 }
 
 // Renderizar histórico
@@ -651,7 +785,8 @@ function renderHistory() {
         r.docName.toLowerCase().includes(search) ||
         r.formattedNumber.toLowerCase().includes(search) ||
         r.userName.toLowerCase().includes(search) ||
-        (r.subject && r.subject.toLowerCase().includes(search))
+        (r.subject && r.subject.toLowerCase().includes(search)) ||
+        (r.ementa && r.ementa.toLowerCase().includes(search))
     );
 
     if (filtered.length === 0) {
@@ -659,16 +794,50 @@ function renderHistory() {
         return;
     }
 
-    container.innerHTML = filtered.slice(0, 50).map(r => `
-        <div class="history-item">
-            <div class="history-info">
-                <div class="history-type">${r.docName}</div>
-                <div class="history-details">${formatDate(new Date(r.timestamp))} às ${formatTime(new Date(r.timestamp))} - ${r.userName}</div>
-                ${r.subject ? `<div class="history-details" style="color: #3b82f6; font-weight: 500;">Assunto: ${r.subject}</div>` : ''}
+    container.innerHTML = filtered.slice(0, 50).map(r => {
+        const date = new Date(r.timestamp);
+        const ementa = r.ementa || 'Sem ementa cadastrada';
+        const cargo = r.userCargo || 'N/A';
+        const setor = r.userSetor || 'N/A';
+        const secretaria = r.userSecretaria || 'N/A';
+
+        return `
+            <div class="history-item-detailed">
+                <div class="history-header">
+                    <div class="history-doc-type">
+                        <span class="doc-icon">📄</span>
+                        <span>${r.docName}</span>
+                    </div>
+                    <div class="history-datetime">
+                        ${formatDate(date)} ${formatTime(date)}
+                    </div>
+                </div>
+                
+                <div class="history-body">
+                    <div class="history-subject">
+                        <strong>Assunto:</strong> ${r.subject || 'Não informado'}
+                    </div>
+                    <div class="history-number-box">
+                        <strong>Número:</strong> <span class="highlight-number">${r.formattedNumber}</span>
+                    </div>
+                </div>
+                
+                <div class="history-ementa">
+                    <strong>Ementa:</strong>
+                    <p>${ementa}</p>
+                </div>
+                
+                <div class="history-user-info">
+                    <span class="user-icon">👤</span>
+                    <div class="user-details">
+                        <div class="user-name">${r.userName}</div>
+                        <div class="user-position">${cargo} - ${setor}</div>
+                        <div class="user-dept">${secretaria}</div>
+                    </div>
+                </div>
             </div>
-            <div class="history-number">${r.formattedNumber}</div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 // Renderizar documentos admin
@@ -731,39 +900,62 @@ function renderLogs() {
     const container = document.getElementById('logsList');
     const search = document.getElementById('logsSearch')?.value.toLowerCase() || '';
 
-    let filtered = state.logs;
-
-    if (state.currentLogFilter !== 'todos') {
-        filtered = filtered.filter(l => l.type === state.currentLogFilter);
-    }
-
-    if (search) {
-        filtered = filtered.filter(l =>
-            l.action.toLowerCase().includes(search) ||
-            l.details.toLowerCase().includes(search) ||
-            l.userName.toLowerCase().includes(search)
-        );
-    }
+    // Mostrar as mesmas reservas do histórico principal
+    let filtered = state.reservations.filter(r =>
+        r.docName.toLowerCase().includes(search) ||
+        r.formattedNumber.toLowerCase().includes(search) ||
+        r.userName.toLowerCase().includes(search) ||
+        (r.subject && r.subject.toLowerCase().includes(search)) ||
+        (r.ementa && r.ementa.toLowerCase().includes(search))
+    );
 
     if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum log encontrado.</p>';
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhuma reserva encontrada.</p>';
         return;
     }
 
-    container.innerHTML = filtered.slice(0, 100).map(log => {
-        const date = new Date(log.timestamp);
-        const typeColor = log.type === 'cadastro' ? '#3b82f6' : '#10b981';
-        const typeIcon = log.type === 'cadastro' ? '📝' : '🔢';
+    // Layout IDÊNTICO ao histórico principal
+    container.innerHTML = filtered.map(r => {
+        const date = new Date(r.timestamp);
+        const ementa = r.ementa || 'Sem ementa cadastrada';
+        const cargo = r.userCargo || 'N/A';
+        const setor = r.userSetor || 'N/A';
+        const secretaria = r.userSecretaria || 'N/A';
 
         return `
-            <div class="log-item" style="border-left: 4px solid ${typeColor}">
-                <div class="log-header">
-                    <span class="log-icon">${typeIcon}</span>
-                    <span class="log-user">${log.userName}</span>
-                    <span class="log-time">${formatDate(date)} às ${formatTime(date)}</span>
+            <div class="history-item-detailed">
+                <div class="history-header">
+                    <div class="history-doc-type">
+                        <span class="doc-icon">📄</span>
+                        <span>${r.docName}</span>
+                    </div>
+                    <div class="history-datetime">
+                        ${formatDate(date)} ${formatTime(date)}
+                    </div>
                 </div>
-                <div class="log-action">${log.action}</div>
-                ${log.details ? `<div class="log-details">${log.details}</div>` : ''}
+                
+                <div class="history-body">
+                    <div class="history-subject">
+                        <strong>Assunto:</strong> ${r.subject || 'Não informado'}
+                    </div>
+                    <div class="history-number-box">
+                        <strong>Número:</strong> <span class="highlight-number">${r.formattedNumber}</span>
+                    </div>
+                </div>
+                
+                <div class="history-ementa">
+                    <strong>Ementa:</strong>
+                    <p>${ementa}</p>
+                </div>
+                
+                <div class="history-user-info">
+                    <span class="user-icon">👤</span>
+                    <div class="user-details">
+                        <div class="user-name">${r.userName}</div>
+                        <div class="user-position">${cargo} - ${setor}</div>
+                        <div class="user-dept">${secretaria}</div>
+                    </div>
+                </div>
             </div>
         `;
     }).join('');
@@ -1228,5 +1420,259 @@ function importData() {
 
     input.click();
 }
+
+// ========== FUNÇÕES DE EXPORTAÇÃO DE HISTÓRICO ==========
+
+// Obter logs filtrados
+function getFilteredLogs() {
+    const search = document.getElementById('logsSearch')?.value.toLowerCase() || '';
+
+    let filtered = state.logs;
+
+    if (state.currentLogFilter !== 'todos') {
+        filtered = filtered.filter(l => l.type === state.currentLogFilter);
+    }
+
+    if (search) {
+        filtered = filtered.filter(l =>
+            l.action.toLowerCase().includes(search) ||
+            l.details.toLowerCase().includes(search) ||
+            l.userName.toLowerCase().includes(search)
+        );
+    }
+
+    return filtered;
+}
+
+// Exportar para PDF
+function exportHistoryToPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    const logs = getFilteredLogs();
+
+    if (logs.length === 0) {
+        showAlertModal('⚠️ Atenção', 'Nenhum registro para exportar!');
+        return;
+    }
+
+    // Título
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'bold');
+    doc.text('Histórico do Sistema', 14, 20);
+
+    // Data de geração
+    doc.setFontSize(10);
+    doc.setFont(undefined, 'normal');
+    doc.text(`Gerado em: ${formatDate(new Date())} às ${formatTime(new Date())}`, 14, 28);
+    doc.text(`Total de registros: ${logs.length}`, 14, 34);
+
+    // Filtro aplicado
+    const filterText = state.currentLogFilter === 'todos' ? 'Todos' :
+        state.currentLogFilter === 'cadastro' ? 'Cadastros' : 'Reservas';
+    doc.text(`Filtro: ${filterText}`, 14, 40);
+
+    // Tabela
+    const tableData = logs.map(log => {
+        const date = new Date(log.timestamp);
+        return [
+            formatDate(date) + ' ' + formatTime(date),
+            log.userName,
+            log.action,
+            log.details || '-'
+        ];
+    });
+
+    doc.autoTable({
+        startY: 48,
+        head: [['Data/Hora', 'Usuário', 'Ação', 'Detalhes']],
+        body: tableData,
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [37, 99, 235], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { top: 48 }
+    });
+
+    // Salvar arquivo
+    const filename = `historico_${new Date().getTime()}.pdf`;
+    doc.save(filename);
+
+    showAlertModal('✅ Sucesso!', `Arquivo ${filename} exportado com sucesso!`);
+    addLog('sistema', 'Exportou histórico em PDF', `${logs.length} registros exportados`);
+}
+
+// Exportar para Excel
+function exportHistoryToExcel() {
+    const logs = getFilteredLogs();
+
+    if (logs.length === 0) {
+        showAlertModal('⚠️ Atenção', 'Nenhum registro para exportar!');
+        return;
+    }
+
+    // Preparar dados
+    const data = logs.map(log => {
+        const date = new Date(log.timestamp);
+        return {
+            'Data': formatDate(date),
+            'Hora': formatTime(date),
+            'Usuário': log.userName,
+            'Tipo': log.type === 'cadastro' ? 'Cadastro' : 'Reserva',
+            'Ação': log.action,
+            'Detalhes': log.details || ''
+        };
+    });
+
+    // Criar workbook e worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(data);
+
+    // Ajustar largura das colunas
+    ws['!cols'] = [
+        { wch: 12 },  // Data
+        { wch: 10 },  // Hora
+        { wch: 20 },  // Usuário
+        { wch: 10 },  // Tipo
+        { wch: 30 },  // Ação
+        { wch: 50 }   // Detalhes
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
+
+    // Salvar arquivo
+    const filename = `historico_${new Date().getTime()}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    showAlertModal('✅ Sucesso!', `Arquivo ${filename} exportado com sucesso!`);
+    addLog('sistema', 'Exportou histórico em Excel', `${logs.length} registros exportados`);
+}
+
+// Exportar para Word (HTML compatível)
+function exportHistoryToWord() {
+    const logs = getFilteredLogs();
+
+    if (logs.length === 0) {
+        showAlertModal('⚠️ Atenção', 'Nenhum registro para exportar!');
+        return;
+    }
+
+    // Criar HTML formatado
+    let html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                h1 { color: #2563eb; border-bottom: 3px solid #2563eb; padding-bottom: 10px; }
+                .info { margin: 20px 0; color: #666; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th { background: #2563eb; color: white; padding: 12px; text-align: left; }
+                td { padding: 10px; border-bottom: 1px solid #ddd; }
+                tr:nth-child(even) { background: #f8fafc; }
+                .cadastro { color: #3b82f6; }
+                .reserva { color: #10b981; }
+            </style>
+        </head>
+        <body>
+            <h1>📊 Histórico do Sistema</h1>
+            <div class="info">
+                <p><strong>Gerado em:</strong> ${formatDate(new Date())} às ${formatTime(new Date())}</p>
+                <p><strong>Total de registros:</strong> ${logs.length}</p>
+                <p><strong>Filtro:</strong> ${state.currentLogFilter === 'todos' ? 'Todos' :
+            state.currentLogFilter === 'cadastro' ? 'Cadastros' : 'Reservas'}</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Usuário</th>
+                        <th>Tipo</th>
+                        <th>Ação</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    logs.forEach(log => {
+        const date = new Date(log.timestamp);
+        const typeClass = log.type === 'cadastro' ? 'cadastro' : 'reserva';
+        const typeLabel = log.type === 'cadastro' ? 'Cadastro' : 'Reserva';
+
+        html += `
+            <tr>
+                <td>${formatDate(date)} ${formatTime(date)}</td>
+                <td>${log.userName}</td>
+                <td class="${typeClass}">${typeLabel}</td>
+                <td>${log.action}</td>
+                <td>${log.details || '-'}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </body>
+        </html>
+    `;
+
+    // Criar blob e baixar
+    const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const filename = `historico_${new Date().getTime()}.doc`;
+    saveAs(blob, filename);
+
+    showAlertModal('✅ Sucesso!', `Arquivo ${filename} exportado com sucesso!`);
+    addLog('sistema', 'Exportou histórico em Word', `${logs.length} registros exportados`);
+}
+
+// ========== SISTEMA DE ZOOM DE FONTE ==========
+let fontZoomLevel = parseInt(localStorage.getItem('fontZoomLevel')) || 100;
+
+function applyFontZoom() {
+    const root = document.documentElement;
+    const scale = fontZoomLevel / 100;
+
+    // Aplicar escala nas variáveis CSS
+    root.style.setProperty('--font-small', `${0.875 * scale}rem`);
+    root.style.setProperty('--font-normal', `${1 * scale}rem`);
+    root.style.setProperty('--font-datetime', `${0.875 * scale}rem`);
+    root.style.setProperty('--font-number', `${1.25 * scale}rem`);
+    root.style.setProperty('--font-icon-user', `${1.5 * scale}rem`);
+
+    // Atualizar indicador
+    const indicator = document.getElementById('fontZoomIndicator');
+    if (indicator) {
+        indicator.textContent = `${fontZoomLevel}%`;
+    }
+
+    // Salvar preferência
+    localStorage.setItem('fontZoomLevel', fontZoomLevel);
+}
+
+function increaseFontZoom() {
+    if (fontZoomLevel < 150) {
+        fontZoomLevel += 10;
+        applyFontZoom();
+    }
+}
+
+function decreaseFontZoom() {
+    if (fontZoomLevel > 70) {
+        fontZoomLevel -= 10;
+        applyFontZoom();
+    }
+}
+
+function resetFontZoom() {
+    fontZoomLevel = 100;
+    applyFontZoom();
+}
+
+// Aplicar zoom ao carregar
+document.addEventListener('DOMContentLoaded', () => {
+    applyFontZoom();
+});
 
 // Cache buster: 20260112200732
