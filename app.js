@@ -415,6 +415,16 @@ function showMainApp() {
                                 <span class="export-icon">📝</span>
                                 <span>Exportar Word</span>
                             </button>
+                            <button class="export-btn export-stats" onclick="toggleDocStats()" title="Ver Estatísticas por Documento">
+                                <span class="export-icon">📊</span>
+                                <span>Estatísticas</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Painel de Estatísticas Expansível -->
+                        <div id="docStatsPanel" class="doc-stats-panel" style="display: none;">
+                            <h3>📊 Estatísticas de Reservas por Documento</h3>
+                            <div id="docStatsList" class="doc-stats-grid"></div>
                         </div>
                         
                         <div class="logs-filters">
@@ -1674,5 +1684,63 @@ function resetFontZoom() {
 document.addEventListener('DOMContentLoaded', () => {
     applyFontZoom();
 });
+
+// ========== ESTATÍSTICAS POR DOCUMENTO ==========
+function toggleDocStats() {
+    const panel = document.getElementById('docStatsPanel');
+    const btn = event.target.closest('.export-stats');
+
+    if (panel.style.display === 'none') {
+        // Mostrar painel
+        panel.style.display = 'block';
+        if (btn) btn.classList.add('active');
+
+        // Renderizar estatísticas
+        const container = document.getElementById('docStatsList');
+        const docs = state.documents.filter(d => d.enabled);
+
+        const stats = docs.map(doc => {
+            const docReservations = state.reservations.filter(r => r.docId === doc.id);
+            const lastReservation = docReservations.length > 0
+                ? new Date(Math.max(...docReservations.map(r => new Date(r.timestamp))))
+                : null;
+
+            return {
+                doc,
+                count: docReservations.length,
+                lastDate: lastReservation
+            };
+        }).filter(s => s.count > 0)
+            .sort((a, b) => b.count - a.count);
+
+        if (stats.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum documento possui reservas</p>';
+            return;
+        }
+
+        container.innerHTML = stats.map(({ doc, count, lastDate }) => `
+            <div class="doc-stat-card">
+                <div class="doc-stat-header">
+                    <span class="doc-stat-icon">📄</span>
+                    <span class="doc-stat-name">${doc.name}</span>
+                </div>
+                <div class="doc-stat-body">
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-label">Reservas</span>
+                        <span class="doc-stat-value">${count}</span>
+                    </div>
+                    <div class="doc-stat-item">
+                        <span class="doc-stat-label">Última Reserva</span>
+                        <span class="doc-stat-value">${formatDate(lastDate)}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    } else {
+        // Esconder painel
+        panel.style.display = 'none';
+        if (btn) btn.classList.remove('active');
+    }
+}
 
 // Cache buster: 20260112200732
