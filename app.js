@@ -6,6 +6,7 @@ let state = {
     reservations: [],
     users: [],
     logs: [],
+    secretariaPermissions: {}, // Documentos permitidos por secretaria
     currentUser: null,
     currentView: 'login',
     editingDocId: null,
@@ -64,6 +65,10 @@ function loadData() {
     state.reservations = savedReservations ? JSON.parse(savedReservations) : [];
     state.logs = savedLogs ? JSON.parse(savedLogs) : [];
 
+    // Carregar permissões de secretaria
+    const savedSecretariaPerms = localStorage.getItem('secretariaPermissions');
+    state.secretariaPermissions = savedSecretariaPerms ? JSON.parse(savedSecretariaPerms) : {};
+
     if (savedUsers) {
         state.users = JSON.parse(savedUsers);
     } else {
@@ -79,6 +84,7 @@ function loadData() {
             allowedDocuments: [],
             createdAt: new Date().toISOString()
         }];
+        addLog('usuario', 'Criou usuário inicial', `${state.users[0].name} - ${state.users[0].cargo}`);
         saveUsers();
     }
 }
@@ -87,14 +93,21 @@ function loadData() {
 function saveData() {
     localStorage.setItem('documents', JSON.stringify(state.documents));
     localStorage.setItem('reservations', JSON.stringify(state.reservations));
+    if (typeof syncAllViews === 'function') syncAllViews();
 }
 
 function saveUsers() {
     localStorage.setItem('users', JSON.stringify(state.users));
+    if (typeof syncAllViews === 'function') syncAllViews();
 }
 
 function saveLogs() {
     localStorage.setItem('logs', JSON.stringify(state.logs));
+}
+
+function saveSecretariaPermissions() {
+    localStorage.setItem('secretariaPermissions', JSON.stringify(state.secretariaPermissions));
+    if (typeof syncAllViews === 'function') syncAllViews();
 }
 
 // Adicionar log
@@ -325,7 +338,27 @@ function showMainApp() {
                     <div id="adminSectionUsuarios" class="admin-section" style="display: none;">
                         <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
                         <h2>👥 Gerenciar Usuários</h2>
-                        <button class="btn-primary" onclick="toggleUserForm()" style="margin-bottom: 1.5rem;">➕ Adicionar Usuário</button>
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+                            <button class="btn-primary" onclick="toggleUserForm()">➕ Adicionar Usuário</button>
+                            <button class="btn-secondary" onclick="toggleSecretariaConfig()">⚙️ Configurar Secretarias</button>
+                        </div>
+                        
+                        <!-- Área de Configuração de Secretarias -->
+                        <div id="secretariaConfigArea" class="inline-form" style="display: none;">
+                            <h3>⚙️ Configurar Documentos por Secretaria</h3>
+                            <p class="help-text" style="margin-bottom: 1.5rem;">Defina quais documentos cada secretaria pode acessar por padrão. Novos usuários dessa secretaria herdarão essas permissões automaticamente.</p>
+                            <div id="secretariaConfigList"></div>
+                            <div class="form-actions">
+                                <button type="button" class="btn-secondary" onclick="toggleSecretariaConfig()">Cancelar</button>
+                                <button type="button" class="btn-primary" onclick="saveSecretariaConfig()">💾 Salvar Configurações</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Campo de Busca -->
+                        <div class="search-box" style="max-width: 100%; margin-bottom: 1.5rem;">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="usersSearch" placeholder="Buscar por nome, usuário, cargo, setor ou secretaria..." oninput="renderAdminUsers()">
+                        </div>
                         
                         <!-- Formulário Inline -->
                         <div id="userFormInline" class="inline-form" style="display: none;">
@@ -349,7 +382,22 @@ function showMainApp() {
                                     </div>
                                     <div class="form-group">
                                         <label for="userSecretaria">Secretaria *</label>
-                                        <input type="text" id="userSecretaria" required>
+                                        <select id="userSecretaria" required>
+                                            <option value="">Selecione...</option>
+                                            <option value="Controle Interno">Controle Interno</option>
+                                            <option value="Gabinete">Gabinete</option>
+                                            <option value="Procuradoria">Procuradoria</option>
+                                            <option value="Secretaria de Administração">Secretaria de Administração</option>
+                                            <option value="Secretaria de Agricultura e Meio Ambiente">Secretaria de Agricultura e Meio Ambiente</option>
+                                            <option value="Secretaria de Cultura e Turismo">Secretaria de Cultura e Turismo</option>
+                                            <option value="Secretaria de Desenvolvimento Econômico e Gestão Institucional">Secretaria de Desenvolvimento Econômico e Gestão Institucional</option>
+                                            <option value="Secretaria de Desenvolvimento Social">Secretaria de Desenvolvimento Social</option>
+                                            <option value="Secretaria de Educação">Secretaria de Educação</option>
+                                            <option value="Secretaria de Esporte">Secretaria de Esporte</option>
+                                            <option value="Secretaria de Fazenda">Secretaria de Fazenda</option>
+                                            <option value="Secretaria da Saúde">Secretaria da Saúde</option>
+                                            <option value="Secretaria de Serviços Urbanos">Secretaria de Serviços Urbanos</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div class="form-section-inline">
@@ -429,8 +477,10 @@ function showMainApp() {
                         
                         <div class="logs-filters">
                             <button class="log-filter-btn active" onclick="filterLogs('todos')">📋 Todos</button>
-                            <button class="log-filter-btn" onclick="filterLogs('cadastro')">📝 Cadastros</button>
                             <button class="log-filter-btn" onclick="filterLogs('reserva')">🔢 Reservas</button>
+                            <button class="log-filter-btn" onclick="filterLogs('sistema')">⚙️ Sistema</button>
+                            <button class="log-filter-btn" onclick="filterLogs('usuario')">👤 Usuários</button>
+                            <button class="log-filter-btn" onclick="filterLogs('documento')">📄 Documentos</button>
                             <div class="logs-search">
                                 <input type="text" id="logsSearch" placeholder="Buscar logs..." oninput="renderLogs()">
                             </div>
@@ -560,6 +610,26 @@ function setupEventListeners() {
     if (typeof initAutocomplete === 'function') {
         const docNameInput = document.getElementById('docName');
         if (docNameInput) setTimeout(() => initAutocomplete(), 100);
+    }
+}
+
+// Sincronização de todas as views
+function syncAllViews() {
+    // Renderizar view principal se estiver ativa
+    if (document.getElementById('mainView')?.classList.contains('active')) {
+        renderDocuments();
+        renderHistory();
+    }
+
+    // Renderizar views admin se estiverem ativas
+    if (document.getElementById('adminView')?.classList.contains('active')) {
+        const isAdmin = state.currentUser?.role === 'admin';
+        if (isAdmin) {
+            renderAdminDocs();
+            renderAdminUsers();
+            renderLogs();
+            updateStats();
+        }
     }
 }
 
@@ -795,6 +865,9 @@ function renderHistory() {
         r.docName.toLowerCase().includes(search) ||
         r.formattedNumber.toLowerCase().includes(search) ||
         r.userName.toLowerCase().includes(search) ||
+        (r.userCargo && r.userCargo.toLowerCase().includes(search)) ||
+        (r.userSetor && r.userSetor.toLowerCase().includes(search)) ||
+        (r.userSecretaria && r.userSecretaria.toLowerCase().includes(search)) ||
         (r.subject && r.subject.toLowerCase().includes(search)) ||
         (r.ementa && r.ementa.toLowerCase().includes(search))
     );
@@ -875,7 +948,28 @@ function renderAdminDocs() {
 // Renderizar usuários admin
 function renderAdminUsers() {
     const container = document.getElementById('adminUsersList');
-    container.innerHTML = state.users.map(user => {
+    const search = document.getElementById('usersSearch')?.value.toLowerCase() || '';
+
+    // Filtrar usuários pela busca
+    let filteredUsers = state.users;
+    if (search) {
+        filteredUsers = state.users.filter(user =>
+            user.name.toLowerCase().includes(search) ||
+            user.username.toLowerCase().includes(search) ||
+            (user.cargo && user.cargo.toLowerCase().includes(search)) ||
+            (user.setor && user.setor.toLowerCase().includes(search)) ||
+            (user.secretaria && user.secretaria.toLowerCase().includes(search)) ||
+            PERMISSION_LEVELS[user.role]?.label.toLowerCase().includes(search)
+        );
+    }
+
+    // Mostrar mensagem se não houver resultados
+    if (filteredUsers.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum usuário encontrado.</p>';
+        return;
+    }
+
+    container.innerHTML = filteredUsers.map(user => {
         const permLabel = PERMISSION_LEVELS[user.role]?.label || user.role;
         const permIcon = user.role === 'admin' ? '🔑' : user.role === 'user_readonly' ? '👁️' : '👤';
 
@@ -909,65 +1003,142 @@ function renderAdminUsers() {
 function renderLogs() {
     const container = document.getElementById('logsList');
     const search = document.getElementById('logsSearch')?.value.toLowerCase() || '';
+    const filter = state.currentLogFilter || 'todos';
 
-    // Mostrar as mesmas reservas do histórico principal
-    let filtered = state.reservations.filter(r =>
-        r.docName.toLowerCase().includes(search) ||
-        r.formattedNumber.toLowerCase().includes(search) ||
-        r.userName.toLowerCase().includes(search) ||
-        (r.subject && r.subject.toLowerCase().includes(search)) ||
-        (r.ementa && r.ementa.toLowerCase().includes(search))
-    );
+    // Combinar reservas e logs de sistema
+    let allItems = [];
 
-    if (filtered.length === 0) {
-        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhuma reserva encontrada.</p>';
+    // Adicionar reservas como tipo 'reserva'
+    state.reservations.forEach(r => {
+        allItems.push({
+            ...r,
+            logType: 'reserva',
+            timestamp: r.timestamp
+        });
+    });
+
+    // Adicionar logs de sistema
+    state.logs.forEach(log => {
+        allItems.push({
+            ...log,
+            logType: log.type // 'sistema', 'usuario', 'documento', etc
+        });
+    });
+
+    // Ordenar por data (mais recente primeiro)
+    allItems.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    // Aplicar filtro por tipo
+    if (filter !== 'todos') {
+        allItems = allItems.filter(item => item.logType === filter);
+    }
+
+    // Aplicar busca textual
+    if (search) {
+        allItems = allItems.filter(item => {
+            // Buscar em reservas
+            if (item.logType === 'reserva') {
+                return item.docName?.toLowerCase().includes(search) ||
+                    item.formattedNumber?.toLowerCase().includes(search) ||
+                    item.userName?.toLowerCase().includes(search) ||
+                    (item.userCargo && item.userCargo.toLowerCase().includes(search)) ||
+                    (item.userSetor && item.userSetor.toLowerCase().includes(search)) ||
+                    (item.userSecretaria && item.userSecretaria.toLowerCase().includes(search)) ||
+                    (item.subject && item.subject.toLowerCase().includes(search)) ||
+                    (item.ementa && item.ementa.toLowerCase().includes(search));
+            }
+            // Buscar em logs de sistema
+            else {
+                return item.action?.toLowerCase().includes(search) ||
+                    item.details?.toLowerCase().includes(search) ||
+                    item.userName?.toLowerCase().includes(search);
+            }
+        });
+    }
+
+    if (allItems.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum log encontrado.</p>';
         return;
     }
 
-    // Layout IDÊNTICO ao histórico principal
-    container.innerHTML = filtered.map(r => {
-        const date = new Date(r.timestamp);
-        const ementa = r.ementa || 'Sem ementa cadastrada';
-        const cargo = r.userCargo || 'N/A';
-        const setor = r.userSetor || 'N/A';
-        const secretaria = r.userSecretaria || 'N/A';
+    // Renderizar items
+    container.innerHTML = allItems.map(item => {
+        if (item.logType === 'reserva') {
+            // Renderizar reserva
+            const date = new Date(item.timestamp);
+            const ementa = item.ementa || 'Sem ementa cadastrada';
+            const cargo = item.userCargo || 'N/A';
+            const setor = item.userSetor || 'N/A';
+            const secretaria = item.userSecretaria || 'N/A';
 
-        return `
-            <div class="history-item-detailed">
-                <div class="history-header">
-                    <div class="history-doc-type">
-                        <span class="doc-icon">📄</span>
-                        <span>${r.docName}</span>
+            return `
+                <div class="history-item-detailed">
+                    <div class="history-header">
+                        <div class="history-doc-type">
+                            <span class="doc-icon">📄</span>
+                            <span>${item.docName}</span>
+                            <span class="log-badge log-badge-reserva">RESERVA</span>
+                        </div>
+                        <div class="history-datetime">
+                            ${formatDate(date)} ${formatTime(date)}
+                        </div>
                     </div>
-                    <div class="history-datetime">
-                        ${formatDate(date)} ${formatTime(date)}
+                    
+                    <div class="history-body">
+                        <div class="history-subject">
+                            <strong>Assunto:</strong> ${item.subject || 'Não informado'}
+                        </div>
+                        <div class="history-number-box">
+                            <strong>Número:</strong> <span class="highlight-number">${item.formattedNumber}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="history-ementa">
+                        <strong>Ementa:</strong>
+                        <p>${ementa}</p>
+                    </div>
+                    
+                    <div class="history-user-info">
+                        <span class="user-icon">👤</span>
+                        <div class="user-details">
+                            <div class="user-name">${item.userName}</div>
+                            <div class="user-position">${cargo} - ${setor}</div>
+                            <div class="user-dept">${secretaria}</div>
+                        </div>
                     </div>
                 </div>
-                
-                <div class="history-body">
-                    <div class="history-subject">
-                        <strong>Assunto:</strong> ${r.subject || 'Não informado'}
+            `;
+        } else {
+            // Renderizar log de sistema
+            const date = new Date(item.timestamp);
+            const iconMap = {
+                'sistema': '⚙️',
+                'usuario': '👤',
+                'documento': '📄'
+            };
+            const icon = iconMap[item.logType] || '📝';
+
+            const badgeClass = `log-badge log-badge-${item.logType}`;
+
+            return `
+                <div class="log-item">
+                    <div class="log-header">
+                        <div class="log-type">
+                            <span class="log-icon">${icon}</span>
+                            <span class="log-badge ${badgeClass}">${item.logType.toUpperCase()}</span>
+                        </div>
+                        <div class="log-datetime">
+                            ${formatDate(date)} ${formatTime(date)}
+                        </div>
                     </div>
-                    <div class="history-number-box">
-                        <strong>Número:</strong> <span class="highlight-number">${r.formattedNumber}</span>
+                    <div class="log-body">
+                        <div class="log-action"><strong>${item.action}</strong></div>
+                        <div class="log-details">${item.details}</div>
+                        <div class="log-user">👤 ${item.userName}</div>
                     </div>
                 </div>
-                
-                <div class="history-ementa">
-                    <strong>Ementa:</strong>
-                    <p>${ementa}</p>
-                </div>
-                
-                <div class="history-user-info">
-                    <span class="user-icon">👤</span>
-                    <div class="user-details">
-                        <div class="user-name">${r.userName}</div>
-                        <div class="user-position">${cargo} - ${setor}</div>
-                        <div class="user-dept">${secretaria}</div>
-                    </div>
-                </div>
-            </div>
-        `;
+            `;
+        }
     }).join('');
 }
 
@@ -975,8 +1146,13 @@ function renderLogs() {
 function filterLogs(type) {
     state.currentLogFilter = type;
     document.querySelectorAll('.log-filter-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.textContent.includes(type === 'todos' ? 'Todos' : type === 'cadastro' ? 'Cadastros' : 'Reservas'));
+        btn.classList.remove('active');
     });
+
+    // Adicionar active no botão clicado
+    event.target.classList.add('active');
+
+    // Aplicar o filtro real
     renderLogs();
 }
 
@@ -1073,7 +1249,7 @@ function handleDocFormSubmit(e) {
     if (state.editingDocId) {
         const doc = state.documents.find(d => d.id === state.editingDocId);
         Object.assign(doc, formData);
-        addLog('cadastro', 'Editou documento', doc.name);
+        addLog('documento', 'Editou documento', `${doc.name} foi modificado`);
     } else {
         state.documents.push({
             id: generateId(),
@@ -1081,7 +1257,7 @@ function handleDocFormSubmit(e) {
             currentNumber: formData.startNumber,
             lastResetYear: new Date().getFullYear()
         });
-        addLog('cadastro', 'Criou documento', formData.name);
+        addLog('documento', 'Criou documento', `Novo tipo: ${formData.name}`);
     }
 
     saveData();
@@ -1095,7 +1271,7 @@ function toggleDocStatus(docId) {
     const doc = state.documents.find(d => d.id === docId);
     doc.enabled = !doc.enabled;
     saveData();
-    addLog('cadastro', `${doc.enabled ? 'Habilitou' : 'Desabilitou'} documento`, doc.name);
+    addLog('documento', `${doc.enabled ? 'Habilitou' : 'Desabilitou'} documento`, doc.name);
     renderAdminDocs();
     renderDocuments();
 }
@@ -1108,7 +1284,7 @@ function deleteDocument(docId) {
         () => {
             state.documents = state.documents.filter(d => d.id !== docId);
             saveData();
-            addLog('cadastro', 'Excluiu documento', doc.name);
+            addLog('documento', 'Excluiu documento', `Tipo ${doc.name} foi removido`);
             renderAdminDocs();
             renderDocuments();
             updateStats();
@@ -1208,10 +1384,28 @@ function handleUserFormSubmit(e) {
     e.preventDefault();
 
     const role = document.getElementById('userRole').value;
+    const secretaria = document.getElementById('userSecretaria').value;
     let allowedDocuments = [];
 
     if (role === 'user_restricted' || role === 'user_readonly') {
-        allowedDocuments = Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => cb.value);
+        // Herdar documentos da secretaria se estiver criando novo usuário
+        if (!state.editingUserId) {
+            const secretariaDocs = state.secretariaPermissions[secretaria] || [];
+            allowedDocuments = [...secretariaDocs]; // Copiar documentos da secretaria
+        }
+
+        // Adicionar documentos manualmente selecionados
+        const manuallySelected = Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => cb.value);
+
+        // Combinar e remover duplicatas
+        if (!state.editingUserId) {
+            // Novo usuário: usar secretaria + selecionados manualmente
+            allowedDocuments = [...new Set([...allowedDocuments, ...manuallySelected])];
+        } else {
+            // Editando: usar apenas selecionados manualmente
+            allowedDocuments = manuallySelected;
+        }
+
         if (allowedDocuments.length === 0) {
             showAlertModal('⚠️ Aviso', 'Selecione pelo menos um documento!');
             return;
@@ -1238,14 +1432,14 @@ function handleUserFormSubmit(e) {
     if (state.editingUserId) {
         const user = state.users.find(u => u.id === state.editingUserId);
         Object.assign(user, formData);
-        addLog('cadastro', 'Editou usuário', `${formData.name} - ${formData.cargo}`);
+        addLog('usuario', 'Editou usuário', `${formData.name} - ${formData.cargo}`);
     } else {
         state.users.push({
             id: generateId(),
             ...formData,
             createdAt: new Date().toISOString()
         });
-        addLog('cadastro', 'Criou usuário', `${formData.name} - ${formData.cargo}`);
+        addLog('usuario', 'Criou usuário', `${formData.name} - ${formData.cargo}`);
     }
 
     saveUsers();
@@ -1262,11 +1456,180 @@ function deleteUser(userId) {
         () => {
             state.users = state.users.filter(u => u.id !== userId);
             saveUsers();
-            addLog('cadastro', 'Excluiu usuário', user.name);
+            addLog('usuario', 'Excluiu usuário', `${user.name} foi removido`);
             renderAdminUsers();
             updateStats();
         }
     );
+}
+
+// Configuração de Secretarias
+const SECRETARIAS = [
+    "Controle Interno",
+    "Gabinete",
+    "Procuradoria",
+    "Secretaria de Administração",
+    "Secretaria de Agricultura e Meio Ambiente",
+    "Secretaria de Cultura e Turismo",
+    "Secretaria de Desenvolvimento Econômico e Gestão Institucional",
+    "Secretaria de Desenvolvimento Social",
+    "Secretaria de Educação",
+    "Secretaria de Esporte",
+    "Secretaria de Fazenda",
+    "Secretaria da Saúde",
+    "Secretaria de Serviços Urbanos"
+];
+
+function toggleSecretariaConfig() {
+    const area = document.getElementById('secretariaConfigArea');
+    const userForm = document.getElementById('userFormInline');
+    const isVisible = area.style.display !== 'none';
+
+    if (isVisible) {
+        area.style.display = 'none';
+    } else {
+        // Fechar formulário de usuário se estiver aberto
+        userForm.style.display = 'none';
+        area.style.display = 'block';
+        renderSecretariaConfig();
+        // Scroll to form
+        area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function renderSecretariaConfig() {
+    const container = document.getElementById('secretariaConfigList');
+
+    container.innerHTML = `
+        <div class="secretaria-selector">
+            <label for="secretariaSelect"><strong>Selecione a Secretaria:</strong></label>
+            <select id="secretariaSelect" onchange="renderSecretariaDocuments()">
+                <option value="">-- Escolha uma secretaria --</option>
+                ${SECRETARIAS.map(sec => `<option value="${sec}">${sec}</option>`).join('')}
+            </select>
+        </div>
+        <div id="secretariaDocumentsArea" style="display: none;">
+            <h4 id="selectedSecretariaName"></h4>
+            <div id="secretariaDocumentsGrid" class="secretaria-docs-grid"></div>
+        </div>
+    `;
+}
+
+function renderSecretariaDocuments() {
+    const select = document.getElementById('secretariaSelect');
+    const selectedSecretaria = select.value;
+    const documentsArea = document.getElementById('secretariaDocumentsArea');
+    const documentsGrid = document.getElementById('secretariaDocumentsGrid');
+    const nameDisplay = document.getElementById('selectedSecretariaName');
+
+    if (!selectedSecretaria) {
+        documentsArea.style.display = 'none';
+        return;
+    }
+
+    // Mostrar área de documentos
+    documentsArea.style.display = 'block';
+    nameDisplay.textContent = selectedSecretaria;
+
+    // Obter configurações já salvas (novo formato)
+    const secretariaConfigs = state.secretariaPermissions[selectedSecretaria] || {};
+
+    // Renderizar cards de configuração
+    documentsGrid.innerHTML = state.documents.filter(d => d.enabled).map(doc => {
+        // Buscar configuração existente ou usar padrões do documento
+        const config = secretariaConfigs[doc.id] || {
+            enabled: false,
+            startNumber: doc.startNumber,
+            yearlyReset: doc.yearlyReset
+        };
+
+        return `
+            <div class="document-config-card">
+                <div class="doc-config-header">
+                    <label class="checkbox-label">
+                        <input type="checkbox" 
+                               class="secretaria-doc-checkbox" 
+                               data-doc-id="${doc.id}"
+                               data-secretaria="${selectedSecretaria}"
+                               ${config.enabled ? 'checked' : ''}
+                               onchange="toggleDocConfig('${doc.id}')">
+                        <span><strong>${doc.name}</strong> ${doc.prefix ? '(' + doc.prefix + ')' : ''}</span>
+                    </label>
+                </div>
+                <div class="doc-config-inputs" id="config-${doc.id}" style="display: ${config.enabled ? 'block' : 'none'};">
+                    <div class="config-row">
+                        <label>Número Inicial:</label>
+                        <input type="number" 
+                               class="config-start-number" 
+                               data-doc-id="${doc.id}"
+                               value="${config.startNumber}" 
+                               min="1">
+                    </div>
+                    <div class="config-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" 
+                                   class="config-yearly-reset" 
+                                   data-doc-id="${doc.id}"
+                                   ${config.yearlyReset ? 'checked' : ''}>
+                            <span>Reset Anual</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Alternar visibilidade das configurações do documento
+function toggleDocConfig(docId) {
+    const configArea = document.getElementById(`config-${docId}`);
+    const checkbox = document.querySelector(`.secretaria-doc-checkbox[data-doc-id="${docId}"]`);
+
+    if (checkbox.checked) {
+        configArea.style.display = 'block';
+    } else {
+        configArea.style.display = 'none';
+    }
+}
+
+function saveSecretariaConfig() {
+    const select = document.getElementById('secretariaSelect');
+    const selectedSecretaria = select.value;
+
+    if (!selectedSecretaria) {
+        showAlertModal('⚠️ Aviso', 'Selecione uma secretaria para configurar!');
+        return;
+    }
+
+    // Inicializar configurações da secretaria
+    state.secretariaPermissions[selectedSecretaria] = {};
+
+    // Cole tar todos os documentos marcados
+    const checkboxes = document.querySelectorAll('.secretaria-doc-checkbox:checked');
+
+    checkboxes.forEach(checkbox => {
+        const docId = checkbox.getAttribute('data-doc-id');
+
+        // Buscar valores dos inputs de configuração
+        const startNumberInput = document.querySelector(`.config-start-number[data-doc-id="${docId}"]`);
+        const yearlyResetInput = document.querySelector(`.config-yearly-reset[data-doc-id="${docId}"]`);
+
+        // Salvar configuração completa
+        state.secretariaPermissions[selectedSecretaria][docId] = {
+            enabled: true,
+            startNumber: parseInt(startNumberInput.value) || 1,
+            yearlyReset: yearlyResetInput.checked
+        };
+    });
+
+    saveSecretariaPermissions();
+    addLog('sistema', 'Atualizou permissões de secretaria', `Configurações da ${selectedSecretaria} foram atualizadas`);
+
+    showAlertModal('✅ Sucesso!', `Configurações da ${selectedSecretaria} salvas com sucesso!`);
+
+    // Limpar seleção e resetar dropdown
+    select.value = '';
+    document.getElementById('secretariaDocumentsArea').style.display = 'none';
 }
 
 // Utilitários
