@@ -77,19 +77,40 @@ body {
     white-space: nowrap;
 }
 
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
+/* Header Institucional */
+.app-header.institutional {
+    padding: 0.5rem 0;
+    background: #001B5E;
+    /* Dark Blue Header */
 }
 
-.logo h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+.institutional-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.3rem;
+    flex: 1;
+}
+
+.brand-logo-horizontal {
+    height: 70px;
+    display: flex;
+    align-items: center;
+}
+
+.logo-horizontal-img {
+    height: 100%;
+    width: auto;
+    object-fit: contain;
+}
+
+.system-subtitle-header {
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 400;
+    letter-spacing: 0.3px;
+    margin-top: 0.1rem;
+    margin-left: 0.2rem;
 }
 
 .header-nav {

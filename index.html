@@ -144,13 +144,14 @@
     <!-- App gerado dinamicamente -->
 
     <script>
-        function resetAppData() {
+        <script>
+            function resetAppData() {
             if (confirm('Resetar dados do aplicativo?')) {
                 localStorage.clear();
-                location.reload();
+            location.reload();
             }
         }
-        window.resetAppData = resetAppData;
+            window.resetAppData = resetAppData;
     </script>
 
     <!-- Bibliotecas para Exportação -->
@@ -160,7 +161,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
     <script src="autocomplete.js?v=202601122026"></script>
-    <script src="admin-views.js?v=202601122026"></script>
+    <script src="autocomplete.js?v=202601122026"></script>
+    <!-- admin-views.js removido pois app.js gerencia as views agora -->
     <script src="app.js?v=202601140002"></script>
 </body>
 
