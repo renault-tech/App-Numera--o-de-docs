@@ -145,23 +145,35 @@ body {
     box-shadow: var(--glow-blue);
 }
 
-/* Controles de Zoom de Fonte */
-.font-zoom-controls {
+/* Controles de Zoom Flutuantes */
+.floating-zoom-controls {
+    position: fixed;
+    top: 90px;
+    right: 2rem;
+    z-index: 1000;
     display: flex;
     align-items: center;
     gap: 0.5rem;
     background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 0.25rem 0.5rem;
+    border: 2px solid var(--border-color);
+    border-radius: 50px;
+    padding: 0.5rem 1rem;
+    box-shadow: var(--shadow-md);
+    transition: all 0.3s ease;
+}
+
+.floating-zoom-controls:hover {
+    box-shadow: var(--shadow-lg);
+    border-color: #2563eb;
+    transform: translateY(-2px);
 }
 
 .zoom-btn {
     background: transparent;
     border: none;
     color: var(--text-primary);
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-size: 1rem;
+    font-weight: 700;
     cursor: pointer;
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
@@ -171,14 +183,20 @@ body {
 .zoom-btn:hover {
     background: var(--bg-hover);
     color: var(--primary-color);
+    transform: scale(1.1);
 }
 
 .zoom-indicator {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    font-weight: 500;
-    min-width: 40px;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    font-weight: 600;
+    min-width: 45px;
     text-align: center;
+}
+
+.app-zoom-wrapper {
+    /* Wrapper para o zoom */
+    transform-origin: top center;
 }
 
 
@@ -565,6 +583,19 @@ body {
     background: var(--bg-hover);
     border-color: #2563eb;
     color: #2563eb;
+}
+
+.btn-primary.active {
+    background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+    box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.2);
+    transform: translateY(1px);
+}
+
+.btn-secondary.active {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1e40af;
+    box-shadow: inset 0 2px 4px rgba(37, 99, 235, 0.1);
 }
 
 /* Modal */

@@ -1,17 +1,27 @@
 // Sistema de Numeração de Documentos - Versão Simplificada e Completa
 // Com: Campos expandidos, 4 níveis de permissão, seleção de documentos, logs
 
+// Configuração do Supabase
+const SUPABASE_URL = 'https://rizzhpsfwghhohozvggf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpenpocHNmd2doaG9ob3p2Z2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1Mjg5MzEsImV4cCI6MjA4NTEwNDkzMX0.bp8HpkYJxqiSW5krTk8uqOEYjdV2fg8PukOlNBXPSak';
+const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
 let state = {
     documents: [],
     reservations: [],
     users: [],
     logs: [],
-    secretariaPermissions: {}, // Documentos permitidos por secretaria
+    // secretariaPermissions agora será derivada dos atributos dos usuários ou tabela dedicada se necessário.
+    // Para simplificar a migração com o schema atual, vamos assumir que 'allowed_documents' no usuário resolve,
+    // ou manteremos secretariaPermissions apenas em memória se não persistirmos.
+    // O schema.sql não tem tabela 'secretaria_permissions', então vamos focar no 'allowed_documents' do usuário.
+    secretariaPermissions: {},
     currentUser: null,
     currentView: 'login',
     editingDocId: null,
     editingUserId: null,
-    currentLogFilter: 'todos'
+    currentLogFilter: 'todos',
+    loading: false
 };
 
 // Níveis de permissão
@@ -28,115 +38,280 @@ document.addEventListener('DOMContentLoaded', () => {
     checkAutoLogin();
 });
 
-// Carregar dados
-function loadData() {
-    const savedDocs = localStorage.getItem('documents');
-    const savedReservations = localStorage.getItem('reservations');
-    const savedUsers = localStorage.getItem('users');
-    const savedLogs = localStorage.getItem('logs');
-
-    if (savedDocs) {
-        state.documents = JSON.parse(savedDocs);
-        checkYearlyReset();
-    } else {
-        state.documents = [
-            { id: generateId(), name: 'Ofício', prefix: 'Of.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Memorando', prefix: 'Mem.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Resolução', prefix: 'Res.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Contrato', prefix: 'Contr.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Decreto', prefix: 'Dec.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Portaria', prefix: 'Port.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Ata', prefix: '', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Edital', prefix: 'Ed.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Parecer', prefix: 'Par.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Circular', prefix: 'Circ.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Processo', prefix: 'Proc.', startNumber: 1, currentNumber: 1, yearlyReset: false, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Protocolo', prefix: 'Prot.', startNumber: 1000, currentNumber: 1000, yearlyReset: false, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Lei', prefix: 'L.', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Lei Complementar', prefix: 'LC', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Medida Provisória', prefix: 'MP', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Instrução Normativa', prefix: 'IN', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Exposição de Motivos', prefix: 'EM', startNumber: 1, currentNumber: 1, yearlyReset: true, lastResetYear: new Date().getFullYear(), enabled: true },
-            { id: generateId(), name: 'Folha', prefix: 'fl.', startNumber: 1, currentNumber: 1, yearlyReset: false, lastResetYear: new Date().getFullYear(), enabled: true }
-        ];
-        saveData();
+// Carregar dados do Supabase
+async function loadData() {
+    if (!supabase) {
+        console.error('Supabase client not initialized');
+        return;
     }
 
-    state.reservations = savedReservations ? JSON.parse(savedReservations) : [];
-    state.logs = savedLogs ? JSON.parse(savedLogs) : [];
+    try {
+        state.loading = true;
 
-    // Carregar permissões de secretaria
-    const savedSecretariaPerms = localStorage.getItem('secretariaPermissions');
-    state.secretariaPermissions = savedSecretariaPerms ? JSON.parse(savedSecretariaPerms) : {};
+        // 1. Carregar Documentos
+        const { data: docs, error: errDocs } = await supabase
+            .from('documents')
+            .select('*')
+            .order('name');
 
-    if (savedUsers) {
-        state.users = JSON.parse(savedUsers);
-    } else {
-        state.users = [{
-            id: generateId(),
-            username: 'admin',
-            password: 'admin123',
-            name: 'Administrador',
-            cargo: 'Administrador do Sistema',
-            setor: 'TI',
-            secretaria: 'Administrativa',
-            role: 'admin',
-            allowedDocuments: [],
-            createdAt: new Date().toISOString()
-        }];
-        addLog('usuario', 'Criou usuário inicial', `${state.users[0].name} - ${state.users[0].cargo}`);
-        saveUsers();
+        if (errDocs) throw errDocs;
+
+        // Mapeamento para formato do state (convert snake_case to camelCase)
+        state.documents = docs.map(d => ({
+            id: d.id,
+            name: d.name,
+            prefix: d.prefix,
+            startNumber: d.start_number,
+            currentNumber: d.current_number,
+            yearlyReset: d.yearly_reset,
+            lastResetYear: d.last_reset_year,
+            enabled: d.enabled
+        }));
+
+        // Se não houver documentos, semear padrões
+        if (state.documents.length === 0) {
+            const defaultDocs = [
+                { name: 'Ofício', prefix: 'Of.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Memorando', prefix: 'Mem.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Resolução', prefix: 'Res.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Contrato', prefix: 'Contr.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Decreto', prefix: 'Dec.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Portaria', prefix: 'Port.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Ata', prefix: '', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Edital', prefix: 'Ed.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Parecer', prefix: 'Par.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Circular', prefix: 'Circ.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Processo', prefix: 'Proc.', start_number: 1, current_number: 1, yearly_reset: false, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Protocolo', prefix: 'Prot.', start_number: 1000, current_number: 1000, yearly_reset: false, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Lei', prefix: 'L.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Lei Complementar', prefix: 'LC', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Medida Provisória', prefix: 'MP', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Instrução Normativa', prefix: 'IN', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Exposição de Motivos', prefix: 'EM', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: new Date().getFullYear(), enabled: true },
+                { name: 'Folha', prefix: 'fl.', start_number: 1, current_number: 1, yearly_reset: false, last_reset_year: new Date().getFullYear(), enabled: true }
+            ];
+
+            const { data: newDocs, error: seedError } = await supabase
+                .from('documents')
+                .insert(defaultDocs)
+                .select();
+
+            if (!seedError && newDocs) {
+                state.documents = newDocs.map(d => ({
+                    id: d.id,
+                    name: d.name,
+                    prefix: d.prefix,
+                    startNumber: d.start_number,
+                    currentNumber: d.current_number,
+                    yearlyReset: d.yearly_reset,
+                    lastResetYear: d.last_reset_year,
+                    enabled: d.enabled
+                }));
+                addLog('sistema', 'Inicialização', 'Documentos padrão criados');
+            }
+        }
+
+        // Reset anual (lógica mantida, mas precisa salvar no banco se mudar)
+        await checkYearlyReset();
+
+        // 1.1 Carregar Configurações (Secretarias)
+        const { data: configs, error: errConfig } = await supabase
+            .from('app_config')
+            .select('*');
+
+        if (!errConfig && configs) {
+            const secConfig = configs.find(c => c.key === 'secretariaPermissions');
+            if (secConfig) {
+                state.secretariaPermissions = secConfig.value;
+            }
+        }
+
+        // 2. Carregar Usuários
+        const { data: users, error: errUsers } = await supabase
+            .from('users')
+            .select('*');
+
+        if (errUsers) throw errUsers;
+
+        state.users = users.map(u => ({
+            id: u.id,
+            username: u.username,
+            password: u.password,
+            name: u.name,
+            cargo: u.cargo,
+            setor: u.setor,
+            secretaria: u.secretaria,
+            role: u.role,
+            allowedDocuments: u.allowed_documents || [],
+            createdAt: u.created_at
+        }));
+
+        // Se não houver usuários, criar admin padrão (apenas na primeira vez/migração)
+        if (state.users.length === 0) {
+            // Criar usuário admin localmente para permitir login inicial e salvar
+            // Idealmente, você inseriria isso direto no banco ou teria um seed.
+            const adminUser = {
+                username: 'admin',
+                password: 'admin123',
+                name: 'Administrador',
+                cargo: 'Administrador do Sistema',
+                setor: 'TI',
+                secretaria: 'Administrativa',
+                role: 'admin',
+                allowed_documents: []
+            };
+
+            const { data: newUser, error: createError } = await supabase
+                .from('users')
+                .insert([adminUser])
+                .select()
+                .single();
+
+            if (!createError && newUser) {
+                state.users.push({
+                    ...newUser,
+                    allowedDocuments: newUser.allowed_documents
+                });
+                addLog('usuario', 'Criou usuário inicial', 'Sistema criou admin padrão');
+            }
+        }
+
+        // 3. Carregar Reservas
+        const { data: reservations, error: errRes } = await supabase
+            .from('reservations')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(1000); // Limite inicial para performance
+
+        if (errRes) throw errRes;
+
+        state.reservations = reservations.map(r => ({
+            id: r.id,
+            docId: r.doc_id,
+            docName: r.doc_name,
+            number: r.number,
+            formattedNumber: r.formatted_number,
+            subject: r.subject,
+            ementa: r.ementa,
+            userId: r.user_id,
+            userName: r.user_name,
+            userCargo: r.user_cargo,
+            userSetor: r.user_setor,
+            userSecretaria: r.user_secretaria,
+            timestamp: r.timestamp
+        }));
+
+        // 4. Carregar Logs
+        const { data: logs, error: errLogs } = await supabase
+            .from('logs')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(500);
+
+        if (errLogs) throw errLogs;
+
+        state.logs = logs.map(l => ({
+            id: l.id,
+            type: l.type,
+            action: l.action,
+            details: l.details,
+            userId: l.user_id,
+            userName: l.user_name,
+            timestamp: l.timestamp
+        }));
+
+        // Renderizar se a view estiver ativa
+        if (typeof syncAllViews === 'function') syncAllViews();
+
+    } catch (error) {
+        console.error('Erro ao carregar dados:', error);
+        alert('Erro ao carregar dados do sistema. Verifique o console.');
+    } finally {
+        state.loading = false;
     }
 }
 
-// Salvar dados
+// Funções de salvamento agora são específicas ou deprecadas em favor de chamadas diretas
+// Mantendo as assinaturas para não quebrar chamadas existentes, mas elas não farão nada globalmente.
+// As alterações de estado devem chamar o Supabase diretamente.
+
 function saveData() {
-    localStorage.setItem('documents', JSON.stringify(state.documents));
-    localStorage.setItem('reservations', JSON.stringify(state.reservations));
+    console.log('saveData: Operação global desativada. Use funções específicas do Supabase.');
     if (typeof syncAllViews === 'function') syncAllViews();
 }
 
 function saveUsers() {
-    localStorage.setItem('users', JSON.stringify(state.users));
+    console.log('saveUsers: Operação global desativada.');
     if (typeof syncAllViews === 'function') syncAllViews();
 }
 
 function saveLogs() {
-    localStorage.setItem('logs', JSON.stringify(state.logs));
+    console.log('saveLogs: Operação global desativada.');
 }
 
 function saveSecretariaPermissions() {
-    localStorage.setItem('secretariaPermissions', JSON.stringify(state.secretariaPermissions));
-    if (typeof syncAllViews === 'function') syncAllViews();
+    console.log('saveSecretariaPermissions: Implementação pendente no Supabase.');
+    // localStorage.setItem('secretariaPermissions', JSON.stringify(state.secretariaPermissions)); 
 }
 
-// Adicionar log
-function addLog(type, action, details) {
-    state.logs.unshift({
-        id: generateId(),
+// Adicionar log (Async)
+async function addLog(type, action, details) {
+    // Atualizar estado local (otimista)
+    const logItem = {
         type: type,
         action: action,
         details: details,
-        userId: state.currentUser?.id,
-        userName: state.currentUser?.name || 'Sistema',
+        user_id: state.currentUser?.id,
+        user_name: state.currentUser?.name || 'Sistema',
         timestamp: new Date().toISOString()
-    });
-    if (state.logs.length > 1000) state.logs = state.logs.slice(0, 1000);
-    saveLogs();
+    };
+
+    // state.logs.unshift(logItem); // Atualizar via fetch é mais seguro para garantir IDs
+
+    try {
+        const { error } = await supabase
+            .from('logs')
+            .insert([logItem]);
+
+        if (error) console.error('Erro ao salvar Log:', error);
+
+        // Recarregar logs discretamente
+        // Ou adicionar ao state local manualmente se tiver ID
+    } catch (e) {
+        console.error('Exceção ao salvar log:', e);
+    }
 }
 
 // Reset anual
-function checkYearlyReset() {
+async function checkYearlyReset() {
     const currentYear = new Date().getFullYear();
     let hasChanges = false;
-    state.documents.forEach(doc => {
+
+    // Iterar e atualizar documentos necessários
+    for (const doc of state.documents) {
         if (doc.yearlyReset && doc.lastResetYear !== currentYear) {
-            doc.currentNumber = doc.startNumber;
-            doc.lastResetYear = currentYear;
-            hasChanges = true;
+            // Atualizar no banco
+            try {
+                const { error } = await supabase
+                    .from('documents')
+                    .update({
+                        current_number: doc.startNumber,
+                        last_reset_year: currentYear
+                    })
+                    .eq('id', doc.id);
+
+                if (!error) {
+                    doc.currentNumber = doc.startNumber;
+                    doc.lastResetYear = currentYear;
+                    hasChanges = true;
+                }
+            } catch (e) {
+                console.error('Erro no reset anual:', e);
+            }
         }
-    });
-    if (hasChanges) saveData();
+    }
+
+    if (hasChanges) console.log('Reset anual aplicado');
 }
 
 // Auto login
@@ -204,6 +379,7 @@ function showLoginView() {
         </div>
     `;
     document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    applyGlobalZoom(); // Aplicar zoom ao carregar a view
 }
 
 // Tela principal
@@ -211,6 +387,12 @@ function showMainApp() {
     const isAdmin = state.currentUser.role === 'admin';
 
     document.body.innerHTML = `
+        <div id="zoom-controls-floating" class="floating-zoom-controls">
+            <button class="zoom-btn" onclick="decreaseGlobalZoom()" title="Diminuir zoom">A-</button>
+            <span id="globalZoomIndicator" class="zoom-indicator">100%</span>
+            <button class="zoom-btn" onclick="increaseGlobalZoom()" title="Aumentar zoom">A+</button>
+        </div>
+        <div id="app-zoom-wrapper" class="app-zoom-wrapper">
         <div class="app-container">
             <header class="app-header">
                 <div class="header-content">
@@ -219,13 +401,8 @@ function showMainApp() {
                         <button class="nav-btn active" onclick="switchView('main')">📋 Principal</button>
                         ${isAdmin ? '<button class="nav-btn" onclick="switchView(\'admin\')">⚙️ Administração</button>' : ''}
                     </nav>
-                    <div class="header-actions">
                         <span class="user-info">${state.currentUser.name} (${PERMISSION_LEVELS[state.currentUser.role].label})</span>
-                        <div class="font-zoom-controls">
-                            <button class="zoom-btn" onclick="decreaseFontZoom()" title="Diminuir fonte">A-</button>
-                            <span id="fontZoomIndicator" class="zoom-indicator">100%</span>
-                            <button class="zoom-btn" onclick="increaseFontZoom()" title="Aumentar fonte">A+</button>
-                        </div>
+                        <!-- Zoom removed from here -->
                         <button class="btn-secondary" onclick="handleLogout()">Sair</button>
                     </div>
                 </div>
@@ -339,8 +516,8 @@ function showMainApp() {
                         <button class="back-btn" onclick="hideAdminSections()">← Voltar</button>
                         <h2>👥 Gerenciar Usuários</h2>
                         <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-                            <button class="btn-primary" onclick="toggleUserForm()">➕ Adicionar Usuário</button>
-                            <button class="btn-secondary" onclick="toggleSecretariaConfig()">⚙️ Configurar Secretarias</button>
+                            <button id="btnAddUser" class="btn-primary" onclick="toggleUserForm()">➕ Adicionar Usuário</button>
+                            <button id="btnConfigSecretarias" class="btn-secondary" onclick="toggleSecretariaConfig()">⚙️ Configurar Secretarias</button>
                         </div>
                         
                         <!-- Área de Configuração de Secretarias -->
@@ -592,6 +769,8 @@ function showMainApp() {
                 </div>
             </div>
         </div>
+        </div>
+        </div> <!-- End app-zoom-wrapper -->
     `;
 
     setupEventListeners();
@@ -603,6 +782,7 @@ function showMainApp() {
         renderLogs();
         updateStats();
     }
+    applyGlobalZoom(); // Aplicar zoom ao carregar a view
 }
 
 // Event listeners
@@ -700,8 +880,8 @@ function formatNumber(doc) {
     return doc.prefix ? `${doc.prefix} ${number}/${year}` : `${number}/${year}`;
 }
 
-// Reservar número
-function reserveNumber(docId) {
+// Reservar número (Async Refactor)
+async function reserveNumber(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
 
@@ -716,39 +896,83 @@ function reserveNumber(docId) {
         showConfirmModal(
             '⚠️ Confirmação de Reserva',
             confirmMessage,
-            () => {
+            async () => {
                 // Confirmado - reservar número
-                const reservation = {
-                    id: generateId(),
-                    docId: doc.id,
-                    docName: doc.name,
-                    number: doc.currentNumber,
-                    formattedNumber: formatNumber(doc),
-                    subject: data.subject,
-                    ementa: data.ementa,
-                    userId: state.currentUser.id,
-                    userName: state.currentUser.name,
-                    userCargo: state.currentUser.cargo || '',
-                    userSetor: state.currentUser.setor || '',
-                    userSecretaria: state.currentUser.secretaria || '',
-                    timestamp: new Date().toISOString()
-                };
+                try {
+                    // Lock otimista no cliente (para UI), mas o banco é a verdade.
+                    // Em produção, usaríamos uma transaction ou procedure no Supabase para garantir atomicidade.
+                    // Aqui faremos: Insert Reservation -> Update Document
 
-                doc.currentNumber++;
-                state.reservations.unshift(reservation);
+                    const reservation = {
+                        doc_id: doc.id,
+                        doc_name: doc.name,
+                        number: doc.currentNumber,
+                        formatted_number: formatNumber(doc),
+                        subject: data.subject,
+                        ementa: data.ementa,
+                        user_id: state.currentUser.id,
+                        user_name: state.currentUser.name,
+                        user_cargo: state.currentUser.cargo || '',
+                        user_setor: state.currentUser.setor || '',
+                        user_secretaria: state.currentUser.secretaria || '',
+                        timestamp: new Date().toISOString()
+                    };
 
-                saveData();
-                addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formattedNumber} - Assunto: ${data.subject}`);
+                    const { data: resData, error: resError } = await supabase
+                        .from('reservations')
+                        .insert([reservation])
+                        .select()
+                        .single();
 
-                renderDocuments();
-                renderHistory();
-                if (state.currentUser.role === 'admin') {
-                    renderAdminDocs();
-                    updateStats();
+                    if (resError) throw resError;
+
+                    // Atualizar número do documento
+                    const { error: docError } = await supabase
+                        .from('documents')
+                        .update({ current_number: doc.currentNumber + 1 })
+                        .eq('id', doc.id);
+
+                    if (docError) {
+                        console.error('Erro ao incrementar documento:', docError);
+                        alert('Atenção: A reserva foi criada mas houve erro ao atualizar o contador. Contate o suporte.');
+                    } else {
+                        // Sucesso total - atualizar estado local
+                        doc.currentNumber++;
+
+                        // Adicionar ao topo da lista local
+                        state.reservations.unshift({
+                            id: resData.id,
+                            docId: reservation.doc_id,
+                            docName: reservation.doc_name,
+                            formattedNumber: reservation.formatted_number,
+                            subject: reservation.subject,
+                            ementa: reservation.ementa,
+                            userId: reservation.user_id,
+                            userName: reservation.user_name,
+                            userCargo: reservation.user_cargo,
+                            userSetor: reservation.user_setor,
+                            userSecretaria: reservation.user_secretaria,
+                            timestamp: reservation.timestamp,
+                            number: reservation.number
+                        });
+
+                        addLog('reserva', `Reservou ${doc.name}`, `Número: ${reservation.formatted_number} - Assunto: ${data.subject}`);
+
+                        renderDocuments();
+                        renderHistory();
+                        if (state.currentUser.role === 'admin') {
+                            renderAdminDocs();
+                            updateStats();
+                        }
+
+                        // Modal de sucesso
+                        showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formatted_number}\nAssunto: ${data.subject}`);
+                    }
+
+                } catch (error) {
+                    console.error('Erro na reserva:', error);
+                    showAlertModal('❌ Erro', 'Falha ao realizar reserva. Tente novamente.');
                 }
-
-                // Modal de sucesso
-                showAlertModal('✅ Sucesso!', `Número reservado com sucesso!\n\n${reservation.formattedNumber}\nAssunto: ${data.subject}`);
             }
         );
     });
@@ -1235,45 +1459,97 @@ function openEditDocModal(docId) {
     document.getElementById('docFormInline').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function handleDocFormSubmit(e) {
+async function handleDocFormSubmit(e) {
     e.preventDefault();
 
     const formData = {
         name: document.getElementById('docName').value,
         prefix: document.getElementById('docPrefix').value,
-        startNumber: parseInt(document.getElementById('startNumber').value),
-        yearlyReset: document.getElementById('yearlyReset').checked,
+        start_number: parseInt(document.getElementById('startNumber').value),
+        yearly_reset: document.getElementById('yearlyReset').checked,
         enabled: document.getElementById('docEnabled').checked
     };
 
-    if (state.editingDocId) {
-        const doc = state.documents.find(d => d.id === state.editingDocId);
-        Object.assign(doc, formData);
-        addLog('documento', 'Editou documento', `${doc.name} foi modificado`);
-    } else {
-        state.documents.push({
-            id: generateId(),
-            ...formData,
-            currentNumber: formData.startNumber,
-            lastResetYear: new Date().getFullYear()
-        });
-        addLog('documento', 'Criou documento', `Novo tipo: ${formData.name}`);
-    }
+    try {
+        if (state.editingDocId) {
+            // Editar
+            const { error } = await supabase
+                .from('documents')
+                .update(formData)
+                .eq('id', state.editingDocId);
 
-    saveData();
-    renderAdminDocs();
-    renderDocuments();
-    updateStats();
-    toggleDocForm(); // Fecha o formulário inline
+            if (error) throw error;
+
+            // Update local state
+            const doc = state.documents.find(d => d.id === state.editingDocId);
+            doc.name = formData.name;
+            doc.prefix = formData.prefix;
+            doc.startNumber = formData.start_number;
+            doc.yearlyReset = formData.yearly_reset;
+            doc.enabled = formData.enabled;
+
+            addLog('documento', 'Editou documento', `${doc.name} foi modificado`);
+
+        } else {
+            // Criar
+            const newDoc = {
+                ...formData,
+                current_number: formData.start_number,
+                last_reset_year: new Date().getFullYear()
+            };
+
+            const { data, error } = await supabase
+                .from('documents')
+                .insert([newDoc])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            state.documents.push({
+                id: data.id,
+                name: data.name,
+                prefix: data.prefix,
+                startNumber: data.start_number,
+                currentNumber: data.current_number,
+                yearlyReset: data.yearly_reset,
+                lastResetYear: data.last_reset_year,
+                enabled: data.enabled
+            });
+
+            addLog('documento', 'Criou documento', `Novo tipo: ${formData.name}`);
+        }
+
+        renderAdminDocs();
+        renderDocuments();
+        updateStats();
+        toggleDocForm();
+
+    } catch (error) {
+        console.error('Erro salvar documento:', error);
+        showAlertModal('❌ Erro', 'Erro ao salvar documento no banco de dados.');
+    }
 }
 
-function toggleDocStatus(docId) {
+async function toggleDocStatus(docId) {
     const doc = state.documents.find(d => d.id === docId);
-    doc.enabled = !doc.enabled;
-    saveData();
-    addLog('documento', `${doc.enabled ? 'Habilitou' : 'Desabilitou'} documento`, doc.name);
-    renderAdminDocs();
-    renderDocuments();
+    const newStatus = !doc.enabled;
+
+    try {
+        const { error } = await supabase
+            .from('documents')
+            .update({ enabled: newStatus })
+            .eq('id', docId);
+
+        if (error) throw error;
+
+        doc.enabled = newStatus;
+        addLog('documento', `${doc.enabled ? 'Habilitou' : 'Desabilitou'} documento`, doc.name);
+        renderAdminDocs();
+        renderDocuments();
+    } catch (error) {
+        console.error('Erro status documento:', error);
+    }
 }
 
 function deleteDocument(docId) {
@@ -1281,13 +1557,24 @@ function deleteDocument(docId) {
     showConfirmModal(
         '⚠️ Confirmar Exclusão',
         `Tem certeza que deseja excluir o documento "${doc.name}"?`,
-        () => {
-            state.documents = state.documents.filter(d => d.id !== docId);
-            saveData();
-            addLog('documento', 'Excluiu documento', `Tipo ${doc.name} foi removido`);
-            renderAdminDocs();
-            renderDocuments();
-            updateStats();
+        async () => {
+            try {
+                const { error } = await supabase
+                    .from('documents')
+                    .delete()
+                    .eq('id', docId);
+
+                if (error) throw error;
+
+                state.documents = state.documents.filter(d => d.id !== docId);
+                addLog('documento', 'Excluiu documento', `Tipo ${doc.name} foi removido`);
+                renderAdminDocs();
+                renderDocuments();
+                updateStats();
+            } catch (error) {
+                console.error('Erro excluir documento:', error);
+                showAlertModal('❌ Erro', 'Não foi possível excluir (pode haver reservas vinculadas).');
+            }
         }
     );
 }
@@ -1296,12 +1583,21 @@ function deleteDocument(docId) {
 function toggleUserForm() {
     const form = document.getElementById('userFormInline');
     const isVisible = form.style.display !== 'none';
+    const btndAddUser = document.getElementById('btnAddUser');
+    const btnConfigSecretarias = document.getElementById('btnConfigSecretarias');
 
     if (isVisible) {
         form.style.display = 'none';
         state.editingUserId = null;
+        if (btndAddUser) btndAddUser.classList.remove('active');
     } else {
+        // Fechar config de secretarias se estiver aberta
+        document.getElementById('secretariaConfigArea').style.display = 'none';
+        if (btnConfigSecretarias) btnConfigSecretarias.classList.remove('active');
+
         form.style.display = 'block';
+        if (btndAddUser) btndAddUser.classList.add('active');
+
         document.getElementById('userFormTitle').textContent = 'Adicionar Usuário';
         document.getElementById('userForm').reset();
         document.getElementById('userRole').value = 'user_restricted';
@@ -1380,7 +1676,7 @@ function deselectAllDocs() {
     document.querySelectorAll('.doc-checkbox').forEach(cb => cb.checked = false);
 }
 
-function handleUserFormSubmit(e) {
+async function handleUserFormSubmit(e) {
     e.preventDefault();
 
     const role = document.getElementById('userRole').value;
@@ -1388,21 +1684,16 @@ function handleUserFormSubmit(e) {
     let allowedDocuments = [];
 
     if (role === 'user_restricted' || role === 'user_readonly') {
-        // Herdar documentos da secretaria se estiver criando novo usuário
         if (!state.editingUserId) {
             const secretariaDocs = state.secretariaPermissions[secretaria] || [];
-            allowedDocuments = [...secretariaDocs]; // Copiar documentos da secretaria
+            allowedDocuments = [...secretariaDocs];
         }
 
-        // Adicionar documentos manualmente selecionados
         const manuallySelected = Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => cb.value);
 
-        // Combinar e remover duplicatas
         if (!state.editingUserId) {
-            // Novo usuário: usar secretaria + selecionados manualmente
             allowedDocuments = [...new Set([...allowedDocuments, ...manuallySelected])];
         } else {
-            // Editando: usar apenas selecionados manualmente
             allowedDocuments = manuallySelected;
         }
 
@@ -1420,32 +1711,62 @@ function handleUserFormSubmit(e) {
         username: document.getElementById('userUsername').value,
         password: document.getElementById('userPassword').value,
         role: role,
-        allowedDocuments: allowedDocuments
+        allowed_documents: allowedDocuments
     };
 
-    const existing = state.users.find(u => u.username === formData.username && u.id !== state.editingUserId);
-    if (existing) {
-        showAlertModal('⚠️ Aviso', 'Este nome de usuário já existe!');
-        return;
+    if (!state.editingUserId) {
+        // Verificar duplicata apenas na criação
+        // (Nota: Supabase lançaria erro de constraint unique no username, mas checar aqui é bom UX)
+        const existing = state.users.find(u => u.username === formData.username);
+        if (existing) {
+            showAlertModal('⚠️ Aviso', 'Este nome de usuário já existe!');
+            return;
+        }
     }
 
-    if (state.editingUserId) {
-        const user = state.users.find(u => u.id === state.editingUserId);
-        Object.assign(user, formData);
-        addLog('usuario', 'Editou usuário', `${formData.name} - ${formData.cargo}`);
-    } else {
-        state.users.push({
-            id: generateId(),
-            ...formData,
-            createdAt: new Date().toISOString()
-        });
-        addLog('usuario', 'Criou usuário', `${formData.name} - ${formData.cargo}`);
-    }
+    try {
+        if (state.editingUserId) {
+            // Update
+            const { error } = await supabase
+                .from('users')
+                .update(formData)
+                .eq('id', state.editingUserId);
 
-    saveUsers();
-    renderAdminUsers();
-    updateStats();
-    toggleUserForm(); // Fecha o formulário inline
+            if (error) throw error;
+
+            // Local update
+            const user = state.users.find(u => u.id === state.editingUserId);
+            Object.assign(user, {
+                ...formData,
+                allowedDocuments: allowedDocuments
+            });
+            addLog('usuario', 'Editou usuário', `${formData.name} - ${formData.cargo}`);
+
+        } else {
+            // Create
+            const { data, error } = await supabase
+                .from('users')
+                .insert([formData])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            state.users.push({
+                ...data,
+                allowedDocuments: data.allowed_documents
+            });
+            addLog('usuario', 'Criou usuário', `${formData.name} - ${formData.cargo}`);
+        }
+
+        renderAdminUsers();
+        updateStats();
+        toggleUserForm();
+
+    } catch (error) {
+        console.error('Erro usuario:', error);
+        showAlertModal('❌ Erro', 'Erro ao salvar usuário.');
+    }
 }
 
 function deleteUser(userId) {
@@ -1453,12 +1774,23 @@ function deleteUser(userId) {
     showConfirmModal(
         '⚠️ Confirmar Exclusão',
         `Tem certeza que deseja excluir o usuário "${user.name}"?`,
-        () => {
-            state.users = state.users.filter(u => u.id !== userId);
-            saveUsers();
-            addLog('usuario', 'Excluiu usuário', `${user.name} foi removido`);
-            renderAdminUsers();
-            updateStats();
+        async () => {
+            try {
+                const { error } = await supabase
+                    .from('users')
+                    .delete()
+                    .eq('id', userId);
+
+                if (error) throw error;
+
+                state.users = state.users.filter(u => u.id !== userId);
+                addLog('usuario', 'Excluiu usuário', `${user.name} foi removido`);
+                renderAdminUsers();
+                updateStats();
+            } catch (error) {
+                console.error('Erro delete User:', error);
+                showAlertModal('❌ Erro', 'Erro ao excluir usuário (verifique dependências).');
+            }
         }
     );
 }
@@ -1484,13 +1816,20 @@ function toggleSecretariaConfig() {
     const area = document.getElementById('secretariaConfigArea');
     const userForm = document.getElementById('userFormInline');
     const isVisible = area.style.display !== 'none';
+    const btnConfigSecretarias = document.getElementById('btnConfigSecretarias');
+    const btnAddUser = document.getElementById('btnAddUser');
 
     if (isVisible) {
         area.style.display = 'none';
+        if (btnConfigSecretarias) btnConfigSecretarias.classList.remove('active');
     } else {
         // Fechar formulário de usuário se estiver aberto
         userForm.style.display = 'none';
+        if (btnAddUser) btnAddUser.classList.remove('active');
+
         area.style.display = 'block';
+        if (btnConfigSecretarias) btnConfigSecretarias.classList.add('active');
+
         renderSecretariaConfig();
         // Scroll to form
         area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1592,7 +1931,7 @@ function toggleDocConfig(docId) {
     }
 }
 
-function saveSecretariaConfig() {
+async function saveSecretariaConfig() {
     const select = document.getElementById('secretariaSelect');
     const selectedSecretaria = select.value;
 
@@ -1622,10 +1961,25 @@ function saveSecretariaConfig() {
         };
     });
 
-    saveSecretariaPermissions();
-    addLog('sistema', 'Atualizou permissões de secretaria', `Configurações da ${selectedSecretaria} foram atualizadas`);
+    // saveSecretariaPermissions(); // Old method
+    // Persistir no Supabase (Upsert na tabela app_config)
+    try {
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({
+                key: 'secretariaPermissions',
+                value: state.secretariaPermissions
+            });
 
-    showAlertModal('✅ Sucesso!', `Configurações da ${selectedSecretaria} salvas com sucesso!`);
+        if (error) throw error;
+
+        addLog('sistema', 'Atualizou permissões de secretaria', `Configurações da ${selectedSecretaria} foram atualizadas`);
+        showAlertModal('✅ Sucesso!', `Configurações da ${selectedSecretaria} salvas com sucesso!`);
+
+    } catch (e) {
+        console.error('Erro salvando config:', e);
+        showAlertModal('❌ Erro', 'Falha ao salvar configurações.');
+    }
 
     // Limpar seleção e resetar dropdown
     select.value = '';
@@ -2000,52 +2354,51 @@ function exportHistoryToWord() {
     addLog('sistema', 'Exportou histórico em Word', `${logs.length} registros exportados`);
 }
 
-// ========== SISTEMA DE ZOOM DE FONTE ==========
-let fontZoomLevel = parseInt(localStorage.getItem('fontZoomLevel')) || 100;
+// ========== SISTEMA DE ZOOM GLOBAL ==========
+let globalZoomLevel = parseInt(localStorage.getItem('globalZoomLevel')) || 100;
 
-function applyFontZoom() {
-    const root = document.documentElement;
-    const scale = fontZoomLevel / 100;
-
-    // Aplicar escala nas variáveis CSS
-    root.style.setProperty('--font-small', `${0.875 * scale}rem`);
-    root.style.setProperty('--font-normal', `${1 * scale}rem`);
-    root.style.setProperty('--font-datetime', `${0.875 * scale}rem`);
-    root.style.setProperty('--font-number', `${1.25 * scale}rem`);
-    root.style.setProperty('--font-icon-user', `${1.5 * scale}rem`);
+function applyGlobalZoom() {
+    // Aplicar zoom no wrapper se existir, senão no body (fallback)
+    const wrapper = document.getElementById('app-zoom-wrapper');
+    if (wrapper) {
+        document.body.style.zoom = '100%'; // Resetar zoom do body para evitar duplo zoom
+        wrapper.style.zoom = `${globalZoomLevel}%`;
+    } else {
+        document.body.style.zoom = `${globalZoomLevel}%`;
+    }
 
     // Atualizar indicador
-    const indicator = document.getElementById('fontZoomIndicator');
+    const indicator = document.getElementById('globalZoomIndicator');
     if (indicator) {
-        indicator.textContent = `${fontZoomLevel}%`;
+        indicator.textContent = `${globalZoomLevel}%`;
     }
 
     // Salvar preferência
-    localStorage.setItem('fontZoomLevel', fontZoomLevel);
+    localStorage.setItem('globalZoomLevel', globalZoomLevel);
 }
 
-function increaseFontZoom() {
-    if (fontZoomLevel < 150) {
-        fontZoomLevel += 10;
-        applyFontZoom();
+function increaseGlobalZoom() {
+    if (globalZoomLevel < 150) {
+        globalZoomLevel += 10;
+        applyGlobalZoom();
     }
 }
 
-function decreaseFontZoom() {
-    if (fontZoomLevel > 70) {
-        fontZoomLevel -= 10;
-        applyFontZoom();
+function decreaseGlobalZoom() {
+    if (globalZoomLevel > 50) {
+        globalZoomLevel -= 10;
+        applyGlobalZoom();
     }
 }
 
-function resetFontZoom() {
-    fontZoomLevel = 100;
-    applyFontZoom();
+function resetGlobalZoom() {
+    globalZoomLevel = 100;
+    applyGlobalZoom();
 }
 
 // Aplicar zoom ao carregar
 document.addEventListener('DOMContentLoaded', () => {
-    applyFontZoom();
+    applyGlobalZoom(); // Usar o novo nome da função
 });
 
 // ========== ESTATÍSTICAS POR DOCUMENTO ==========
