@@ -1,5 +1,5 @@
 // Templates de documentos pré-definidos (ordem alfabética)
-const DOCUMENT_TEMPLATES = [
+var DOCUMENT_TEMPLATES = DOCUMENT_TEMPLATES || [
     { name: 'Ata', prefix: '' },
     { name: 'Circular', prefix: 'Circ.' },
     { name: 'Contrato', prefix: 'Contr.' },

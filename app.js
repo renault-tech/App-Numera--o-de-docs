@@ -4,7 +4,7 @@
 // Configuração do Supabase
 const SUPABASE_URL = 'https://rizzhpsfwghhohozvggf.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpenpocHNmd2doaG9ob3p2Z2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1Mjg5MzEsImV4cCI6MjA4NTEwNDkzMX0.bp8HpkYJxqiSW5krTk8uqOEYjdV2fg8PukOlNBXPSak';
-const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 let state = {
     documents: [],

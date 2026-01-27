@@ -141,6 +141,22 @@
 </head>
 
 <body>
+    <div id="debug-error-container"
+        style="display:none; color: red; padding: 20px; background: white; border: 2px solid red; margin: 20px; font-family: monospace; white-space: pre-wrap;">
+    </div>
+    <script>
+        window.onerror = function (msg, url, lineNo, columnNo, error) {
+            var container = document.getElementById('debug-error-container');
+            container.style.display = 'block';
+            container.innerHTML += 'Error: ' + msg + '\nURL: ' + url + '\nLine: ' + lineNo + '\n\n';
+            return false;
+        };
+        window.addEventListener('unhandledrejection', function (event) {
+            var container = document.getElementById('debug-error-container');
+            container.style.display = 'block';
+            container.innerHTML += 'Promise Rejection: ' + event.reason + '\n\n';
+        });
+    </script>
     <!-- App gerado dinamicamente -->
 
     <script>
@@ -163,7 +179,7 @@
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
     <script src="autocomplete.js?v=202601122026"></script>
-    <script src="autocomplete.js?v=202601122026"></script>
+
     <!-- admin-views.js removido pois app.js gerencia as views agora -->
     <script src="app.js?v=202601140002"></script>
 </body>
