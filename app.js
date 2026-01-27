@@ -360,7 +360,7 @@ function showLoginView() {
         <div class="login-container">
             <div class="login-card">
                 <div class="login-header">
-                    <div class="logo-large">📄</div>
+                    <img src="./logo-prefeitura.png" alt="Logo Prefeitura" class="login-logo-img" style="max-width: 150px; margin-bottom: 1rem;">
                     <h1>Sistema de Numeração</h1>
                     <p>Faça login para continuar</p>
                 </div>
@@ -396,7 +396,10 @@ function showMainApp() {
         <div class="app-container">
             <header class="app-header">
                 <div class="header-content">
-                    <div class="logo"><h1>📄 Sistema de Numeração</h1></div>
+                    <div class="logo">
+                        <img src="./logo-prefeitura-horizontal.png" alt="Logo" style="height: 40px; margin-right: 10px; vertical-align: middle;">
+                        <h1 style="display: inline; vertical-align: middle;">Sistema de Numeração</h1>
+                    </div>
                     <nav class="header-nav">
                         <button class="nav-btn active" onclick="switchView('main')">📋 Principal</button>
                         ${isAdmin ? '<button class="nav-btn" onclick="switchView(\'admin\')">⚙️ Administração</button>' : ''}
