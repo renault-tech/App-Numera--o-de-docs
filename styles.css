@@ -44,159 +44,193 @@ body {
     padding: 0 2rem;
 }
 
-/* Header */
+/* Header Moderno */
 .app-header {
-    background: var(--bg-secondary);
-    border-bottom: 2px solid var(--border-color);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.8);
     position: sticky;
     top: 0;
-    z-index: 100;
-    box-shadow: var(--shadow-sm);
-}
-
-.header-content {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 1.5rem 2rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 2rem;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-}
-
-.user-info {
-    color: var(--text-secondary);
-    font-size: 0.875rem;
-    font-weight: 500;
-    white-space: nowrap;
-}
-
-/* Header Institucional */
-.app-header.institutional {
-    padding: 0.5rem 0;
-    background: #001B5E;
-    /* Dark Blue Header */
-}
-
-.institutional-brand {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.3rem;
-    flex: 1;
-}
-
-.brand-logo-horizontal {
+    z-index: 1000;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     height: 70px;
     display: flex;
     align-items: center;
 }
 
-.logo-horizontal-img {
-    height: 100%;
+.header-content {
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Marca e Logo */
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-decoration: none;
+    color: var(--text-primary);
+}
+
+.header-logo-img {
+    height: 40px;
     width: auto;
     object-fit: contain;
 }
 
-.system-subtitle-header {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.85);
-    font-weight: 400;
-    letter-spacing: 0.3px;
-    margin-top: 0.1rem;
-    margin-left: 0.2rem;
-}
-
-.header-nav {
+.header-title-wrapper {
     display: flex;
-    gap: 1rem;
+    flex-direction: column;
 }
 
-.nav-btn {
-    padding: 0.75rem 1.5rem;
-    background: transparent;
-    border: 2px solid transparent;
-    color: var(--text-secondary);
-    font-size: 1rem;
-    font-weight: 500;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.nav-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border: 2px solid var(--border-hover);
-}
-
-.nav-btn.active {
-    background: var(--primary-gradient);
-    color: white;
-    box-shadow: var(--glow-blue);
-}
-
-/* Controles de Zoom Flutuantes */
-.floating-zoom-controls {
-    position: fixed;
-    top: 90px;
-    right: 2rem;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: var(--bg-card);
-    border: 2px solid var(--border-color);
-    border-radius: 50px;
-    padding: 0.5rem 1rem;
-    box-shadow: var(--shadow-md);
-    transition: all 0.3s ease;
-}
-
-.floating-zoom-controls:hover {
-    box-shadow: var(--shadow-lg);
-    border-color: #2563eb;
-    transform: translateY(-2px);
-}
-
-.zoom-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    font-size: 1rem;
+.header-title-main {
+    font-size: 1.125rem;
     font-weight: 700;
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
+    color: #1e3a8a;
+    /* Dark Blue */
+    line-height: 1.2;
+}
+
+.header-title-sub {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+}
+
+/* Área do Usuário e Ações */
+.header-actions-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.user-profile-widget {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.35rem 0.75rem 0.35rem 0.35rem;
+    background: #f1f5f9;
+    border-radius: 50px;
+    border: 1px solid transparent;
     transition: all 0.2s ease;
 }
 
-.zoom-btn:hover {
+.user-profile-widget:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+}
+
+.user-avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--primary-gradient);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.875rem;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+}
+
+.user-info-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.user-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.user-role {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+/* Toolbar de Ações */
+.header-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--border-color);
+}
+
+/* Controles de Zoom Integrados */
+.header-zoom-controls {
+    display: flex;
+    align-items: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 0.25rem;
+    gap: 0.25rem;
+}
+
+.header-zoom-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.header-zoom-btn:hover {
     background: var(--bg-hover);
     color: var(--primary-color);
-    transform: scale(1.1);
 }
 
-.zoom-indicator {
-    font-size: 0.875rem;
-    color: var(--text-primary);
+.header-zoom-value {
+    font-size: 0.8rem;
     font-weight: 600;
-    min-width: 45px;
+    color: var(--text-primary);
+    min-width: 40px;
     text-align: center;
+    user-select: none;
 }
 
-.app-zoom-wrapper {
-    /* Wrapper para o zoom */
-    transform-origin: top center;
+
+/* Botão Logout */
+.btn-logout-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: white;
+    border: 1px solid #ef4444;
+    color: #ef4444;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-logout-header:hover {
+    background: #fef2f2;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.1);
 }
 
 
