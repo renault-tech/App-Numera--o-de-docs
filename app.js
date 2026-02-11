@@ -317,70 +317,193 @@ async function checkYearlyReset() {
 }
 
 // Auto login
-function checkAutoLogin() {
-    const savedUserId = localStorage.getItem('currentUserId');
-    if (savedUserId) {
-        const user = state.users.find(u => u.id === savedUserId);
-        if (user) {
-            state.currentUser = user;
-            showMainApp();
-            return;
-        }
-    }
-    showLoginView();
-}
-
-// Login
-function handleLogin(e) {
-    e.preventDefault();
-    const username = document.getElementById('loginUsername').value;
-    const password = document.getElementById('loginPassword').value;
-
-    const user = state.users.find(u => u.username === username && u.password === password);
+async function checkAutoLogin() {
+    state.loading = true;
+    const user = await authService.getCurrentUser();
 
     if (user) {
         state.currentUser = user;
-        localStorage.setItem('currentUserId', user.id);
-        addLog('sistema', 'Login realizado', `${user.name} acessou o sistema`);
         showMainApp();
     } else {
-        showAlertModal('❌ Erro de Login', 'Usuário ou senha incorretos!');
+        showLoginView();
+    }
+    state.loading = false;
+}
+
+// Login Handler
+async function handleLogin(e) {
+    e.preventDefault();
+    const emailOrUsername = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    const btn = e.target.querySelector('button');
+
+    // UI Feedback
+    const originalText = btn.textContent;
+    btn.textContent = 'Entrando...';
+    btn.disabled = true;
+
+    const result = await authService.signIn(emailOrUsername, password);
+
+    if (result.user) {
+        state.currentUser = result.user;
+        addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
+        showMainApp();
+    } else {
+        alert(result.error || 'Erro ao entrar. Verifique suas credenciais.');
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+// Register Handler
+async function handleRegister(e) {
+    e.preventDefault();
+    const btn = e.target.querySelector('button');
+
+    // Validar senhas
+    const p1 = document.getElementById('regPassword').value;
+    const p2 = document.getElementById('regConfirmPassword').value;
+
+    if (p1 !== p2) {
+        alert('As senhas não coincidem!');
+        return;
+    }
+
+    if (p1.length < 6) {
+        alert('A senha deve ter pelo menos 6 caracteres.');
+        return;
+    }
+
+    // UI Feedback
+    const originalText = btn.textContent;
+    btn.textContent = 'Cadastrando...';
+    btn.disabled = true;
+
+    const userData = {
+        name: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        username: document.getElementById('regUsername').value,
+        password: p1,
+        cargo: document.getElementById('regCargo').value,
+        setor: document.getElementById('regSetor').value,
+        secretaria: document.getElementById('regSecretaria').value
+    };
+
+    const result = await authService.signUp(userData);
+
+    if (result.error) {
+        alert('Erro no cadastro: ' + result.error);
+        btn.textContent = originalText;
+        btn.disabled = false;
+    } else {
+        alert(result.message);
+        // Limpar form e mudar para aba de login
+        e.target.reset();
+        switchAuthTab('login');
+        // Preencher usuário criado
+        document.getElementById('loginUsername').value = userData.email;
     }
 }
 
 // Logout
-function handleLogout() {
-    addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu do sistema`);
-    localStorage.removeItem('currentUserId');
+async function handleLogout() {
+    if (state.currentUser) {
+        addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu do sistema`);
+    }
+    await authService.signOut();
     state.currentUser = null;
     showLoginView();
 }
 
-// Tela de login
+// Switch Tabs
+function switchAuthTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById(`form-${tab}`).classList.add('active');
+}
+
+// Tela de login e cadastro
 function showLoginView() {
     document.body.innerHTML = `
         <div class="login-container">
             <div class="login-card">
                 <div class="login-header">
-                    <img src="./logo-prefeitura.png" alt="Logo Prefeitura" class="login-logo-img" style="max-width: 150px; margin-bottom: 1rem;">
-                    <h1>Sistema de Numeração</h1>
-                    <p>Faça login para continuar</p>
+                    <img src="./logo-prefeitura.png" alt="Logo Prefeitura" class="login-logo-img">
+                    <h3>Sistema de Numeração</h3>
                 </div>
-                <form id="loginForm" class="login-form">
+                
+                <div class="auth-tabs">
+                    <button id="tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Entrar</button>
+                    <button id="tab-register" class="auth-tab" onclick="switchAuthTab('register')">Criar Conta</button>
+                </div>
+
+                <!-- LOGIN FORM -->
+                <form id="form-login" class="auth-form active">
                     <div class="form-group">
-                        <label for="loginUsername">Usuário</label>
-                        <input type="text" id="loginUsername" required autofocus>
+                        <label>Email ou Usuário</label>
+                        <input type="text" id="loginUsername" required autofocus placeholder="ex: joao.silva">
                     </div>
                     <div class="form-group">
-                        <label for="loginPassword">Senha</label>
-                        <input type="password" id="loginPassword" required>
+                        <label>Senha</label>
+                        <input type="password" id="loginPassword" required placeholder="Sua senha">
                     </div>
-                    <button type="submit" class="btn-primary btn-block">Entrar</button>
+                    <button type="submit" class="btn-primary btn-block">Acessar Sistema</button>
                 </form>
+
+                <!-- REGISTER FORM -->
+                <form id="form-register" class="auth-form">
+                    <div class="form-group">
+                        <label>Nome Completo</label>
+                        <input type="text" id="regName" required placeholder="Ex: Maria Souza">
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="regEmail" required placeholder="maria@exemplo.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Usuário (Login)</label>
+                        <input type="text" id="regUsername" required placeholder="maria.souza">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Senha</label>
+                            <input type="password" id="regPassword" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>Confirmar</label>
+                            <input type="password" id="regConfirmPassword" required minlength="6">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Cargo</label>
+                            <input type="text" id="regCargo" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Setor</label>
+                            <input type="text" id="regSetor" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Secretaria</label>
+                        <input type="text" id="regSecretaria" required placeholder="Selecione ou digite...">
+                    </div>
+                    <button type="submit" class="btn-primary btn-block">Cadastrar</button>
+                </form>
+
             </div>
         </div>
     `;
-    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+
+    // Bind events manually because inline onclick logic might not see global scope immediately
+    document.getElementById('form-login').addEventListener('submit', handleLogin);
+    document.getElementById('form-register').addEventListener('submit', handleRegister);
+
+    // Expose switchAuthTab to global scope for inline onclick
+    window.switchAuthTab = switchAuthTab;
+
     applyGlobalZoom(); // ========== HEADER MODERNO ==========
     function renderAppHeader() {
         const header = document.querySelector('.app-header');
