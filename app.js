@@ -35,9 +35,29 @@ const PERMISSION_LEVELS = {
 };
 
 // Inicialização
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
-    checkAutoLogin();
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        console.log('App iniciado');
+        if (!window.supabase) {
+            // throw new Error('Biblioteca Supabase não carregou!'); 
+            // Tentar carregar fallback ou alertar
+            console.error('Supabase global not found');
+        }
+
+        // Garantir init do cliente
+        if (!supabase && window.supabase) {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        }
+
+        if (!supabase) throw new Error('Falha ao inicializar Supabase Client');
+
+        await loadData();
+        await checkAutoLogin();
+
+    } catch (e) {
+        console.error('Fatal Error:', e);
+        document.body.innerHTML = `<div style="color:red; padding:20px;"><h1>Erro Fatal</h1><p>${e.message}</p></div>`;
+    }
 });
 
 // Carregar dados do Supabase
@@ -318,16 +338,26 @@ async function checkYearlyReset() {
 
 // Auto login
 async function checkAutoLogin() {
-    state.loading = true;
-    const user = await authService.getCurrentUser();
+    try {
+        state.loading = true;
+        // console.log('Verificando login...');
+        const user = await authService.getCurrentUser();
 
-    if (user) {
-        state.currentUser = user;
-        showMainApp();
-    } else {
-        showLoginView();
+        if (user) {
+            // console.log('Usuário encontrado:', user.username);
+            state.currentUser = user;
+            showMainApp();
+        } else {
+            // console.log('Nenhum usuário logado active');
+            showLoginView();
+        }
+    } catch (err) {
+        console.error('Erro no AutoLogin:', err);
+        alert('Erro ao verificar login: ' + err.message);
+        showLoginView(); // Fallback
+    } finally {
+        state.loading = false;
     }
-    state.loading = false;
 }
 
 // Login Handler
