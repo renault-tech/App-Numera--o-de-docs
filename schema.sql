@@ -25,6 +25,8 @@ create table public.users (
   secretaria text,
   role text not null check (role in ('admin', 'user_full', 'user_restricted', 'user_readonly')),
   allowed_documents jsonb default '[]'::jsonb, -- Array of document IDs
+  approved boolean default false, -- Approval status
+  email text, -- Contact email
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 

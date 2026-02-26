@@ -39,7 +39,8 @@ const authService = {
             setor: userData.setor,
             secretaria: userData.secretaria,
             role: 'user_restricted', // Padrão: restrito até aprovação
-            allowed_documents: [] // Será preenchido pelo admin ou lógica de secretaria
+            allowed_documents: [], // Será preenchido pelo admin ou lógica de secretaria
+            approved: false // Pendente de aprovação
         };
 
         const { error: dbError } = await supabase
@@ -75,6 +76,10 @@ const authService = {
                     .single();
 
                 if (userDetails) {
+                    if (userDetails.approved === false) {
+                        await supabase.auth.signOut();
+                        return { error: "Sua conta aguarda aprovação do administrador." };
+                    }
                     return { user: userDetails };
                 }
             }

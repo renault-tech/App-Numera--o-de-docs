@@ -21,7 +21,9 @@ let state = {
     editingDocId: null,
     editingUserId: null,
     currentLogFilter: 'todos',
-    loading: false
+    currentLogFilter: 'todos',
+    loading: false,
+    secretariats: ['Gabinete', 'Administração', 'Finanças', 'Saúde', 'Educação', 'Obras'] // Default list
 };
 
 
@@ -143,8 +145,11 @@ async function loadData() {
 
         if (!errConfig && configs) {
             const secConfig = configs.find(c => c.key === 'secretariaPermissions');
-            if (secConfig) {
-                state.secretariaPermissions = secConfig.value;
+            if (secConfig) state.secretariaPermissions = secConfig.value;
+
+            const secList = configs.find(c => c.key === 'secretaria_list');
+            if (secList && Array.isArray(secList.value)) {
+                state.secretariats = secList.value.sort();
             }
         }
 
@@ -488,13 +493,15 @@ function showLoginView() {
                         <label>Nome Completo</label>
                         <input type="text" id="regName" required placeholder="Ex: Maria Souza">
                     </div>
-                    <div class="form-group">
-                        <label>Email</label>
-                        <input type="email" id="regEmail" required placeholder="maria@exemplo.com">
-                    </div>
-                    <div class="form-group">
-                        <label>Usuário (Login)</label>
-                        <input type="text" id="regUsername" required placeholder="maria.souza">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" id="regEmail" required placeholder="maria@exemplo.com">
+                        </div>
+                        <div class="form-group">
+                            <label>Usuário (Login)</label>
+                            <input type="text" id="regUsername" required placeholder="maria.souza">
+                        </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -518,7 +525,10 @@ function showLoginView() {
                     </div>
                     <div class="form-group">
                         <label>Secretaria</label>
-                        <input type="text" id="regSecretaria" required placeholder="Selecione ou digite...">
+                        <select id="regSecretaria" required>
+                            <option value="">Selecione...</option>
+                            ${state.secretariats.map(s => `<option value="${s}">${s}</option>`).join('')}
+                        </select>
                     </div>
                     <button type="submit" class="btn-primary btn-block">Cadastrar</button>
                 </form>
@@ -533,30 +543,28 @@ function showLoginView() {
 
     // Expose switchAuthTab to global scope for inline onclick
     window.switchAuthTab = switchAuthTab;
+}
 
-    applyGlobalZoom(); // ========== HEADER MODERNO ==========
-    function renderAppHeader() {
-        const header = document.querySelector('.app-header');
-        if (!header) return;
+// ========== HEADER MODERNO ==========
+function renderAppHeader() {
+    const header = document.querySelector('.app-header');
+    if (!header) return;
 
-        // Limpar conteúdo atual
-        header.innerHTML = '';
+    // Limpar conteúdo atual
+    header.innerHTML = '';
 
-        // Dados do usuário (ou placeholder)
-        const user = state.currentUser || { name: 'Visitante', role: 'Acesso Restrito' };
-        const userInitials = user.name ? user.name.substring(0, 2).toUpperCase() : 'VS';
+    const user = state.currentUser || { name: 'Visitante', role: 'Acesso Restrito' };
+    const userInitials = user.name ? user.name.substring(0, 2).toUpperCase() : 'VS';
 
-        // Criar estrutura flexbox
-        const container = document.createElement('div');
-        container.className = 'header-content';
+    const container = document.createElement('div');
+    container.className = 'header-content';
 
-        // 1. Marca (Esquerda)
-        const brand = document.createElement('a');
-        brand.href = '#';
-        brand.className = 'header-brand';
-        brand.onclick = (e) => { e.preventDefault(); showMainApp(); };
+    const brand = document.createElement('a');
+    brand.href = '#';
+    brand.className = 'header-brand';
+    brand.onclick = (e) => { e.preventDefault(); showMainApp(); };
 
-        brand.innerHTML = `
+    brand.innerHTML = `
         <img src="logo_prefeitura_cataguases.png" alt="Logo" class="header-logo-img">
         <div class="header-title-wrapper">
             <span class="header-title-main">Sistema de Numeração</span>
@@ -564,16 +572,14 @@ function showLoginView() {
         </div>
     `;
 
-        // 2. Toolbar (Direita) - Perfil + Ações
-        const actionsWrapper = document.createElement('div');
-        actionsWrapper.className = 'header-actions-wrapper';
+    const actionsWrapper = document.createElement('div');
+    actionsWrapper.className = 'header-actions-wrapper';
 
-        if (state.currentUser) {
-            // Widget do Usuário
-            const userWidget = document.createElement('div');
-            userWidget.className = 'user-profile-widget';
-            userWidget.title = `Logado como: ${user.name}`;
-            userWidget.innerHTML = `
+    if (state.currentUser) {
+        const userWidget = document.createElement('div');
+        userWidget.className = 'user-profile-widget';
+        userWidget.title = `Logado como: ${user.name}`;
+        userWidget.innerHTML = `
             <div class="user-avatar">${userInitials}</div>
             <div class="user-info-text">
                 <span class="user-name">${user.name.split(' ')[0]}</span>
@@ -581,80 +587,88 @@ function showLoginView() {
             </div>
         `;
 
-            // Toolbar
-            const toolbar = document.createElement('div');
-            toolbar.className = 'header-toolbar';
+        const navMenu = document.createElement('nav');
+        navMenu.className = 'header-nav';
+        navMenu.innerHTML = `
+            <button class="nav-btn ${state.currentView !== 'admin' ? 'active' : ''}" onclick="switchView('main')" data-view="main">
+                <span>📋</span> Principal
+            </button>
+            ${user.role === 'admin' ? `
+            <button class="nav-btn ${state.currentView === 'admin' ? 'active' : ''}" onclick="switchView('admin')" data-view="admin">
+                <span>⚙️</span> Administração
+            </button>
+            ` : ''}
+        `;
 
-            // Zoom Controls Integrados
-            const zoomControls = document.createElement('div');
-            zoomControls.className = 'header-zoom-controls';
-            zoomControls.innerHTML = `
+        const toolbar = document.createElement('div');
+        toolbar.className = 'header-toolbar';
+
+        const zoomControls = document.createElement('div');
+        zoomControls.className = 'header-zoom-controls';
+        zoomControls.innerHTML = `
             <button class="header-zoom-btn" onclick="decreaseGlobalZoom()" title="Diminuir Zoom">A-</button>
             <span id="globalZoomIndicator" class="header-zoom-value">${globalZoomLevel}%</span>
             <button class="header-zoom-btn" onclick="increaseGlobalZoom()" title="Aumentar Zoom">A+</button>
         `;
 
-            // Logout Button Integrado
-            const logoutBtn = document.createElement('button');
-            logoutBtn.className = 'btn-logout-header';
-            logoutBtn.onclick = handleLogout;
-            logoutBtn.innerHTML = `<span>Sair</span>`;
+        const logoutBtn = document.createElement('button');
+        logoutBtn.className = 'btn-logout-header';
+        logoutBtn.onclick = handleLogout;
+        logoutBtn.innerHTML = `<span>Sair</span>`;
 
-            // Montar Toolbar
-            toolbar.appendChild(zoomControls);
-            toolbar.appendChild(logoutBtn);
+        toolbar.appendChild(zoomControls);
+        toolbar.appendChild(logoutBtn);
 
-            // Adicionar à wrapper
-            actionsWrapper.appendChild(userWidget);
-            actionsWrapper.appendChild(toolbar);
-        }
-
-        // Montar Header
-        container.appendChild(brand);
-        container.appendChild(actionsWrapper);
-        header.appendChild(container);
+        actionsWrapper.appendChild(navMenu);
+        actionsWrapper.appendChild(userWidget);
+        actionsWrapper.appendChild(toolbar);
     }
 
-    // Aplicar zoom ao carregar e renderizar header
-    document.addEventListener('DOMContentLoaded', () => {
-        applyGlobalZoom();
-        renderAppHeader();
-    });
+    container.appendChild(brand);
+    container.appendChild(actionsWrapper);
+    header.appendChild(container);
+}
 
-    // ========== ESTATÍSTICAS POR DOCUMENTO ==========
-    function toggleDocStats() {
-        const panel = document.getElementById('docStatsPanel');
-        const btn = event.target.closest('.export-stats');
+// Inicializar Header e Zoom
+document.addEventListener('DOMContentLoaded', () => {
+    applyGlobalZoom();
+    renderAppHeader();
+});
 
-        if (panel.style.display === 'none') {
-            // Mostrar painel
-            panel.style.display = 'block';
-            if (btn) btn.classList.add('active');
+// ========== ESTATÍSTICAS POR DOCUMENTO ==========
+function toggleDocStats() {
+    const panel = document.getElementById('docStatsPanel');
+    const btn = event.target.closest('.export-stats');
 
-            // Renderizar estatísticas
-            const container = document.getElementById('docStatsList');
-            const docs = state.documents.filter(d => d.enabled);
+    if (panel.style.display === 'none') {
+        // Mostrar painel
+        panel.style.display = 'block';
+        if (btn) btn.classList.add('active');
 
-            const stats = docs.map(doc => {
-                const docReservations = state.reservations.filter(r => r.docId === doc.id);
-                const lastReservation = docReservations.length > 0
-                    ? new Date(Math.max(...docReservations.map(r => new Date(r.timestamp))))
-                    : null;
+        // Renderizar estatísticas
+        const container = document.getElementById('docStatsList');
+        const docs = state.documents.filter(d => d.enabled);
 
-                return {
-                    doc,
-                    count: docReservations.length,
-                    lastDate: lastReservation
-                };
-            }).filter(s => s.count > 0)
-                .sort((a, b) => b.count - a.count);
+        const stats = docs.map(doc => {
+            const docReservations = state.reservations.filter(r => r.docId === doc.id);
+            const lastReservation = docReservations.length > 0
+                ? new Date(Math.max(...docReservations.map(r => new Date(r.timestamp))))
+                : null;
 
-            if (stats.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum documento possui reservas</p>';
-                return;
-            }
+            return {
+                doc,
+                count: docReservations.length,
+                lastDate: lastReservation
+            };
+        }).filter(s => s.count > 0)
+            .sort((a, b) => b.count - a.count);
 
-            container.innerHTML = stats.map(({ doc, count, lastDate }) => `
+        if (stats.length === 0) {
+            container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhum documento possui reservas</p>';
+            return;
+        }
+
+        container.innerHTML = stats.map(({ doc, count, lastDate }) => `
             <div class="doc-stat-card">
                 <div class="doc-stat-header">
                     <span class="doc-stat-icon">📄</span>
@@ -672,16 +686,14 @@ function showLoginView() {
                 </div>
             </div>
         `).join('');
-        } else {
-            // Esconder painel
-            panel.style.display = 'none';
-            if (btn) btn.classList.remove('active');
-        }
+    } else {
+        // Esconder painel
+        panel.style.display = 'none';
+        if (btn) btn.classList.remove('active');
     }
-
-    // Cache buster: 20260112200732
-
 }
+
+
 
 
 // ========== FUNÇÕES AUXILIARES ==========
@@ -919,7 +931,7 @@ function showMainApp() {
         </div>
     `;
 
-    // Renderizar Header
+    // Renderizar Header e Interface Inicial
     if (typeof renderAppHeader === 'function') {
         renderAppHeader();
     }
@@ -1163,6 +1175,13 @@ function renderAdminInterface() {
                                 <div class="help-text">Histórico completo de ações</div>
                             </div>
                         </div>
+                        <div class="admin-nav-card" onclick="showAdminSubView('secretariats')">
+                            <div class="stat-icon"><span style="font-size:32px">🏢</span></div>
+                            <div>
+                                <div class="stat-label" style="font-size: 1.125rem; font-weight: 600;">Secretarias</div>
+                                <div class="help-text">Gerenciar lista de secretarias</div>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -1207,6 +1226,22 @@ function renderAdminInterface() {
                 </div>
                 <div id="logsList" class="logs-list"></div>
             </div>
+
+            <div id="secretariatsView" class="admin-sub-view" style="display: none;">
+                <button class="back-btn" onclick="showAdminSubView('stats')">← Voltar</button>
+                <div class="view-header">
+                    <h2>🏢 Gerenciar Secretarias</h2>
+                    <p>Adicionar ou remover secretarias disponíveis no sistema</p>
+                </div>
+                <div class="form-row" style="margin-bottom: 2rem; gap: 1rem; align-items: flex-end;">
+                    <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                        <label>Nova Secretaria</label>
+                        <input type="text" id="newSecretariatName" placeholder="Ex: Secretaria de Cultura">
+                    </div>
+                    <button class="btn-primary" onclick="addSecretariat()">➕ Adicionar</button>
+                </div>
+                <div id="adminSecretariatsList" class="admin-docs-list"></div>
+            </div>
         `;
     }
 
@@ -1225,6 +1260,7 @@ function showAdminSubView(view) {
     if (view === 'documents') renderAdminDocs();
     if (view === 'users') renderAdminUsers();
     if (view === 'logs') renderLogs();
+    if (view === 'secretariats') renderAdminSecretariats();
 }
 
 function updateStats() {
@@ -1432,12 +1468,14 @@ function renderAdminUsers() {
                         Usuário: ${user.username} | 
                         Cargo: ${user.cargo || 'N/A'} | 
                         Setor: ${user.setor || 'N/A'}
+                        ${!user.approved ? '<br><span class="badge-disabled" style="background:#f59e0b; color:white">Pendente de Aprovação</span>' : ''}
                     </div>
                     <div class="admin-doc-details">
                         ${permIcon} ${permLabel}
                     </div>
                 </div>
                 <div class="admin-doc-actions">
+                    ${!user.approved ? `<button class="icon-btn" onclick="approveUser('${user.id}')" title="Aprovar" style="color:green">✅</button>` : ''}
                     ${user.id !== state.currentUser.id ? `
                         <button class="icon-btn" onclick="openEditUserModal('${user.id}')">✏️</button>
                         <button class="icon-btn delete" onclick="deleteUser('${user.id}')">🗑️</button>
@@ -1453,6 +1491,12 @@ function openAddUserModal() {
     document.getElementById('userModalTitle').textContent = 'Adicionar Usuário';
     document.getElementById('userForm').reset();
     document.getElementById('userRole').value = 'user_restricted';
+
+    // Populate Secretariats
+    const secSelect = document.getElementById('userSecretaria');
+    secSelect.innerHTML = '<option value="">Selecione...</option>' +
+        state.secretariats.map(s => `<option value="${s}">${s}</option>`).join('');
+
     handleRoleChange();
     document.getElementById('userModal').classList.add('active');
 }
@@ -1466,7 +1510,15 @@ function openEditUserModal(userId) {
     document.getElementById('userName').value = user.name;
     document.getElementById('userCargo').value = user.cargo || '';
     document.getElementById('userSetor').value = user.setor || '';
-    document.getElementById('userSecretaria').value = user.secretaria || '';
+    document.getElementById('userSetor').value = user.setor || '';
+
+    // Update Select options before setting value
+    const secSelect = document.getElementById('userSecretaria');
+    secSelect.innerHTML = '<option value="">Selecione...</option>' +
+        state.secretariats.map(s => `<option value="${s}">${s}</option>`).join('');
+    secSelect.value = user.secretaria || '';
+
+    // document.getElementById('userSecretaria').value = user.secretaria || ''; // Replaced by above
     document.getElementById('userUsername').value = user.username;
     document.getElementById('userPassword').value = user.password;
     document.getElementById('userRole').value = user.role;
@@ -1711,5 +1763,118 @@ function switchView(view) {
         const navs = document.querySelectorAll('.nav-btn');
         if (navs.length > 1) navs[1].classList.add('active');
         updateStats();
+    }
+}
+
+// ========== GERENCIAR SECRETARIAS (ADMIN) ==========
+
+function renderAdminSecretariats() {
+    const container = document.getElementById('adminSecretariatsList');
+    if (!container) return;
+
+    if (state.secretariats.length === 0) {
+        container.innerHTML = '<p class="text-secondary">Nenhuma secretaria cadastrada.</p>';
+        return;
+    }
+
+    container.innerHTML = state.secretariats.sort().map(sec => `
+        <div class="admin-doc-item">
+            <div class="admin-doc-info">
+                <div class="admin-doc-name">${sec}</div>
+            </div>
+            <div class="admin-doc-actions">
+                <button class="icon-btn delete" onclick="removeSecretariat('${sec}')" title="Remover">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function addSecretariat() {
+    const input = document.getElementById('newSecretariatName');
+    const name = input.value.trim();
+
+    if (!name) return alert('Digite o nome da secretaria.');
+    if (state.secretariats.includes(name)) return alert('Secretaria já existe.');
+
+    try {
+        const newList = [...state.secretariats, name];
+
+        // Save to Supabase (app_config)
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({ key: 'secretaria_list', value: newList });
+
+        if (error) throw error;
+
+        state.secretariats = newList;
+        input.value = '';
+        renderAdminSecretariats();
+        addLog('sistema', 'Adicionou secretaria', name);
+
+    } catch (err) {
+        console.error(err);
+        alert('Erro ao salvar: ' + err.message);
+    }
+}
+
+async function removeSecretariat(name) {
+    if (!confirm(`Remover "${name}"? Usuários vinculados manterão o nome, mas ele sumirá da lista.`)) return;
+
+    try {
+        const newList = state.secretariats.filter(s => s !== name);
+
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({ key: 'secretaria_list', value: newList });
+
+        if (error) throw error;
+
+        state.secretariats = newList;
+        renderAdminSecretariats();
+        addLog('sistema', 'Removeu secretaria', name);
+
+    } catch (err) {
+        console.error(err);
+        alert('Erro ao remover: ' + err.message);
+    }
+}
+
+async function approveUser(userId) {
+    if (!confirm('Aprovar este usuário? Ele terá acesso imediato com o nível "Usuário Restrito".')) return;
+
+    try {
+        const user = state.users.find(u => u.id === userId);
+
+        // Update approved status
+        const updates = { approved: true };
+
+        // Logica de Herança de Permissões da Secretaria
+        if (user.secretaria && state.secretariaPermissions && state.secretariaPermissions[user.secretaria]) {
+            const permissions = state.secretariaPermissions[user.secretaria];
+            if (Array.isArray(permissions) && permissions.length > 0) {
+                updates.allowed_documents = permissions;
+                // Também atualiza o objeto local para refletir na UI imediatamente
+                user.allowedDocuments = permissions;
+                console.log(`Aplicando permissões da secretaria ${user.secretaria}:`, permissions);
+            }
+        }
+
+        const { error } = await supabase
+            .from('users')
+            .update(updates)
+            .eq('id', userId);
+
+        if (error) throw error;
+
+        // Update local
+        if (user) user.approved = true;
+
+        renderAdminUsers();
+        addLog('cadastro', 'Aprovou usuário', user ? user.name : userId);
+        alert('Usuário aprovado com sucesso!');
+
+    } catch (err) {
+        console.error(err);
+        alert('Erro ao aprovar: ' + err.message);
     }
 }

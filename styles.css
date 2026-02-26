@@ -160,6 +160,40 @@ body {
     text-transform: uppercase;
 }
 
+/* Navegação do Cabeçalho */
+.header-nav {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0 1.5rem;
+}
+
+.nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+    background: var(--bg-hover);
+    color: var(--primary-color);
+}
+
+.nav-btn.active {
+    background: var(--bg-hover);
+    color: #2563eb;
+    box-shadow: inset 0 -2px 0 #2563eb;
+    border-radius: 8px 8px 0 0;
+}
+
 /* Toolbar de Ações */
 .header-toolbar {
     display: flex;
@@ -2248,6 +2282,7 @@ select:focus {
     padding: 0;
     margin: 0;
 }
+
 /* ==========================================================================
    LOGIN & AUTH STYLES
    ========================================================================== */
@@ -2317,7 +2352,48 @@ select:focus {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
+/* UI Improvements - Contrast & Layout */
+.form-control,
+.form-group input,
+.form-group select,
+.modal-input,
+.modal-textarea {
+    border: 2px solid #94a3b8 !important;
+    /* Ensure contrast */
+    background-color: #f8fafc;
+    border-radius: 8px;
+    padding: 0.75rem;
+    width: 100%;
+    color: #1e293b;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.modal-input:focus {
+    border-color: #2563eb !important;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.5rem;
+    display: block;
+}
