@@ -44,6 +44,12 @@ body {
     padding: 0 2rem;
 }
 
+/* Zoom global: aplicado só na área de conteúdo (nunca no header),
+   assim o header e o botão de zoom nunca mudam de tamanho/posição. */
+.app-container>main.view {
+    zoom: var(--content-zoom, 100%);
+}
+
 /* Header Moderno */
 .app-header {
     background: rgba(255, 255, 255, 0.95);
