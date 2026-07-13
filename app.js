@@ -465,7 +465,7 @@ function showLoginView() {
         <div class="login-container">
             <div class="login-card">
                 <div class="login-header">
-                    <img src="./logo-prefeitura.png" alt="Logo Prefeitura" class="login-logo-img">
+                    <img src="./logo-header.png" alt="Prefeitura de Cataguases" class="login-logo-img">
                     <h3>Sistema de Numeração</h3>
                 </div>
                 
