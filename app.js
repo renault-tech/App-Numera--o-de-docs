@@ -565,10 +565,10 @@ function renderAppHeader() {
     brand.onclick = (e) => { e.preventDefault(); showMainApp(); };
 
     brand.innerHTML = `
-        <img src="./logo-prefeitura.png" alt="Logo" class="header-logo-img">
+        <img src="./logo-header.png" alt="Prefeitura de Cataguases" class="header-logo-img">
         <div class="header-title-wrapper">
             <span class="header-title-main">Sistema de Numeração</span>
-            <span class="header-title-sub">Prefeitura de Cataguases</span>
+            <span class="header-title-sub">de Documentos</span>
         </div>
     `;
 

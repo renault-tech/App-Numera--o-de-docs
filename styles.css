@@ -53,7 +53,7 @@ body {
     top: 0;
     z-index: 1000;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    height: 70px;
+    height: 76px;
     display: flex;
     align-items: center;
 }
@@ -79,9 +79,10 @@ body {
 }
 
 .header-logo-img {
-    height: 40px;
+    height: 56px;
     width: auto;
     object-fit: contain;
+    border-radius: 8px;
 }
 
 .header-title-wrapper {
