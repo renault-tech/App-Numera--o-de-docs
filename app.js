@@ -2,8 +2,8 @@
 // Com: Campos expandidos, 4 níveis de permissão, seleção de documentos, logs
 
 // Configuração do Supabase
-const SUPABASE_URL = 'https://rizzhpsfwghhohozvggf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpenpocHNmd2doaG9ob3p2Z2dmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1Mjg5MzEsImV4cCI6MjA4NTEwNDkzMX0.bp8HpkYJxqiSW5krTk8uqOEYjdV2fg8PukOlNBXPSak';
+const SUPABASE_URL = 'https://uxdjhdnsnditivvjktzf.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4ZGpoZG5zbmRpdGl2dmprdHpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDk1MDcsImV4cCI6MjA5OTUyNTUwN30.uLnbm7lvuxlHRm8IobFcNo6c_dbV1ZFs3gT97q7AYR8';
 var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 let state = {
