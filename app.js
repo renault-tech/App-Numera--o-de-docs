@@ -627,8 +627,6 @@ function renderAppHeader() {
     container.appendChild(brand);
     container.appendChild(actionsWrapper);
     header.appendChild(container);
-
-    lockHeaderZoom();
 }
 
 // Inicializar Header e Zoom
@@ -731,28 +729,25 @@ function applyGlobalZoom() {
     if (savedZoom) {
         globalZoomLevel = parseInt(savedZoom);
     }
-    document.body.style.zoom = `${globalZoomLevel}%`;
+    setContentZoom();
     updateZoomDisplay();
-    lockHeaderZoom();
 }
 
 function increaseGlobalZoom() {
     if (globalZoomLevel < 150) {
         globalZoomLevel += 10;
-        document.body.style.zoom = `${globalZoomLevel}%`;
         localStorage.setItem('globalZoomLevel', globalZoomLevel);
+        setContentZoom();
         updateZoomDisplay();
-        lockHeaderZoom();
     }
 }
 
 function decreaseGlobalZoom() {
     if (globalZoomLevel > 70) {
         globalZoomLevel -= 10;
-        document.body.style.zoom = `${globalZoomLevel}%`;
         localStorage.setItem('globalZoomLevel', globalZoomLevel);
+        setContentZoom();
         updateZoomDisplay();
-        lockHeaderZoom();
     }
 }
 
@@ -761,14 +756,11 @@ function updateZoomDisplay() {
     if (el) el.textContent = `${globalZoomLevel}%`;
 }
 
-// O header aplica um zoom inverso ao do body para cancelar o efeito:
-// assim ele (e o botão de zoom dentro dele) sempre renderiza em tamanho
-// real e nunca muda de posição/tamanho quando o zoom do conteúdo muda.
-function lockHeaderZoom() {
-    const header = document.querySelector('.app-header');
-    if (header) {
-        header.style.zoom = `${10000 / globalZoomLevel}%`;
-    }
+// O zoom é aplicado só via CSS (--content-zoom, usado em main.view),
+// nunca em document.body. Assim o header e o botão de zoom nunca são
+// escalados e nunca mudam de tamanho/posição, em qualquer nível de zoom.
+function setContentZoom() {
+    document.documentElement.style.setProperty('--content-zoom', `${globalZoomLevel}%`);
 }
 
 // ========== RENDERIZAÇÃO PRINCIPAL ==========
