@@ -36,6 +36,120 @@ const PERMISSION_LEVELS = {
     user_readonly: { label: 'Somente Leitura', desc: 'Visualizar apenas' }
 };
 
+// ========== NOTIFICAÇÕES E CONFIRMAÇÕES (janelas flutuantes no topo) ==========
+// Substituem alert()/confirm() nativos por componentes próprios, consistentes
+// e não bloqueantes (exceto a confirmação, que retorna uma Promise<boolean>).
+
+function ensureNotificationRoot() {
+    let root = document.getElementById('notificationRoot');
+    if (!root) {
+        root = document.createElement('div');
+        root.id = 'notificationRoot';
+        root.className = 'notification-root';
+        document.body.appendChild(root);
+    }
+    return root;
+}
+
+const TOAST_ICONS = { success: '✓', error: '✕', warning: '!', info: 'i' };
+
+function showToast(message, type = 'info', duration = 4500) {
+    const root = ensureNotificationRoot();
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+
+    const icon = document.createElement('span');
+    icon.className = 'toast__icon';
+    icon.textContent = TOAST_ICONS[type] || TOAST_ICONS.info;
+
+    const text = document.createElement('span');
+    text.className = 'toast__message';
+    text.textContent = message;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'toast__close';
+    closeBtn.type = 'button';
+    closeBtn.setAttribute('aria-label', 'Fechar aviso');
+    closeBtn.innerHTML = '&times;';
+
+    toast.appendChild(icon);
+    toast.appendChild(text);
+    toast.appendChild(closeBtn);
+
+    const close = () => {
+        toast.classList.add('toast--leaving');
+        setTimeout(() => toast.remove(), 200);
+    };
+    closeBtn.onclick = close;
+
+    root.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('toast--visible'));
+
+    if (duration > 0) setTimeout(close, duration);
+    return toast;
+}
+
+function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary' } = {}) {
+    return new Promise((resolve) => {
+        const root = ensureNotificationRoot();
+
+        const dialog = document.createElement('div');
+        dialog.className = 'confirm-dialog';
+        dialog.setAttribute('role', 'alertdialog');
+        dialog.setAttribute('aria-modal', 'true');
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'confirm-dialog__title';
+        titleEl.textContent = title;
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'confirm-dialog__message';
+        messageEl.textContent = message;
+
+        const actions = document.createElement('div');
+        actions.className = 'confirm-dialog__actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn-secondary';
+        cancelBtn.textContent = cancelText;
+
+        const confirmBtn = document.createElement('button');
+        confirmBtn.type = 'button';
+        confirmBtn.className = variant === 'danger' ? 'btn-danger' : 'btn-primary';
+        confirmBtn.textContent = confirmText;
+
+        actions.appendChild(cancelBtn);
+        actions.appendChild(confirmBtn);
+        dialog.appendChild(titleEl);
+        dialog.appendChild(messageEl);
+        dialog.appendChild(actions);
+
+        const finish = (result) => {
+            dialog.classList.add('confirm-dialog--leaving');
+            setTimeout(() => dialog.remove(), 200);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') finish(false);
+        };
+
+        cancelBtn.onclick = () => finish(false);
+        confirmBtn.onclick = () => finish(true);
+        document.addEventListener('keydown', onKey);
+
+        root.appendChild(dialog);
+        requestAnimationFrame(() => {
+            dialog.classList.add('confirm-dialog--visible');
+            confirmBtn.focus();
+        });
+    });
+}
+
 // Inicialização
 document.addEventListener('DOMContentLoaded', async () => {
     try {
@@ -252,7 +366,7 @@ async function loadData() {
 
     } catch (error) {
         console.error('Erro ao carregar dados:', error);
-        alert('Erro ao carregar dados do sistema. Verifique o console.');
+        showToast('Erro ao carregar dados do sistema. Verifique o console.', 'error', 0);
     } finally {
         state.loading = false;
     }
@@ -358,7 +472,7 @@ async function checkAutoLogin() {
         }
     } catch (err) {
         console.error('Erro no AutoLogin:', err);
-        alert('Erro ao verificar login: ' + err.message);
+        showToast('Erro ao verificar login: ' + err.message, 'error');
         showLoginView(); // Fallback
     } finally {
         state.loading = false;
@@ -384,7 +498,7 @@ async function handleLogin(e) {
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         showMainApp();
     } else {
-        alert(result.error || 'Erro ao entrar. Verifique suas credenciais.');
+        showToast(result.error || 'Erro ao entrar. Verifique suas credenciais.', 'error');
         btn.textContent = originalText;
         btn.disabled = false;
     }
@@ -400,12 +514,12 @@ async function handleRegister(e) {
     const p2 = document.getElementById('regConfirmPassword').value;
 
     if (p1 !== p2) {
-        alert('As senhas não coincidem!');
+        showToast('As senhas não coincidem!', 'warning');
         return;
     }
 
     if (p1.length < 6) {
-        alert('A senha deve ter pelo menos 6 caracteres.');
+        showToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
         return;
     }
 
@@ -427,11 +541,11 @@ async function handleRegister(e) {
     const result = await authService.signUp(userData);
 
     if (result.error) {
-        alert('Erro no cadastro: ' + result.error);
+        showToast('Erro no cadastro: ' + result.error, 'error');
         btn.textContent = originalText;
         btn.disabled = false;
     } else {
-        alert(result.message);
+        showToast(result.message, 'success');
         // Limpar form e mudar para aba de login
         e.target.reset();
         switchAuthTab('login');
@@ -1013,9 +1127,13 @@ async function reserveNumber(docId) {
     const formattedNum = formatNumber(doc);
 
     // CONFIRMAÇÃO
-    if (!confirm(`Confirma a reserva do número:\n\n${formattedNum}\n\nDocumento: ${doc.name}`)) {
-        return;
-    }
+    const confirmed = await showConfirmDialog({
+        title: 'Confirmar reserva',
+        message: `Documento: ${doc.name}\nNúmero: ${formattedNum}`,
+        confirmText: 'Reservar número',
+        cancelText: 'Cancelar'
+    });
+    if (!confirmed) return;
 
     try {
         const numberToReserve = doc.currentNumber;
@@ -1050,7 +1168,7 @@ async function reserveNumber(docId) {
 
         if (docError) {
             console.error('Erro ao incrementar documento:', docError);
-            alert('Erro crítico: Reserva criada mas falha ao incrementar número. Contate suporte.');
+            showToast('Erro crítico: reserva criada, mas falha ao incrementar número. Contate o suporte.', 'error', 0);
         }
 
         // Sucesso
@@ -1074,11 +1192,11 @@ async function reserveNumber(docId) {
             updateStats();
         }
 
-        alert(`Número reservado com sucesso!\n\n${formattedNum}`);
+        showToast(`Número reservado com sucesso: ${formattedNum}`, 'success');
 
     } catch (error) {
         console.error('Erro na reserva:', error);
-        alert('Erro ao realizar reserva: ' + error.message);
+        showToast('Erro ao realizar reserva: ' + error.message, 'error', 0);
     }
 }
 
@@ -1402,7 +1520,7 @@ async function handleDocFormSubmit(e) {
 
     } catch (err) {
         console.error('Erro ao salvar documento:', err);
-        alert('Erro ao salvar: ' + err.message);
+        showToast('Erro ao salvar: ' + err.message, 'error');
     }
 }
 
@@ -1426,12 +1544,18 @@ async function toggleDocStatus(docId) {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao alterar status');
+        showToast('Erro ao alterar status', 'error');
     }
 }
 
 async function deleteDocument(docId) {
-    if (!confirm('Excluir este documento? Isso pode afetar o histórico.')) return;
+    const confirmed = await showConfirmDialog({
+        title: 'Excluir documento',
+        message: 'Excluir este documento? Isso pode afetar o histórico.',
+        confirmText: 'Excluir',
+        variant: 'danger'
+    });
+    if (!confirmed) return;
 
     try {
         const { error } = await supabase
@@ -1453,7 +1577,7 @@ async function deleteDocument(docId) {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao excluir: ' + err.message);
+        showToast('Erro ao excluir: ' + err.message, 'error');
     }
 }
 
@@ -1600,7 +1724,7 @@ async function handleUserFormSubmit(e) {
     if (role === 'user_restricted' || role === 'user_readonly') {
         allowedDocuments = Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => cb.value);
         if (allowedDocuments.length === 0) {
-            alert('Selecione pelo menos um documento!');
+            showToast('Selecione pelo menos um documento!', 'warning');
             return;
         }
     }
@@ -1672,12 +1796,18 @@ async function handleUserFormSubmit(e) {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao salvar usuário: ' + err.message);
+        showToast('Erro ao salvar usuário: ' + err.message, 'error');
     }
 }
 
 async function deleteUser(userId) {
-    if (!confirm('Excluir este usuário?')) return;
+    const confirmed = await showConfirmDialog({
+        title: 'Excluir usuário',
+        message: 'Excluir este usuário?',
+        confirmText: 'Excluir',
+        variant: 'danger'
+    });
+    if (!confirmed) return;
 
     try {
         const { error } = await supabase
@@ -1694,7 +1824,7 @@ async function deleteUser(userId) {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao excluir usuário');
+        showToast('Erro ao excluir usuário', 'error');
     }
 }
 
@@ -1800,8 +1930,8 @@ async function addSecretariat() {
     const input = document.getElementById('newSecretariatName');
     const name = input.value.trim();
 
-    if (!name) return alert('Digite o nome da secretaria.');
-    if (state.secretariats.includes(name)) return alert('Secretaria já existe.');
+    if (!name) return showToast('Digite o nome da secretaria.', 'warning');
+    if (state.secretariats.includes(name)) return showToast('Secretaria já existe.', 'warning');
 
     try {
         const newList = [...state.secretariats, name];
@@ -1820,12 +1950,18 @@ async function addSecretariat() {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao salvar: ' + err.message);
+        showToast('Erro ao salvar: ' + err.message, 'error');
     }
 }
 
 async function removeSecretariat(name) {
-    if (!confirm(`Remover "${name}"? Usuários vinculados manterão o nome, mas ele sumirá da lista.`)) return;
+    const confirmed = await showConfirmDialog({
+        title: 'Remover secretaria',
+        message: `Remover "${name}"? Usuários vinculados manterão o nome, mas ele sumirá da lista.`,
+        confirmText: 'Remover',
+        variant: 'danger'
+    });
+    if (!confirmed) return;
 
     try {
         const newList = state.secretariats.filter(s => s !== name);
@@ -1842,12 +1978,17 @@ async function removeSecretariat(name) {
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao remover: ' + err.message);
+        showToast('Erro ao remover: ' + err.message, 'error');
     }
 }
 
 async function approveUser(userId) {
-    if (!confirm('Aprovar este usuário? Ele terá acesso imediato com o nível "Usuário Restrito".')) return;
+    const confirmed = await showConfirmDialog({
+        title: 'Aprovar usuário',
+        message: 'Aprovar este usuário? Ele terá acesso imediato com o nível "Usuário Restrito".',
+        confirmText: 'Aprovar'
+    });
+    if (!confirmed) return;
 
     try {
         const user = state.users.find(u => u.id === userId);
@@ -1878,10 +2019,10 @@ async function approveUser(userId) {
 
         renderAdminUsers();
         addLog('cadastro', 'Aprovou usuário', user ? user.name : userId);
-        alert('Usuário aprovado com sucesso!');
+        showToast('Usuário aprovado com sucesso!', 'success');
 
     } catch (err) {
         console.error(err);
-        alert('Erro ao aprovar: ' + err.message);
+        showToast('Erro ao aprovar: ' + err.message, 'error');
     }
 }
