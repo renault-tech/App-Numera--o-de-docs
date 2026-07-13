@@ -565,7 +565,7 @@ function renderAppHeader() {
     brand.onclick = (e) => { e.preventDefault(); showMainApp(); };
 
     brand.innerHTML = `
-        <img src="logo_prefeitura_cataguases.png" alt="Logo" class="header-logo-img">
+        <img src="./logo-prefeitura.png" alt="Logo" class="header-logo-img">
         <div class="header-title-wrapper">
             <span class="header-title-main">Sistema de Numeração</span>
             <span class="header-title-sub">Prefeitura de Cataguases</span>
@@ -627,6 +627,8 @@ function renderAppHeader() {
     container.appendChild(brand);
     container.appendChild(actionsWrapper);
     header.appendChild(container);
+
+    lockHeaderZoom();
 }
 
 // Inicializar Header e Zoom
@@ -731,6 +733,7 @@ function applyGlobalZoom() {
     }
     document.body.style.zoom = `${globalZoomLevel}%`;
     updateZoomDisplay();
+    lockHeaderZoom();
 }
 
 function increaseGlobalZoom() {
@@ -739,6 +742,7 @@ function increaseGlobalZoom() {
         document.body.style.zoom = `${globalZoomLevel}%`;
         localStorage.setItem('globalZoomLevel', globalZoomLevel);
         updateZoomDisplay();
+        lockHeaderZoom();
     }
 }
 
@@ -748,12 +752,23 @@ function decreaseGlobalZoom() {
         document.body.style.zoom = `${globalZoomLevel}%`;
         localStorage.setItem('globalZoomLevel', globalZoomLevel);
         updateZoomDisplay();
+        lockHeaderZoom();
     }
 }
 
 function updateZoomDisplay() {
     const el = document.getElementById('globalZoomIndicator');
     if (el) el.textContent = `${globalZoomLevel}%`;
+}
+
+// O header aplica um zoom inverso ao do body para cancelar o efeito:
+// assim ele (e o botão de zoom dentro dele) sempre renderiza em tamanho
+// real e nunca muda de posição/tamanho quando o zoom do conteúdo muda.
+function lockHeaderZoom() {
+    const header = document.querySelector('.app-header');
+    if (header) {
+        header.style.zoom = `${10000 / globalZoomLevel}%`;
+    }
 }
 
 // ========== RENDERIZAÇÃO PRINCIPAL ==========
