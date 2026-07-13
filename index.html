@@ -4,8 +4,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Sistema de reserva e numeração de documentos oficiais da Prefeitura de Cataguases">
+    <meta name="theme-color" content="#1e40af">
     <title>Sistema de Numeração de Documentos</title>
-    <link rel="stylesheet" href="styles.css?v=202601140001">
+    <link rel="icon" type="image/png" href="logo-header.png">
+    <link rel="stylesheet" href="styles.css?v=202607132300">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         /* Nav Cards - Estilo Estatísticas */
@@ -169,20 +173,18 @@
         window.resetAppData = resetAppData;
     </script>
 
-    <!-- Bibliotecas para Exportação -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- Bibliotecas de exportação (jsPDF/XLSX) removidas: não eram usadas
+         em nenhum ponto do código e custavam ~1MB em todo carregamento.
+         Quando a exportação for implementada, carregá-las sob demanda. -->
 
     <!-- Supabase SDK -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-    <script src="autocomplete.js?v=202601271540"></script>
-    <script src="auth-service.js?v=202602111950"></script>
+    <script src="autocomplete.js?v=202607132300"></script>
+    <script src="auth-service.js?v=202607132300"></script>
 
     <!-- admin-views.js removido pois app.js gerencia as views agora -->
-    <script src="app.js?v=202602111955"></script>
+    <script src="app.js?v=202607132300"></script>
 </body>
 
 </html>

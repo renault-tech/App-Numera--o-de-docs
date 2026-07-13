@@ -21,7 +21,6 @@ let state = {
     editingDocId: null,
     editingUserId: null,
     currentLogFilter: 'todos',
-    currentLogFilter: 'todos',
     loading: false,
     secretariats: ['Gabinete', 'Administração', 'Finanças', 'Saúde', 'Educação', 'Obras'] // Default list
 };
@@ -35,6 +34,38 @@ const PERMISSION_LEVELS = {
     user_restricted: { label: 'Usuário Restrito', desc: 'Documentos específicos' },
     user_readonly: { label: 'Somente Leitura', desc: 'Visualizar apenas' }
 };
+
+// Escapa texto vindo de usuários antes de inseri-lo via innerHTML
+// (nomes, assuntos e cargos são cadastrados livremente — sem isso,
+// um valor malicioso executaria script na tela de outros usuários).
+function esc(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (e) {
+        // Fallback para contextos sem Clipboard API (http, browsers antigos)
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) { /* sem suporte */ }
+        ta.remove();
+        return ok;
+    }
+}
 
 // ========== NOTIFICAÇÕES E CONFIRMAÇÕES (janelas flutuantes no topo) ==========
 // Substituem alert()/confirm() nativos por componentes próprios, consistentes
@@ -53,7 +84,7 @@ function ensureNotificationRoot() {
 
 const TOAST_ICONS = { success: '✓', error: '✕', warning: '!', info: 'i' };
 
-function showToast(message, type = 'info', duration = 4500) {
+function showToast(message, type = 'info', duration = 4500, action = null) {
     const root = ensureNotificationRoot();
 
     const toast = document.createElement('div');
@@ -77,6 +108,14 @@ function showToast(message, type = 'info', duration = 4500) {
 
     toast.appendChild(icon);
     toast.appendChild(text);
+    if (action && action.label && typeof action.onClick === 'function') {
+        const actionBtn = document.createElement('button');
+        actionBtn.className = 'toast__action';
+        actionBtn.type = 'button';
+        actionBtn.textContent = action.label;
+        actionBtn.onclick = () => action.onClick(actionBtn);
+        toast.appendChild(actionBtn);
+    }
     toast.appendChild(closeBtn);
 
     const close = () => {
@@ -92,7 +131,9 @@ function showToast(message, type = 'info', duration = 4500) {
     return toast;
 }
 
-function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary' } = {}) {
+// Quando `input` é informado ({ label, placeholder, maxLength }), o diálogo
+// exibe um campo de texto e a Promise resolve { confirmed, value } em vez de boolean.
+function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary', input = null } = {}) {
     return new Promise((resolve) => {
         const root = ensureNotificationRoot();
 
@@ -108,6 +149,16 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
         const messageEl = document.createElement('div');
         messageEl.className = 'confirm-dialog__message';
         messageEl.textContent = message;
+
+        let inputEl = null;
+        if (input) {
+            inputEl = document.createElement('input');
+            inputEl.type = 'text';
+            inputEl.className = 'confirm-dialog__input';
+            inputEl.placeholder = input.placeholder || '';
+            inputEl.maxLength = input.maxLength || 200;
+            inputEl.setAttribute('aria-label', input.label || input.placeholder || 'Informação adicional');
+        }
 
         const actions = document.createElement('div');
         actions.className = 'confirm-dialog__actions';
@@ -126,16 +177,18 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
         actions.appendChild(confirmBtn);
         dialog.appendChild(titleEl);
         dialog.appendChild(messageEl);
+        if (inputEl) dialog.appendChild(inputEl);
         dialog.appendChild(actions);
 
-        const finish = (result) => {
+        const finish = (confirmed) => {
             dialog.classList.add('confirm-dialog--leaving');
             setTimeout(() => dialog.remove(), 200);
             document.removeEventListener('keydown', onKey);
-            resolve(result);
+            resolve(input ? { confirmed, value: inputEl.value.trim() } : confirmed);
         };
         const onKey = (e) => {
             if (e.key === 'Escape') finish(false);
+            if (e.key === 'Enter' && inputEl && document.activeElement === inputEl) finish(true);
         };
 
         cancelBtn.onclick = () => finish(false);
@@ -145,7 +198,7 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
         root.appendChild(dialog);
         requestAnimationFrame(() => {
             dialog.classList.add('confirm-dialog--visible');
-            confirmBtn.focus();
+            (inputEl || confirmBtn).focus();
         });
     });
 }
@@ -694,10 +747,10 @@ function renderAppHeader() {
         userWidget.className = 'user-profile-widget';
         userWidget.title = `Logado como: ${user.name}`;
         userWidget.innerHTML = `
-            <div class="user-avatar">${userInitials}</div>
+            <div class="user-avatar">${esc(userInitials)}</div>
             <div class="user-info-text">
-                <span class="user-name">${user.name.split(' ')[0]}</span>
-                <span class="user-role">${PERMISSION_LEVELS[user.role]?.label || user.role}</span>
+                <span class="user-name">${esc(user.name.split(' ')[0])}</span>
+                <span class="user-role">${esc(PERMISSION_LEVELS[user.role]?.label || user.role)}</span>
             </div>
         `;
 
@@ -829,9 +882,11 @@ function formatTime(date) {
 }
 
 function formatNumber(doc) {
-    const year = new Date().getFullYear();
     const number = String(doc.currentNumber).padStart(3, '0');
-    return doc.prefix ? `${doc.prefix} ${number}/${year}` : `${number}/${year}`;
+    // Documentos de numeração contínua (ex.: Processo, Protocolo) não levam
+    // o ano no número — o ano só faz sentido quando a contagem reinicia nele.
+    const yearSuffix = doc.yearlyReset ? `/${new Date().getFullYear()}` : '';
+    return doc.prefix ? `${doc.prefix} ${number}${yearSuffix}` : `${number}${yearSuffix}`;
 }
 
 // ========== ZOOM & UI ==========
@@ -928,7 +983,7 @@ function showMainApp() {
                             <h2>Histórico de Reservas</h2>
                             <div class="search-box">
                                 <span class="search-icon">🔍</span>
-                                <input type="text" id="searchInput" placeholder="Buscar..." oninput="renderHistory()">
+                                <input type="text" id="searchInput" placeholder="Buscar por tipo, número, assunto ou usuário..." oninput="renderHistory()">
                             </div>
                         </div>
                         <div id="historyList" class="history-list"></div>
@@ -1106,9 +1161,9 @@ function renderDocuments() {
             <div class="doc-card-header">
                 <div class="doc-icon">📄</div>
             </div>
-            <div class="doc-name">${doc.name}</div>
-            <div class="doc-prefix">${doc.prefix || 'Sem prefixo'}</div>
-            <div class="doc-number">${formatNumber(doc)}</div>
+            <div class="doc-name">${esc(doc.name)}</div>
+            <div class="doc-prefix">${esc(doc.prefix) || 'Sem prefixo'}</div>
+            <div class="doc-number">${esc(formatNumber(doc))}</div>
             ${canReserve(doc.id) ?
             `<button class="reserve-btn" onclick="reserveNumber('${doc.id}')">Reservar Número</button>` :
             `<button class="reserve-btn" disabled style="opacity:0.5">🔒 Sem Permissão</button>`
@@ -1123,68 +1178,36 @@ async function reserveNumber(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
 
-    // Recalcular number localmente para UI otimista
+    // Número previsto (informativo — o número final é confirmado pelo servidor)
     const formattedNum = formatNumber(doc);
 
-    // CONFIRMAÇÃO
-    const confirmed = await showConfirmDialog({
+    // CONFIRMAÇÃO + ASSUNTO (permite localizar o documento depois na busca)
+    const result = await showConfirmDialog({
         title: 'Confirmar reserva',
-        message: `Documento: ${doc.name}\nNúmero: ${formattedNum}`,
+        message: `Documento: ${doc.name}\nPróximo número: ${formattedNum}`,
         confirmText: 'Reservar número',
-        cancelText: 'Cancelar'
+        cancelText: 'Cancelar',
+        input: { label: 'Assunto do documento', placeholder: 'Assunto/tema (opcional, ajuda na busca)' }
     });
-    if (!confirmed) return;
+    if (!result.confirmed) return;
+    const subject = result.value || null;
 
     try {
-        const numberToReserve = doc.currentNumber;
+        const reservationRow = await performReservation(doc, formattedNum, subject);
 
-        // Inserir Reserva
-        const reservation = {
-            doc_id: doc.id,
-            doc_name: doc.name,
-            number: numberToReserve,
-            formatted_number: formattedNum,
-            user_id: state.currentUser.id,
-            user_name: state.currentUser.name,
-            user_cargo: state.currentUser.cargo,
-            user_setor: state.currentUser.setor,
-            user_secretaria: state.currentUser.secretaria,
-            timestamp: new Date().toISOString()
-        };
-
-        const { data: resData, error: resError } = await supabase
-            .from('reservations')
-            .insert([reservation])
-            .select()
-            .single();
-
-        if (resError) throw resError;
-
-        // Atualizar documento (Incrementar)
-        const { error: docError } = await supabase
-            .from('documents')
-            .update({ current_number: numberToReserve + 1 })
-            .eq('id', doc.id);
-
-        if (docError) {
-            console.error('Erro ao incrementar documento:', docError);
-            showToast('Erro crítico: reserva criada, mas falha ao incrementar número. Contate o suporte.', 'error', 0);
-        }
-
-        // Sucesso
-        doc.currentNumber++;
+        // Sucesso — atualizar estado local com o que o servidor confirmou
+        doc.currentNumber = reservationRow.number + 1;
         state.reservations.unshift({
-            id: resData.id,
-            docId: resData.doc_id,
-            docName: resData.doc_name,
-            number: resData.number,
-            formattedNumber: resData.formatted_number,
-            userId: resData.user_id,
-            userName: resData.user_name,
-            timestamp: resData.timestamp
+            id: reservationRow.id,
+            docId: reservationRow.doc_id,
+            docName: reservationRow.doc_name,
+            number: reservationRow.number,
+            formattedNumber: reservationRow.formatted_number,
+            subject: reservationRow.subject,
+            userId: reservationRow.user_id,
+            userName: reservationRow.user_name,
+            timestamp: reservationRow.timestamp
         });
-
-        addLog('reserva', `Reservou ${doc.name}`, `Número: ${formattedNum}`);
 
         renderDocuments();
         renderHistory();
@@ -1192,12 +1215,79 @@ async function reserveNumber(docId) {
             updateStats();
         }
 
-        showToast(`Número reservado com sucesso: ${formattedNum}`, 'success');
+        const finalNumber = reservationRow.formatted_number;
+        showToast(`Número reservado: ${finalNumber}`, 'success', 10000, {
+            label: 'Copiar',
+            onClick: async (btn) => {
+                const ok = await copyToClipboard(finalNumber);
+                btn.textContent = ok ? 'Copiado ✓' : 'Falhou';
+            }
+        });
 
     } catch (error) {
         console.error('Erro na reserva:', error);
         showToast('Erro ao realizar reserva: ' + error.message, 'error', 0);
     }
+}
+
+// Executa a reserva. Preferência: função SQL reserve_number() (atômica no
+// banco — imune a corrida entre usuários simultâneos). Se a função ainda não
+// existir no projeto Supabase, cai no fluxo legado (insert + update separados).
+async function performReservation(doc, formattedNum, subject) {
+    const { data, error } = await supabase.rpc('reserve_number', {
+        p_doc_id: doc.id,
+        p_user_id: state.currentUser.id,
+        p_subject: subject
+    });
+
+    if (!error) return data;
+
+    // PGRST202 = função inexistente no schema (migração ainda não aplicada)
+    const functionMissing = error.code === 'PGRST202' ||
+        /reserve_number/.test(error.message || '') && /not find|não encontrada|schema cache/i.test(error.message || '');
+    if (!functionMissing) throw error;
+
+    console.warn('reserve_number() ausente no banco — usando fluxo legado (sujeito a corrida). Aplique supabase/migrations/0002_reserve_number_rpc.sql');
+    return performReservationLegacy(doc, formattedNum, subject);
+}
+
+async function performReservationLegacy(doc, formattedNum, subject) {
+    const numberToReserve = doc.currentNumber;
+
+    const reservation = {
+        doc_id: doc.id,
+        doc_name: doc.name,
+        number: numberToReserve,
+        formatted_number: formattedNum,
+        subject: subject,
+        user_id: state.currentUser.id,
+        user_name: state.currentUser.name,
+        user_cargo: state.currentUser.cargo,
+        user_setor: state.currentUser.setor,
+        user_secretaria: state.currentUser.secretaria,
+        timestamp: new Date().toISOString()
+    };
+
+    const { data: resData, error: resError } = await supabase
+        .from('reservations')
+        .insert([reservation])
+        .select()
+        .single();
+
+    if (resError) throw resError;
+
+    const { error: docError } = await supabase
+        .from('documents')
+        .update({ current_number: numberToReserve + 1 })
+        .eq('id', doc.id);
+
+    if (docError) {
+        console.error('Erro ao incrementar documento:', docError);
+        showToast('Erro crítico: reserva criada, mas falha ao incrementar número. Contate o suporte.', 'error', 0);
+    }
+
+    addLog('reserva', `Reservou ${doc.name}`, `Número: ${formattedNum}`);
+    return resData;
 }
 
 // ========== HISTÓRICO ==========
@@ -1210,11 +1300,12 @@ function renderHistory() {
 
     let filtered = state.reservations;
 
-    // Filtrar por busca
+    // Filtrar por busca (tipo, número, assunto ou usuário)
     if (search) {
         filtered = filtered.filter(r =>
             r.docName.toLowerCase().includes(search) ||
             r.formattedNumber.toLowerCase().includes(search) ||
+            (r.subject || '').toLowerCase().includes(search) ||
             r.userName.toLowerCase().includes(search)
         );
     }
@@ -1227,10 +1318,11 @@ function renderHistory() {
     container.innerHTML = filtered.slice(0, 50).map(r => `
         <div class="history-item">
             <div class="history-info">
-                <div class="history-type">${r.docName}</div>
-                <div class="history-details">${formatDate(r.timestamp)} às ${formatTime(r.timestamp)} - ${r.userName}</div>
+                <div class="history-type">${esc(r.docName)}</div>
+                ${r.subject ? `<div class="history-subject">${esc(r.subject)}</div>` : ''}
+                <div class="history-details">${formatDate(r.timestamp)} às ${formatTime(r.timestamp)} - ${esc(r.userName)}</div>
             </div>
-            <div class="history-number">${r.formattedNumber}</div>
+            <div class="history-number">${esc(r.formattedNumber)}</div>
         </div>
     `).join('');
 }
@@ -1411,9 +1503,9 @@ function renderAdminDocs() {
     container.innerHTML = sortedDocs.map(doc => `
         <div class="admin-doc-item" style="opacity: ${doc.enabled ? '1' : '0.5'}">
             <div class="admin-doc-info">
-                <div class="admin-doc-name">${doc.name} ${!doc.enabled ? '(Desabilitado)' : ''}</div>
+                <div class="admin-doc-name">${esc(doc.name)} ${!doc.enabled ? '(Desabilitado)' : ''}</div>
                 <div class="admin-doc-details">
-                    Prefixo: ${doc.prefix || 'Nenhum'} | 
+                    Prefixo: ${esc(doc.prefix) || 'Nenhum'} |
                     Número atual: ${doc.currentNumber} | 
                     Reset anual: ${doc.yearlyReset ? 'Sim' : 'Não'}
                 </div>
@@ -1594,11 +1686,11 @@ function renderAdminUsers() {
         return `
             <div class="admin-doc-item">
                 <div class="admin-doc-info">
-                    <div class="admin-doc-name">${user.name} ${user.id === state.currentUser.id ? '(Você)' : ''}</div>
+                    <div class="admin-doc-name">${esc(user.name)} ${user.id === state.currentUser.id ? '(Você)' : ''}</div>
                     <div class="admin-doc-details">
-                        Usuário: ${user.username} | 
-                        Cargo: ${user.cargo || 'N/A'} | 
-                        Setor: ${user.setor || 'N/A'}
+                        Usuário: ${esc(user.username)} |
+                        Cargo: ${esc(user.cargo) || 'N/A'} |
+                        Setor: ${esc(user.setor) || 'N/A'}
                         ${!user.approved ? '<br><span class="badge-disabled" style="background:#f59e0b; color:white">Pendente de Aprovação</span>' : ''}
                     </div>
                     <div class="admin-doc-details">
@@ -1844,9 +1936,9 @@ function renderLogs() {
 
     if (search) {
         filtered = filtered.filter(l =>
-            l.action.toLowerCase().includes(search) ||
-            l.details.toLowerCase().includes(search) ||
-            l.userName.toLowerCase().includes(search)
+            (l.action || '').toLowerCase().includes(search) ||
+            (l.details || '').toLowerCase().includes(search) ||
+            (l.userName || '').toLowerCase().includes(search)
         );
     }
 
@@ -1864,11 +1956,11 @@ function renderLogs() {
             <div class="log-item" style="border-left: 4px solid ${typeColor}">
                 <div class="log-header">
                     <span class="log-icon">${typeIcon}</span>
-                    <span class="log-user">${log.userName}</span>
+                    <span class="log-user">${esc(log.userName)}</span>
                     <span class="log-time">${formatDate(date)} às ${formatTime(date)}</span>
                 </div>
-                <div class="log-action">${log.action}</div>
-                ${log.details ? `<div class="log-details">${log.details}</div>` : ''}
+                <div class="log-action">${esc(log.action)}</div>
+                ${log.details ? `<div class="log-details">${esc(log.details)}</div>` : ''}
             </div>
         `;
     }).join('');
@@ -1917,7 +2009,7 @@ function renderAdminSecretariats() {
     container.innerHTML = state.secretariats.sort().map(sec => `
         <div class="admin-doc-item">
             <div class="admin-doc-info">
-                <div class="admin-doc-name">${sec}</div>
+                <div class="admin-doc-name">${esc(sec)}</div>
             </div>
             <div class="admin-doc-actions">
                 <button class="icon-btn delete" onclick="removeSecretariat('${sec}')" title="Remover">🗑️</button>

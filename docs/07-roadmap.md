@@ -19,8 +19,8 @@ dev não aponta para produção.
 
 | # | Item | Ref | Prioridade |
 |---|---|---|---|
-| 1.1 | Constraint `UNIQUE (doc_id, year, number)` + colunas `year`, `status`, anulação | doc 03 | 🔴 |
-| 1.2 | Função `reserve_number()` atômica + frontend chamando via RPC | doc 03 §3 | 🔴 |
+| 1.1 | Constraint de unicidade — ✅ parcial 13/07/2026: índice `UNIQUE (doc_id, formatted_number)` na migração 0002 (colunas `year`/`status`/anulação seguem pendentes) | doc 03 | 🔴 |
+| 1.2 | ✅ 13/07/2026 — Função `reserve_number()` criada (`supabase/migrations/0002_reserve_number_rpc.sql`) e frontend chama via RPC com fallback legado. **Pendente: rodar a migração no projeto Supabase de produção** | doc 03 §3 | 🔴 |
 | 1.3 | Reset anual server-side (pg_cron + verificação na função) | doc 03 §5 | 🔴 |
 | 1.4 | Migração para Supabase Auth exclusivo; remover senhas em texto puro | doc 04 S1 | 🔴 |
 | 1.5 | Políticas RLS reais em todas as tabelas | doc 04 S2 | 🔴 |
@@ -47,9 +47,9 @@ por constraint + teste.
 | # | Item | Descrição | Prioridade |
 |---|---|---|---|
 | 3.1 | **Anulação de reservas** | UC-03: dono no mesmo dia, admin sempre; motivo obrigatório; badge no histórico | 🟡 |
-| 3.2 | **Assunto obrigatório na reserva** | Diálogo de reserva com assunto + ementa antes de confirmar (habilita a busca por tema de verdade) | 🟡 |
-| 3.3 | **Busca avançada** | Filtros combinados: texto, tipo, período com presets, usuário, status; busca global ⌘K | 🟡 |
-| 3.4 | **Botão copiar número** | Clipboard API + toast; formato exato para colar no documento | 🟡 |
+| 3.2 | ✅ 13/07/2026 — **Assunto na reserva** (opcional por ora; avaliar torná-lo obrigatório) | Diálogo de reserva com campo de assunto; salvo em `reservations.subject`; exibido e buscável no histórico | 🟡 |
+| 3.3 | **Busca avançada** | Filtros combinados: texto, tipo, período com presets, usuário, status; busca global ⌘K (busca simples já cobre tipo/número/assunto/usuário) | 🟡 |
+| 3.4 | ✅ 13/07/2026 — **Botão copiar número** | Toast de sucesso com botão "Copiar" (Clipboard API + fallback) | 🟡 |
 | 3.5 | **"Meus números"** | Tela com as reservas do próprio usuário | 🟢 |
 | 3.6 | **Relatórios** | Por período/tipo/secretaria; exportação PDF/Excel respeitando filtros; gráficos simples no painel | 🟢 |
 | 3.7 | **Ajuste manual de contador com trilha** | Para migrar a numeração das folhas de papel: admin define próximo número com motivo + log | 🟢 |
@@ -70,8 +70,12 @@ por constraint + teste.
 
 ## Backlog de dívidas conhecidas (registrar ao encontrar)
 
-- `state.currentLogFilter` duplicado no objeto `state` (`app.js` linhas 23–24);
-- Chave duplicada de cache-busting divergente entre arquivos no `index.html`;
+- ~~`state.currentLogFilter` duplicado no objeto `state`~~ ✅ corrigido 13/07/2026;
+- ~~Cache-busting divergente entre arquivos no `index.html`~~ ✅ unificado 13/07/2026;
+- ~~Libs jsPDF/XLSX/FileSaver (~1MB) carregadas sem uso~~ ✅ removidas 13/07/2026;
+- ~~XSS via `innerHTML` nos campos de usuário (nome, assunto, cargo)~~ ✅ escape aplicado 13/07/2026 (varredura completa da Fase 2 ainda recomendada);
+- ~~`formatNumber` anexava ano em documentos de numeração contínua~~ ✅ corrigido 13/07/2026;
+- supabase-js carregado do CDN unpkg — ponto único de falha; considerar self-host com versão fixada;
 - `admin-views.js` referenciado como removido no HTML mas ainda no repo;
 - README raiz descreve armazenamento em localStorage — desatualizado (já é Supabase); reescrever após Fase 2.
 
