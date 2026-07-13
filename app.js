@@ -3,7 +3,7 @@
 
 // Configuração do Supabase
 const SUPABASE_URL = 'https://uxdjhdnsnditivvjktzf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4ZGpoZG5zbmRpdGl2dmprdHpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDk1MDcsImV4cCI6MjA5OTUyNTUwN30.uLnbm7lvuxlHRm8IobFcNo6c_dbV1ZFs3gT97q7AYR8';
+const SUPABASE_KEY = 'sb_publishable_VAfgn59xk4fN4e3gPSMmLg_OXx6xAjf';
 var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 let state = {
