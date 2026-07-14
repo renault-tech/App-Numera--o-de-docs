@@ -332,11 +332,13 @@ async function loadData() {
             username: u.username,
             password: u.password,
             name: u.name,
+            email: u.email,
             cargo: u.cargo,
             setor: u.setor,
             secretaria: u.secretaria,
             role: u.role,
             allowedDocuments: u.allowed_documents || [],
+            approved: u.approved,
             createdAt: u.created_at
         }));
 
@@ -352,7 +354,8 @@ async function loadData() {
                 setor: 'TI',
                 secretaria: 'Administrativa',
                 role: 'admin',
-                allowed_documents: []
+                allowed_documents: [],
+                approved: true
             };
 
             const { data: newUser, error: createError } = await supabase

@@ -3,6 +3,19 @@
  * Gerencia o cadastro e login via Supabase Auth e fallback para tabela legada.
  */
 
+// Converte a linha crua da tabela 'users' (snake_case, vinda do Supabase)
+// para o formato que o resto do app.js espera (camelCase). Sem isso,
+// state.currentUser.allowedDocuments fica sempre undefined e nenhum
+// documento aparece para usuários restritos/somente leitura.
+function normalizeUser(row) {
+    if (!row) return row;
+    return {
+        ...row,
+        allowedDocuments: row.allowed_documents || [],
+        createdAt: row.created_at
+    };
+}
+
 const authService = {
     // Cadastro de novo usuário
     async signUp(userData) {
@@ -80,7 +93,8 @@ const authService = {
                         await supabase.auth.signOut();
                         return { error: "Sua conta aguarda aprovação do administrador." };
                     }
-                    return { user: userDetails };
+                    localStorage.setItem('currentUserId', userDetails.id);
+                    return { user: normalizeUser(userDetails) };
                 }
             }
         }
@@ -95,7 +109,8 @@ const authService = {
             .single();
 
         if (legacyUser) {
-            return { user: legacyUser };
+            localStorage.setItem('currentUserId', legacyUser.id);
+            return { user: normalizeUser(legacyUser) };
         }
 
         return { error: "Usuário ou senha incorretos." };
@@ -122,7 +137,7 @@ const authService = {
                 .select('*')
                 .eq('id', session.user.id)
                 .single();
-            return data;
+            return normalizeUser(data);
         }
 
         // 2. Checar localStorage (Legado)
@@ -133,7 +148,7 @@ const authService = {
                 .select('*')
                 .eq('id', savedId)
                 .single();
-            return data;
+            return normalizeUser(data);
         }
 
         return null;
