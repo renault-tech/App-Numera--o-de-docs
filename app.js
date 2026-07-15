@@ -22,7 +22,9 @@ let state = {
     editingUserId: null,
     currentLogFilter: 'todos',
     loading: false,
-    secretariats: ['Gabinete', 'Administração', 'Finanças', 'Saúde', 'Educação', 'Obras'] // Default list
+    counters: {}, // `${doc_id}|${secretaria}|${year}` -> próximo número (migração 0003)
+    secretariats: ['Gabinete', 'Administração', 'Finanças', 'Saúde', 'Educação', 'Obras'], // Default list
+    expandedSecretariat: null // secretaria com o painel de "Configurar numeração" aberto
 };
 
 
@@ -256,6 +258,7 @@ async function loadData() {
             currentNumber: d.current_number,
             yearlyReset: d.yearly_reset,
             lastResetYear: d.last_reset_year,
+            perSecretaria: d.per_secretaria || false,
             enabled: d.enabled
         }));
 
@@ -296,14 +299,30 @@ async function loadData() {
                     currentNumber: d.current_number,
                     yearlyReset: d.yearly_reset,
                     lastResetYear: d.last_reset_year,
+                    perSecretaria: d.per_secretaria || false,
                     enabled: d.enabled
                 }));
                 addLog('sistema', 'Inicialização', 'Documentos padrão criados');
             }
         }
 
-        // Reset anual (lógica mantida, mas precisa salvar no banco se mudar)
-        await checkYearlyReset();
+        // 1.2 Carregar contadores por bucket (doc_id|secretaria|year -> próximo número).
+        // Fonte da verdade da numeração desde a migração 0003. Se a tabela ainda
+        // não existir (migração não aplicada), state.counters fica vazio e o
+        // preview cai para startNumber; a reserva falha com aviso claro (ver
+        // performReservation) até a migração ser aplicada.
+        state.counters = {};
+        const { data: counters, error: errCounters } = await supabase
+            .from('document_counters')
+            .select('doc_id,secretaria,year,current_number');
+        if (!errCounters && counters) {
+            counters.forEach(c => {
+                state.counters[`${c.doc_id}|${c.secretaria}|${c.year}`] = c.current_number;
+            });
+        }
+
+        // Reset anual: desde a migração 0003 é estrutural (bucket de ano em
+        // document_counters), não precisa mais mutar documents.current_number.
 
         // 1.1 Carregar Configurações (Secretarias)
         const { data: configs, error: errConfig } = await supabase
@@ -395,6 +414,7 @@ async function loadData() {
             userCargo: r.user_cargo,
             userSetor: r.user_setor,
             userSecretaria: r.user_secretaria,
+            bucketSecretaria: r.bucket_secretaria || '',
             timestamp: r.timestamp
         }));
 
@@ -479,37 +499,10 @@ async function addLog(type, action, details) {
     }
 }
 
-// Reset anual
-async function checkYearlyReset() {
-    const currentYear = new Date().getFullYear();
-    let hasChanges = false;
-
-    // Iterar e atualizar documentos necessários
-    for (const doc of state.documents) {
-        if (doc.yearlyReset && doc.lastResetYear !== currentYear) {
-            // Atualizar no banco
-            try {
-                const { error } = await supabase
-                    .from('documents')
-                    .update({
-                        current_number: doc.startNumber,
-                        last_reset_year: currentYear
-                    })
-                    .eq('id', doc.id);
-
-                if (!error) {
-                    doc.currentNumber = doc.startNumber;
-                    doc.lastResetYear = currentYear;
-                    hasChanges = true;
-                }
-            } catch (e) {
-                console.error('Erro no reset anual:', e);
-            }
-        }
-    }
-
-    if (hasChanges) console.log('Reset anual aplicado');
-}
+// Reset anual — obsoleto desde a migração 0003. O reset agora é estrutural:
+// cada ano tem seu próprio bucket em document_counters, semeado de start_number
+// na primeira reserva. Mantido como no-op para compatibilidade de chamadas antigas.
+async function checkYearlyReset() { /* intencionalmente vazio (ver migração 0003) */ }
 
 // Auto login
 async function checkAutoLogin() {
@@ -884,8 +877,41 @@ function formatTime(date) {
     return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Regra de bucket — DEVE espelhar a RPC reserve_number (migração 0003).
+// per_secretaria ? secretaria do usuário : ''  |  yearly_reset ? ano : 0
+function docBucketSecretaria(doc, user) {
+    if (!doc.perSecretaria) return '';
+    return (user && user.secretaria ? String(user.secretaria).trim() : '');
+}
+
+function bucketKey(doc, user) {
+    const sec = docBucketSecretaria(doc, user);
+    const year = doc.yearlyReset ? new Date().getFullYear() : 0;
+    return `${doc.id}|${sec}|${year}`;
+}
+
+// Mesma regra de bucketKey, mas para uma secretaria arbitrária (não a do
+// usuário logado) — usado no painel de configuração do admin e nas estatísticas.
+function bucketKeyFor(doc, secretaria) {
+    const sec = doc.perSecretaria ? (secretaria || '') : '';
+    const year = doc.yearlyReset ? new Date().getFullYear() : 0;
+    return `${doc.id}|${sec}|${year}`;
+}
+
+// Próximo número previsto para o usuário logado (do contador do seu bucket).
+// Sem bucket ainda → a reserva vai semear de startNumber, então mostramos isso.
+function nextNumberFor(doc) {
+    const v = state.counters[bucketKey(doc, state.currentUser)];
+    return (v !== undefined && v !== null) ? v : doc.startNumber;
+}
+
+// true quando o documento é por secretaria mas o usuário não tem secretaria
+function blockedBySecretaria(doc) {
+    return doc.perSecretaria && !docBucketSecretaria(doc, state.currentUser);
+}
+
 function formatNumber(doc) {
-    const number = String(doc.currentNumber).padStart(3, '0');
+    const number = String(nextNumberFor(doc)).padStart(3, '0');
     // Documentos de numeração contínua (ex.: Processo, Protocolo) não levam
     // o ano no número — o ano só faz sentido quando a contagem reinicia nele.
     const yearSuffix = doc.yearlyReset ? `/${new Date().getFullYear()}` : '';
@@ -1029,7 +1055,14 @@ function showMainApp() {
                                 <input type="checkbox" id="docEnabled" checked>
                                 <span>Documento habilitado</span>
                             </label>
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="docPerSecretaria">
+                                <span>Numerar por secretaria (cada secretaria tem sua própria sequência)</span>
+                            </label>
                         </div>
+                        <p class="form-hint" id="docPerSecretariaHint" style="display:none;">
+                            ⚠️ Mudar esta opção em um documento já em uso troca qual contador é lido — use com cuidado.
+                        </p>
                         <div class="form-actions">
                             <button type="button" class="btn-secondary" onclick="closeDocModal()">Cancelar</button>
                             <button type="submit" class="btn-primary">Salvar</button>
@@ -1141,6 +1174,9 @@ function getVisibleDocuments() {
 function canReserve(docId) {
     const user = state.currentUser;
     if (user.role === 'user_readonly') return false;
+    const doc = state.documents.find(d => d.id === docId);
+    // Documento por secretaria exige que o usuário tenha uma secretaria definida
+    if (doc && blockedBySecretaria(doc)) return false;
     if (user.role === 'admin' || user.role === 'user_full') return true;
     return user.allowedDocuments && user.allowedDocuments.includes(docId);
 }
@@ -1164,12 +1200,14 @@ function renderDocuments() {
             <div class="doc-card-header">
                 <div class="doc-icon">📄</div>
             </div>
-            <div class="doc-name">${esc(doc.name)}</div>
+            <div class="doc-name">${esc(doc.name)}${doc.perSecretaria ? ' <span class="doc-badge-sec" title="Numeração separada por secretaria">por secretaria</span>' : ''}</div>
             <div class="doc-prefix">${esc(doc.prefix) || 'Sem prefixo'}</div>
-            <div class="doc-number">${esc(formatNumber(doc))}</div>
-            ${canReserve(doc.id) ?
-            `<button class="reserve-btn" onclick="reserveNumber('${doc.id}')">Reservar Número</button>` :
-            `<button class="reserve-btn" disabled style="opacity:0.5">🔒 Sem Permissão</button>`
+            <div class="doc-number">${blockedBySecretaria(doc) ? '—' : esc(formatNumber(doc))}</div>
+            ${blockedBySecretaria(doc)
+            ? `<button class="reserve-btn" disabled style="opacity:0.5" title="Defina sua secretaria no seu perfil para reservar">🏢 Defina sua secretaria</button>`
+            : (canReserve(doc.id)
+                ? `<button class="reserve-btn" onclick="reserveNumber('${doc.id}')">Reservar Número</button>`
+                : `<button class="reserve-btn" disabled style="opacity:0.5">🔒 Sem Permissão</button>`)
         }
         </div>
     `).join('');
@@ -1199,7 +1237,11 @@ async function reserveNumber(docId) {
         const reservationRow = await performReservation(doc, formattedNum, subject);
 
         // Sucesso — atualizar estado local com o que o servidor confirmou
-        doc.currentNumber = reservationRow.number + 1;
+        // (bucket vem do próprio servidor: fonte da verdade sobre qual
+        // secretaria/ano a reserva usou, evita recalcular e divergir)
+        const bucketSec = reservationRow.bucket_secretaria || '';
+        const bucketYear = doc.yearlyReset ? new Date().getFullYear() : 0;
+        state.counters[`${doc.id}|${bucketSec}|${bucketYear}`] = reservationRow.number + 1;
         state.reservations.unshift({
             id: reservationRow.id,
             docId: reservationRow.doc_id,
@@ -1209,6 +1251,8 @@ async function reserveNumber(docId) {
             subject: reservationRow.subject,
             userId: reservationRow.user_id,
             userName: reservationRow.user_name,
+            userSecretaria: reservationRow.user_secretaria,
+            bucketSecretaria: bucketSec,
             timestamp: reservationRow.timestamp
         });
 
@@ -1233,9 +1277,12 @@ async function reserveNumber(docId) {
     }
 }
 
-// Executa a reserva. Preferência: função SQL reserve_number() (atômica no
-// banco — imune a corrida entre usuários simultâneos). Se a função ainda não
-// existir no projeto Supabase, cai no fluxo legado (insert + update separados).
+// Executa a reserva. Sempre via função SQL reserve_number() (atômica no banco,
+// imune a corrida entre usuários simultâneos, e a única que conhece a regra de
+// bucket por secretaria/ano). Não há mais fallback legado: um insert/update
+// direto do cliente não sabe qual bucket usar e corromperia a numeração por
+// secretaria — se a RPC estiver ausente, a reserva deve falhar de forma clara
+// para o admin aplicar a migração, não seguir silenciosamente com números errados.
 async function performReservation(doc, formattedNum, subject) {
     const { data, error } = await supabase.rpc('reserve_number', {
         p_doc_id: doc.id,
@@ -1248,49 +1295,11 @@ async function performReservation(doc, formattedNum, subject) {
     // PGRST202 = função inexistente no schema (migração ainda não aplicada)
     const functionMissing = error.code === 'PGRST202' ||
         /reserve_number/.test(error.message || '') && /not find|não encontrada|schema cache/i.test(error.message || '');
-    if (!functionMissing) throw error;
-
-    console.warn('reserve_number() ausente no banco — usando fluxo legado (sujeito a corrida). Aplique supabase/migrations/0002_reserve_number_rpc.sql');
-    return performReservationLegacy(doc, formattedNum, subject);
-}
-
-async function performReservationLegacy(doc, formattedNum, subject) {
-    const numberToReserve = doc.currentNumber;
-
-    const reservation = {
-        doc_id: doc.id,
-        doc_name: doc.name,
-        number: numberToReserve,
-        formatted_number: formattedNum,
-        subject: subject,
-        user_id: state.currentUser.id,
-        user_name: state.currentUser.name,
-        user_cargo: state.currentUser.cargo,
-        user_setor: state.currentUser.setor,
-        user_secretaria: state.currentUser.secretaria,
-        timestamp: new Date().toISOString()
-    };
-
-    const { data: resData, error: resError } = await supabase
-        .from('reservations')
-        .insert([reservation])
-        .select()
-        .single();
-
-    if (resError) throw resError;
-
-    const { error: docError } = await supabase
-        .from('documents')
-        .update({ current_number: numberToReserve + 1 })
-        .eq('id', doc.id);
-
-    if (docError) {
-        console.error('Erro ao incrementar documento:', docError);
-        showToast('Erro crítico: reserva criada, mas falha ao incrementar número. Contate o suporte.', 'error', 0);
+    if (functionMissing) {
+        throw new Error('Sistema de reserva não configurado (função reserve_number ausente). Aplique supabase/migrations/0002 e 0003 no Supabase e recarregue a página.');
     }
 
-    addLog('reserva', `Reservou ${doc.name}`, `Número: ${formattedNum}`);
-    return resData;
+    throw error;
 }
 
 // ========== HISTÓRICO ==========
@@ -1402,6 +1411,13 @@ function renderAdminInterface() {
                                 <div class="help-text">Gerenciar lista de secretarias</div>
                             </div>
                         </div>
+                        <div class="admin-nav-card" onclick="showAdminSubView('secStats')">
+                            <div class="stat-icon"><span style="font-size:32px">📈</span></div>
+                            <div>
+                                <div class="stat-label" style="font-size: 1.125rem; font-weight: 600;">Numeração por Secretaria</div>
+                                <div class="help-text">Visão global de contadores e reservas por secretaria</div>
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>
@@ -1462,6 +1478,15 @@ function renderAdminInterface() {
                 </div>
                 <div id="adminSecretariatsList" class="admin-docs-list"></div>
             </div>
+
+            <div id="secStatsView" class="admin-sub-view" style="display: none;">
+                <button class="back-btn" onclick="showAdminSubView('stats')">← Voltar</button>
+                <div class="view-header">
+                    <h2>📈 Numeração por Secretaria</h2>
+                    <p>Próximo número e total de reservas de cada secretaria, para os tipos de documento configurados como "por secretaria"</p>
+                </div>
+                <div id="secStatsList"></div>
+            </div>
         `;
     }
 
@@ -1481,6 +1506,7 @@ function showAdminSubView(view) {
     if (view === 'users') renderAdminUsers();
     if (view === 'logs') renderLogs();
     if (view === 'secretariats') renderAdminSecretariats();
+    if (view === 'secStats') renderSecStats();
 }
 
 function updateStats() {
@@ -1493,6 +1519,53 @@ function updateStats() {
     const today = new Date().toISOString().split('T')[0];
     const todayCount = state.reservations.filter(r => r.timestamp.startsWith(today)).length;
     document.getElementById('todayReservations').textContent = todayCount;
+}
+
+// Visão global do admin: para cada tipo "por secretaria", o próximo número e
+// total de reservas de cada secretaria — só o admin vê todas juntas (RN de
+// bloqueio impede o usuário comum de ver contadores de outra secretaria).
+function renderSecStats() {
+    const container = document.getElementById('secStatsList');
+    if (!container) return;
+
+    const perSecDocs = state.documents.filter(d => d.perSecretaria);
+    if (perSecDocs.length === 0) {
+        container.innerHTML = '<p class="text-secondary">Nenhum tipo de documento está configurado como "por secretaria" ainda. Ative essa opção ao editar um documento em Documentos.</p>';
+        return;
+    }
+
+    // Inclui secretarias cadastradas + quaisquer outras que já tenham reservas/contadores
+    // (ex.: secretaria removida da lista depois de já ter numeração própria)
+    const secSet = new Set(state.secretariats);
+    state.reservations.forEach(r => { if (r.bucketSecretaria) secSet.add(r.bucketSecretaria); });
+    Object.keys(state.counters).forEach(key => {
+        const sec = key.split('|')[1];
+        if (sec) secSet.add(sec);
+    });
+    const allSecs = [...secSet].sort();
+
+    container.innerHTML = perSecDocs.map(doc => {
+        const rows = allSecs.map(sec => {
+            const next = state.counters[bucketKeyFor(doc, sec)];
+            const nextNumber = (next !== undefined && next !== null) ? next : doc.startNumber;
+            const total = state.reservations.filter(r => r.docId === doc.id && r.bucketSecretaria === sec).length;
+            return `
+                <tr>
+                    <td>${esc(sec)}</td>
+                    <td>${nextNumber}</td>
+                    <td>${total}</td>
+                </tr>`;
+        }).join('');
+
+        return `
+            <div class="stats-section" style="margin-bottom: 1.5rem;">
+                <h3>${esc(doc.name)}${doc.prefix ? ` (${esc(doc.prefix)})` : ''}</h3>
+                <table class="sec-stats-table">
+                    <thead><tr><th>Secretaria</th><th>Próximo número</th><th>Total reservado</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>`;
+    }).join('');
 }
 
 // ========== GERENCIAR DOCUMENTOS (ADMIN) ==========
@@ -1509,8 +1582,11 @@ function renderAdminDocs() {
                 <div class="admin-doc-name">${esc(doc.name)} ${!doc.enabled ? '(Desabilitado)' : ''}</div>
                 <div class="admin-doc-details">
                     Prefixo: ${esc(doc.prefix) || 'Nenhum'} |
-                    Número atual: ${doc.currentNumber} | 
+                    Número atual: ${doc.perSecretaria
+                        ? `<a href="javascript:void(0)" onclick="switchView('admin'); showAdminSubView('secretariats')">por secretaria (configurar)</a>`
+                        : doc.currentNumber} |
                     Reset anual: ${doc.yearlyReset ? 'Sim' : 'Não'}
+                    ${doc.perSecretaria ? ' | <span class="doc-badge-sec">por secretaria</span>' : ''}
                 </div>
             </div>
             <div class="admin-doc-actions">
@@ -1526,6 +1602,7 @@ function openAddDocModal() {
     state.editingDocId = null;
     document.getElementById('modalTitle').textContent = 'Adicionar Documento';
     document.getElementById('docForm').reset();
+    document.getElementById('docPerSecretariaHint').style.display = 'none';
     document.getElementById('docModal').classList.add('active');
 }
 
@@ -1540,6 +1617,8 @@ function openEditDocModal(docId) {
     document.getElementById('startNumber').value = doc.startNumber;
     document.getElementById('yearlyReset').checked = doc.yearlyReset;
     document.getElementById('docEnabled').checked = doc.enabled;
+    document.getElementById('docPerSecretaria').checked = doc.perSecretaria;
+    document.getElementById('docPerSecretariaHint').style.display = 'block';
     document.getElementById('docModal').classList.add('active');
 }
 
@@ -1556,6 +1635,7 @@ async function handleDocFormSubmit(e) {
         start_number: parseInt(document.getElementById('startNumber').value),
         yearly_reset: document.getElementById('yearlyReset').checked,
         enabled: document.getElementById('docEnabled').checked,
+        per_secretaria: document.getElementById('docPerSecretaria').checked,
         // current_number deve ser definido apenas na criação
     };
 
@@ -1576,7 +1656,8 @@ async function handleDocFormSubmit(e) {
                 prefix: formData.prefix,
                 startNumber: formData.start_number,
                 yearlyReset: formData.yearly_reset,
-                enabled: formData.enabled
+                enabled: formData.enabled,
+                perSecretaria: formData.per_secretaria
             });
 
             addLog('cadastro', 'Editou documento', doc.name);
@@ -1602,8 +1683,13 @@ async function handleDocFormSubmit(e) {
                 currentNumber: data.current_number,
                 yearlyReset: data.yearly_reset,
                 lastResetYear: data.last_reset_year,
-                enabled: data.enabled
+                enabled: data.enabled,
+                perSecretaria: data.per_secretaria || false
             });
+            // Bucket global (secretaria '') semeado pela migração 0003 só para
+            // docs já existentes; para um doc novo o primeiro reserve_number()
+            // faz o find-or-create sozinho, então nenhum contador local é
+            // necessário aqui além do que já é usado como fallback em nextNumberFor.
 
             addLog('cadastro', 'Criou documento', formData.name);
         }
@@ -2009,16 +2095,84 @@ function renderAdminSecretariats() {
         return;
     }
 
+    const perSecDocs = state.documents.filter(d => d.perSecretaria);
+
     container.innerHTML = state.secretariats.sort().map(sec => `
-        <div class="admin-doc-item">
-            <div class="admin-doc-info">
-                <div class="admin-doc-name">${esc(sec)}</div>
+        <div class="admin-doc-item" style="flex-direction: column; align-items: stretch;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="admin-doc-info">
+                    <div class="admin-doc-name">${esc(sec)}</div>
+                </div>
+                <div class="admin-doc-actions">
+                    <button class="icon-btn" onclick="toggleSecretariatConfig('${esc(sec)}')" title="Configurar numeração">⚙️ Configurar numeração</button>
+                    <button class="icon-btn delete" onclick="removeSecretariat('${sec}')" title="Remover">🗑️</button>
+                </div>
             </div>
-            <div class="admin-doc-actions">
-                <button class="icon-btn delete" onclick="removeSecretariat('${sec}')" title="Remover">🗑️</button>
-            </div>
+            ${state.expandedSecretariat === sec ? renderSecretariatConfigPanel(sec, perSecDocs) : ''}
         </div>
     `).join('');
+}
+
+function toggleSecretariatConfig(sec) {
+    state.expandedSecretariat = state.expandedSecretariat === sec ? null : sec;
+    renderAdminSecretariats();
+}
+
+// Painel inline: para cada tipo "por secretaria", mostra o próximo número
+// daquela secretaria com um input editável (chama set_secretaria_counter no servidor).
+function renderSecretariatConfigPanel(sec, perSecDocs) {
+    if (perSecDocs.length === 0) {
+        return `<div class="sec-config-panel"><p class="text-secondary">Nenhum tipo de documento está configurado como "por secretaria". Ative essa opção ao editar um documento.</p></div>`;
+    }
+
+    return `
+        <div class="sec-config-panel">
+            ${perSecDocs.map(doc => {
+                const next = state.counters[bucketKeyFor(doc, sec)];
+                const nextNumber = (next !== undefined && next !== null) ? next : doc.startNumber;
+                const inputId = `secCounter_${doc.id}_${sec.replace(/[^a-zA-Z0-9]/g, '_')}`;
+                return `
+                <div class="form-row" style="align-items: flex-end; gap: 0.75rem; margin-bottom: 0.75rem;">
+                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                        <label>${esc(doc.name)} ${esc(doc.prefix) ? `(${esc(doc.prefix)})` : ''} — próximo número em ${esc(sec)}</label>
+                        <input type="number" min="1" id="${inputId}" value="${nextNumber}">
+                    </div>
+                    <button class="btn-secondary" onclick="saveSecretariatCounter('${doc.id}', '${esc(sec)}', '${inputId}')">Salvar</button>
+                </div>`;
+            }).join('')}
+        </div>
+    `;
+}
+
+async function saveSecretariatCounter(docId, secretaria, inputId) {
+    const doc = state.documents.find(d => d.id === docId);
+    if (!doc) return;
+
+    const input = document.getElementById(inputId);
+    const nextNumber = parseInt(input.value, 10);
+    if (!nextNumber || nextNumber < 1) {
+        return showToast('Informe um número inicial válido.', 'warning');
+    }
+
+    try {
+        const { data, error } = await supabase.rpc('set_secretaria_counter', {
+            p_doc_id: docId,
+            p_secretaria: secretaria,
+            p_next_number: nextNumber
+        });
+
+        if (error) throw error;
+
+        state.counters[`${data.doc_id}|${data.secretaria}|${data.year}`] = data.current_number;
+        renderDocuments();
+        renderAdminSecretariats();
+        showToast(`Próximo número de ${doc.name} em ${secretaria} definido para ${nextNumber}.`, 'success');
+        addLog('cadastro', `Definiu numeração de ${doc.name} para ${secretaria}`, `Próximo número: ${nextNumber}`);
+
+    } catch (err) {
+        console.error('Erro ao configurar contador:', err);
+        showToast('Erro ao salvar: ' + err.message, 'error');
+    }
 }
 
 async function addSecretariat() {
