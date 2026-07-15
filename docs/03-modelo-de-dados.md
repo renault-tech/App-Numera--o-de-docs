@@ -13,6 +13,39 @@ Tabelas existentes (ver `schema.sql`): `documents`, `users`, `reservations`,
 | `logs` | Mutável/deletável (política aberta) |
 | `app_config` | OK para chave-valor (secretarias etc.) |
 
+### 1.1 Numeração por secretaria (migração 0003, já em produção)
+
+Até a migração 0002, cada `documents` tinha **um único contador global**
+(`current_number`) — todas as secretarias compartilhavam a mesma sequência.
+A migração `supabase/migrations/0003_per_secretaria_counters.sql` tornou isso
+configurável por tipo de documento, sem exigir a reescrita completa do schema
+alvo da seção 2:
+
+- `documents.per_secretaria boolean` — flag por tipo. Tipos únicos no
+  município (Lei, Decreto) continuam `false` (contador único).
+- Nova tabela `document_counters (doc_id, secretaria, year, current_number)`,
+  chave única `(doc_id, secretaria, year)` — vira a fonte autoritativa da
+  numeração; `documents.current_number` passa a ser só semente/legado.
+- **Regra de bucket** (idêntica em SQL e em `app.js`):
+  `bucket_secretaria = per_secretaria ? secretaria_do_usuário : ''` e
+  `bucket_year = yearly_reset ? ano_atual : 0`. Sem secretaria definida e
+  `per_secretaria = true` → a reserva é **bloqueada** (RN explícita: não existe
+  bucket "Geral" compartilhado).
+- `reservations.bucket_secretaria` guarda o bucket usado, e o índice único
+  passa a ser `(doc_id, bucket_secretaria, formatted_number)` — permite duas
+  secretarias emitirem legitimamente o mesmo número formatado sem colidir.
+- RPC `set_secretaria_counter(doc_id, secretaria, next_number)` permite ao
+  admin definir o número inicial de uma secretaria específica (go-live),
+  validando que o valor é maior que o maior número já reservado naquele
+  bucket — nunca deixa "voltar" o contador para um valor já usado.
+- Painel de estatísticas globais (tela Admin → "Numeração por Secretaria")
+  lista, por tipo `per_secretaria`, o próximo número e o total já reservado
+  de cada secretaria — a visão cruzada que só o admin enxerga.
+
+O schema alvo da seção 2 (`document_types`/`profiles`) ainda deve incorporar
+esse mesmo modelo de bucket quando for implementado — não faz sentido migrar
+para lá e perder a numeração por secretaria.
+
 ## 2. Schema alvo (to-be)
 
 ```sql

@@ -52,8 +52,9 @@ por constraint + teste.
 | 3.4 | ✅ 13/07/2026 — **Botão copiar número** | Toast de sucesso com botão "Copiar" (Clipboard API + fallback) | 🟡 |
 | 3.5 | **"Meus números"** | Tela com as reservas do próprio usuário | 🟢 |
 | 3.6 | **Relatórios** | Por período/tipo/secretaria; exportação PDF/Excel respeitando filtros; gráficos simples no painel | 🟢 |
-| 3.7 | **Ajuste manual de contador com trilha** | Para migrar a numeração das folhas de papel: admin define próximo número com motivo + log | 🟢 |
+| 3.7 | ✅ parcial 15/07/2026 — **Ajuste manual de contador com trilha** | `set_secretaria_counter()` permite ao admin definir o próximo número por secretaria (com log); falta campo de motivo livre | 🟢 |
 | 3.8 | **Autocomplete de assunto** | Sugerir assuntos já usados (evoluir o `autocomplete.js` existente) | 🟢 |
+| 3.9 | ✅ 15/07/2026 — **Numeração independente por secretaria** | Flag `per_secretaria` por tipo de documento; contador em `document_counters` por `(doc, secretaria, ano)`; usuário sem secretaria é bloqueado (sem bucket "Geral"); admin configura o número inicial de cada secretaria na tela Secretarias e vê estatísticas globais por secretaria (`supabase/migrations/0003_per_secretaria_counters.sql`, doc 03 §1.1) | 🟡 |
 
 ## Fase 4 — Evoluções (avaliar demanda real antes)
 
