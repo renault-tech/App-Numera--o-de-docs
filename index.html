@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#1e40af">
     <title>Sistema de Numeração de Documentos</title>
     <link rel="icon" type="image/png" href="logo-header.png">
-    <link rel="stylesheet" href="styles.css?v=202607132300">
+    <link rel="stylesheet" href="styles.css?v=202607171000">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -173,18 +173,18 @@
         window.resetAppData = resetAppData;
     </script>
 
-    <!-- Bibliotecas de exportação (jsPDF/XLSX) removidas: não eram usadas
-         em nenhum ponto do código e custavam ~1MB em todo carregamento.
-         Quando a exportação for implementada, carregá-las sob demanda. -->
+    <!-- Bibliotecas de exportação (jsPDF/XLSX): carregadas SOB DEMANDA pelo
+         app.js (loadScriptOnce) no primeiro clique de exportar — não incluir
+         aqui, custariam ~1MB em todo carregamento. -->
 
     <!-- Supabase SDK -->
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-    <script src="autocomplete.js?v=202607132300"></script>
-    <script src="auth-service.js?v=202607132300"></script>
+    <script src="autocomplete.js?v=202607171000"></script>
+    <script src="auth-service.js?v=202607171000"></script>
 
     <!-- admin-views.js removido pois app.js gerencia as views agora -->
-    <script src="app.js?v=202607132300"></script>
+    <script src="app.js?v=202607171000"></script>
 </body>
 
 </html>

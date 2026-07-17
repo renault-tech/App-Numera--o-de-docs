@@ -29,6 +29,9 @@ let state = {
 
 
 
+// Opção fixa do dropdown de destino para destinatários fora da prefeitura
+const DEST_EXTERNO = 'Externo / Outro órgão';
+
 // Níveis de permissão
 const PERMISSION_LEVELS = {
     admin: { label: 'Administrador', desc: 'Acesso total' },
@@ -135,7 +138,11 @@ function showToast(message, type = 'info', duration = 4500, action = null) {
 
 // Quando `input` é informado ({ label, placeholder, maxLength }), o diálogo
 // exibe um campo de texto e a Promise resolve { confirmed, value } em vez de boolean.
-function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary', input = null } = {}) {
+// Quando `fields` é informado ([{ name, label, type: 'text'|'textarea'|'select',
+// options, required, value, placeholder, maxLength }]), o diálogo exibe um
+// formulário e resolve { confirmed, values: { name: valor } }. Campos required
+// vazios bloqueiam a confirmação com destaque visual no campo.
+function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary', input = null, fields = null } = {}) {
     return new Promise((resolve) => {
         const root = ensureNotificationRoot();
 
@@ -162,6 +169,61 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
             inputEl.setAttribute('aria-label', input.label || input.placeholder || 'Informação adicional');
         }
 
+        // Formulário multi-campos (reserva, edição etc.)
+        const fieldEls = {};
+        let fieldsWrap = null;
+        if (fields && fields.length) {
+            fieldsWrap = document.createElement('div');
+            fieldsWrap.className = 'confirm-dialog__fields';
+            fields.forEach(f => {
+                const group = document.createElement('div');
+                group.className = 'confirm-dialog__field';
+
+                const label = document.createElement('label');
+                label.className = 'confirm-dialog__label';
+                label.textContent = f.label + (f.required ? ' *' : '');
+                group.appendChild(label);
+
+                let el;
+                if (f.type === 'select') {
+                    el = document.createElement('select');
+                    el.className = 'confirm-dialog__input';
+                    const opt0 = document.createElement('option');
+                    opt0.value = '';
+                    opt0.textContent = f.placeholder || 'Selecione...';
+                    el.appendChild(opt0);
+                    const opts = [...(f.options || [])];
+                    // Valor atual fora da lista (ex.: secretaria removida) continua selecionável
+                    if (f.value && !opts.includes(f.value)) opts.push(f.value);
+                    opts.forEach(o => {
+                        const opt = document.createElement('option');
+                        opt.value = o;
+                        opt.textContent = o;
+                        el.appendChild(opt);
+                    });
+                } else if (f.type === 'textarea') {
+                    el = document.createElement('textarea');
+                    el.className = 'confirm-dialog__input confirm-dialog__textarea';
+                    el.rows = 3;
+                    el.placeholder = f.placeholder || '';
+                    el.maxLength = f.maxLength || 500;
+                } else {
+                    el = document.createElement('input');
+                    el.type = 'text';
+                    el.className = 'confirm-dialog__input';
+                    el.placeholder = f.placeholder || '';
+                    el.maxLength = f.maxLength || 200;
+                }
+                el.id = `dlgField_${f.name}`;
+                el.setAttribute('aria-label', f.label);
+                if (f.value !== undefined && f.value !== null) el.value = f.value;
+                el.addEventListener('input', () => el.classList.remove('confirm-dialog__input--invalid'));
+                fieldEls[f.name] = el;
+                group.appendChild(el);
+                fieldsWrap.appendChild(group);
+            });
+        }
+
         const actions = document.createElement('div');
         actions.className = 'confirm-dialog__actions';
 
@@ -180,17 +242,47 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
         dialog.appendChild(titleEl);
         dialog.appendChild(messageEl);
         if (inputEl) dialog.appendChild(inputEl);
+        if (fieldsWrap) dialog.appendChild(fieldsWrap);
         dialog.appendChild(actions);
 
+        const collectValues = () => {
+            const values = {};
+            Object.keys(fieldEls).forEach(name => { values[name] = fieldEls[name].value.trim(); });
+            return values;
+        };
+
+        const validateRequired = () => {
+            if (!fields) return true;
+            let firstInvalid = null;
+            fields.forEach(f => {
+                if (f.required && !fieldEls[f.name].value.trim()) {
+                    fieldEls[f.name].classList.add('confirm-dialog__input--invalid');
+                    if (!firstInvalid) firstInvalid = fieldEls[f.name];
+                }
+            });
+            if (firstInvalid) { firstInvalid.focus(); return false; }
+            return true;
+        };
+
         const finish = (confirmed) => {
+            if (confirmed && fields && !validateRequired()) return; // não fecha
             dialog.classList.add('confirm-dialog--leaving');
             setTimeout(() => dialog.remove(), 200);
             document.removeEventListener('keydown', onKey);
-            resolve(input ? { confirmed, value: inputEl.value.trim() } : confirmed);
+            if (fields) resolve({ confirmed, values: collectValues() });
+            else if (input) resolve({ confirmed, value: inputEl.value.trim() });
+            else resolve(confirmed);
         };
         const onKey = (e) => {
             if (e.key === 'Escape') finish(false);
             if (e.key === 'Enter' && inputEl && document.activeElement === inputEl) finish(true);
+            // Em formulários multi-campos, Enter confirma exceto dentro de textarea
+            if (e.key === 'Enter' && fields && dialog.contains(document.activeElement)
+                && document.activeElement.tagName !== 'TEXTAREA'
+                && document.activeElement !== cancelBtn) {
+                e.preventDefault();
+                finish(true);
+            }
         };
 
         cancelBtn.onclick = () => finish(false);
@@ -200,7 +292,8 @@ function showConfirmDialog({ title = 'Confirmar ação', message = '', confirmTe
         root.appendChild(dialog);
         requestAnimationFrame(() => {
             dialog.classList.add('confirm-dialog--visible');
-            (inputEl || confirmBtn).focus();
+            const firstField = fields && fields.length ? fieldEls[fields[0].name] : null;
+            (firstField || inputEl || confirmBtn).focus();
         });
     });
 }
@@ -401,22 +494,7 @@ async function loadData() {
 
         if (errRes) throw errRes;
 
-        state.reservations = reservations.map(r => ({
-            id: r.id,
-            docId: r.doc_id,
-            docName: r.doc_name,
-            number: r.number,
-            formattedNumber: r.formatted_number,
-            subject: r.subject,
-            ementa: r.ementa,
-            userId: r.user_id,
-            userName: r.user_name,
-            userCargo: r.user_cargo,
-            userSetor: r.user_setor,
-            userSecretaria: r.user_secretaria,
-            bucketSecretaria: r.bucket_secretaria || '',
-            timestamp: r.timestamp
-        }));
+        state.reservations = reservations.map(mapReservationRow);
 
         // 4. Carregar Logs
         const { data: logs, error: errLogs } = await supabase
@@ -1010,11 +1088,16 @@ function showMainApp() {
                     <section class="history-section">
                         <div class="section-header">
                             <h2>Histórico de Reservas</h2>
-                            <div class="search-box">
-                                <span class="search-icon">🔍</span>
-                                <input type="text" id="searchInput" placeholder="Buscar por tipo, número, assunto ou usuário..." oninput="renderHistory()">
+                            <div class="history-toolbar">
+                                <div class="search-box">
+                                    <span class="search-icon">🔍</span>
+                                    <input type="text" id="searchInput" placeholder="Buscar por tipo, número, ementa, destinatário ou usuário..." oninput="renderHistory()">
+                                </div>
+                                <button class="btn-secondary btn-compact" onclick="exportHistoryExcel()" title="Exportar histórico em Excel">📊 Excel</button>
+                                <button class="btn-secondary btn-compact" onclick="exportHistoryPdf()" title="Exportar histórico em PDF">📄 PDF</button>
                             </div>
                         </div>
+                        <p class="history-scope-note" id="historyScopeNote"></p>
                         <div id="historyList" class="history-list"></div>
                     </section>
                 </div>
@@ -1096,7 +1179,8 @@ function showMainApp() {
                             </div>
                             <div class="form-group">
                                 <label for="userSecretaria">Secretaria *</label>
-                                <input type="text" id="userSecretaria" required>
+                                <select id="userSecretaria" required onchange="handleUserSecretariaChange()"></select>
+                                <p class="help-text" id="secretariaDefaultsHint" style="display:none;"></p>
                             </div>
                         </div>
                         <div class="form-section">
@@ -1130,6 +1214,7 @@ function showMainApp() {
                             <div class="checkbox-actions">
                                 <button type="button" class="btn-link" onclick="selectAllDocs()">☑ Todos</button>
                                 <button type="button" class="btn-link" onclick="deselectAllDocs()">☐ Nenhum</button>
+                                <button type="button" class="btn-link" onclick="applySecretariaDefaultsToForm(true)">🏢 Restaurar padrão da secretaria</button>
                             </div>
                             <div id="documentsListCheckboxes" class="documents-checkboxes"></div>
                         </div>
@@ -1222,19 +1307,23 @@ async function reserveNumber(docId) {
     // Número previsto (informativo — o número final é confirmado pelo servidor)
     const formattedNum = formatNumber(doc);
 
-    // CONFIRMAÇÃO + ASSUNTO (permite localizar o documento depois na busca)
+    // CONFIRMAÇÃO: ementa + destinatário (obrigatórios — histórico completo e buscável)
     const result = await showConfirmDialog({
         title: 'Confirmar reserva',
         message: `Documento: ${doc.name}\nPróximo número: ${formattedNum}`,
         confirmText: 'Reservar número',
         cancelText: 'Cancelar',
-        input: { label: 'Assunto do documento', placeholder: 'Assunto/tema (opcional, ajuda na busca)' }
+        fields: [
+            { name: 'subject', label: 'Ementa', type: 'textarea', required: true, placeholder: 'Assunto/tema do documento', maxLength: 500 },
+            { name: 'destSecretaria', label: 'Secretaria de destino', type: 'select', required: true, options: [...state.secretariats, DEST_EXTERNO] },
+            { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, placeholder: 'Ex: João da Silva' }
+        ]
     });
     if (!result.confirmed) return;
-    const subject = result.value || null;
+    const { subject, destSecretaria, destNome } = result.values;
 
     try {
-        const reservationRow = await performReservation(doc, formattedNum, subject);
+        const reservationRow = await performReservation(doc, formattedNum, subject, destSecretaria, destNome);
 
         // Sucesso — atualizar estado local com o que o servidor confirmou
         // (bucket vem do próprio servidor: fonte da verdade sobre qual
@@ -1242,19 +1331,7 @@ async function reserveNumber(docId) {
         const bucketSec = reservationRow.bucket_secretaria || '';
         const bucketYear = doc.yearlyReset ? new Date().getFullYear() : 0;
         state.counters[`${doc.id}|${bucketSec}|${bucketYear}`] = reservationRow.number + 1;
-        state.reservations.unshift({
-            id: reservationRow.id,
-            docId: reservationRow.doc_id,
-            docName: reservationRow.doc_name,
-            number: reservationRow.number,
-            formattedNumber: reservationRow.formatted_number,
-            subject: reservationRow.subject,
-            userId: reservationRow.user_id,
-            userName: reservationRow.user_name,
-            userSecretaria: reservationRow.user_secretaria,
-            bucketSecretaria: bucketSec,
-            timestamp: reservationRow.timestamp
-        });
+        state.reservations.unshift(mapReservationRow(reservationRow));
 
         renderDocuments();
         renderHistory();
@@ -1283,11 +1360,13 @@ async function reserveNumber(docId) {
 // direto do cliente não sabe qual bucket usar e corromperia a numeração por
 // secretaria — se a RPC estiver ausente, a reserva deve falhar de forma clara
 // para o admin aplicar a migração, não seguir silenciosamente com números errados.
-async function performReservation(doc, formattedNum, subject) {
+async function performReservation(doc, formattedNum, subject, destSecretaria, destNome) {
     const { data, error } = await supabase.rpc('reserve_number', {
         p_doc_id: doc.id,
         p_user_id: state.currentUser.id,
-        p_subject: subject
+        p_subject: subject,
+        p_dest_secretaria: destSecretaria || null,
+        p_dest_nome: destNome || null
     });
 
     if (!error) return data;
@@ -1296,47 +1375,307 @@ async function performReservation(doc, formattedNum, subject) {
     const functionMissing = error.code === 'PGRST202' ||
         /reserve_number/.test(error.message || '') && /not find|não encontrada|schema cache/i.test(error.message || '');
     if (functionMissing) {
-        throw new Error('Sistema de reserva não configurado (função reserve_number ausente). Aplique supabase/migrations/0002 e 0003 no Supabase e recarregue a página.');
+        throw new Error('Sistema de reserva não configurado ou desatualizado. Aplique as migrações supabase/migrations/ (até a 0004) no Supabase e recarregue a página.');
     }
 
     throw error;
 }
 
+// Converte a linha crua de reservations (snake_case) para o formato do state.
+// Único ponto de mapeamento — usado no loadData e após reservar/editar/anular.
+function mapReservationRow(r) {
+    return {
+        id: r.id,
+        docId: r.doc_id,
+        docName: r.doc_name,
+        number: r.number,
+        formattedNumber: r.formatted_number,
+        subject: r.subject,
+        ementa: r.ementa,
+        destSecretaria: r.dest_secretaria || '',
+        destNome: r.dest_nome || '',
+        status: r.status || 'ativa',
+        cancelReason: r.cancel_reason || '',
+        canceledByName: r.canceled_by_name || '',
+        editedAt: r.edited_at || null,
+        userId: r.user_id,
+        userName: r.user_name,
+        userCargo: r.user_cargo,
+        userSetor: r.user_setor,
+        userSecretaria: r.user_secretaria,
+        bucketSecretaria: r.bucket_secretaria || '',
+        timestamp: r.timestamp
+    };
+}
+
 // ========== HISTÓRICO ==========
 
-function renderHistory() {
-    const container = document.getElementById('historyList');
-    if (!container) return;
+// Reservas que o usuário logado pode ver no histórico.
+// Admin vê tudo; usuário com secretaria vê as reservas da SUA secretaria;
+// usuário sem secretaria vê apenas as próprias.
+// Atenção: é um filtro de interface — a proteção real no banco (RLS por
+// secretaria) é pendência registrada da Fase 1 (doc 04).
+function getVisibleReservations() {
+    const user = state.currentUser;
+    if (!user) return [];
+    if (user.role === 'admin') return state.reservations;
+    if (user.secretaria) {
+        return state.reservations.filter(r => r.userSecretaria === user.secretaria);
+    }
+    return state.reservations.filter(r => r.userId === user.id);
+}
 
+// Conjunto exibido no histórico após busca — também é o que a exportação usa.
+function getFilteredReservations() {
     const search = document.getElementById('searchInput')?.value.toLowerCase() || '';
-
-    let filtered = state.reservations;
-
-    // Filtrar por busca (tipo, número, assunto ou usuário)
+    let filtered = getVisibleReservations();
     if (search) {
         filtered = filtered.filter(r =>
             r.docName.toLowerCase().includes(search) ||
             r.formattedNumber.toLowerCase().includes(search) ||
             (r.subject || '').toLowerCase().includes(search) ||
+            (r.destNome || '').toLowerCase().includes(search) ||
+            (r.destSecretaria || '').toLowerCase().includes(search) ||
             r.userName.toLowerCase().includes(search)
         );
     }
+    return filtered;
+}
+
+// Quem pode editar/anular uma reserva: o dono ou um admin (regra confirmada).
+function canManageReservation(r) {
+    const user = state.currentUser;
+    if (!user) return false;
+    return user.role === 'admin' || r.userId === user.id;
+}
+
+function renderHistory() {
+    const container = document.getElementById('historyList');
+    if (!container) return;
+
+    // Nota de escopo (transparência sobre o que está sendo listado)
+    const note = document.getElementById('historyScopeNote');
+    if (note) {
+        const user = state.currentUser;
+        if (user.role === 'admin') note.textContent = 'Visão de administrador: todas as secretarias.';
+        else if (user.secretaria) note.textContent = `Exibindo reservas da secretaria: ${user.secretaria}.`;
+        else note.textContent = 'Exibindo apenas as suas reservas (defina sua secretaria para ver as da sua equipe).';
+    }
+
+    const filtered = getFilteredReservations();
 
     if (filtered.length === 0) {
         container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Nenhuma reserva encontrada.</p>';
         return;
     }
 
-    container.innerHTML = filtered.slice(0, 50).map(r => `
-        <div class="history-item">
-            <div class="history-info">
-                <div class="history-type">${esc(r.docName)}</div>
-                ${r.subject ? `<div class="history-subject">${esc(r.subject)}</div>` : ''}
-                <div class="history-details">${formatDate(r.timestamp)} às ${formatTime(r.timestamp)} - ${esc(r.userName)}</div>
+    // Linha compacta em 3 níveis: cabeçalho (número + tipo + chips),
+    // ementa/destinatário, rodapé pequeno (quem/quando).
+    container.innerHTML = filtered.slice(0, 50).map(r => {
+        const anulada = r.status === 'anulada';
+        const actions = (!anulada && canManageReservation(r)) ? `
+            <div class="history-actions">
+                <button class="icon-btn icon-btn--sm" onclick="editReservation('${r.id}')" title="Editar ementa/destinatário">✏️</button>
+                <button class="icon-btn icon-btn--sm delete" onclick="cancelReservation('${r.id}')" title="Anular reserva">🚫</button>
+            </div>` : '';
+
+        return `
+        <div class="history-item ${anulada ? 'history-item--canceled' : ''}">
+            <div class="history-row history-row--head">
+                <span class="history-number-inline ${anulada ? 'history-number--struck' : ''}">${esc(r.formattedNumber)}</span>
+                <span class="history-type-inline">${esc(r.docName)}</span>
+                ${r.destSecretaria ? `<span class="history-chip" title="Secretaria de destino">→ ${esc(r.destSecretaria)}</span>` : ''}
+                ${anulada ? '<span class="history-chip history-chip--canceled">ANULADA</span>' : ''}
+                <span class="history-head-spacer"></span>
+                ${actions}
             </div>
-            <div class="history-number">${esc(r.formattedNumber)}</div>
-        </div>
-    `).join('');
+            <div class="history-row history-row--body">
+                ${r.subject ? `<span class="history-subject">${esc(r.subject)}</span>` : '<span class="history-subject history-subject--empty">Sem ementa</span>'}
+                ${r.destNome ? `<span class="history-dest">Para: ${esc(r.destNome)}</span>` : ''}
+            </div>
+            ${anulada && r.cancelReason ? `<div class="history-row history-cancel-reason">Motivo da anulação: ${esc(r.cancelReason)}${r.canceledByName ? ` — por ${esc(r.canceledByName)}` : ''}</div>` : ''}
+            <div class="history-row history-row--foot">
+                Reservado por ${esc(r.userName)}${r.userSecretaria ? ` · ${esc(r.userSecretaria)}` : ''} · ${formatDate(r.timestamp)} às ${formatTime(r.timestamp)}${r.editedAt ? ' · (editada)' : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ========== ANULAÇÃO E EDIÇÃO DE RESERVA ==========
+
+async function cancelReservation(reservationId) {
+    const r = state.reservations.find(x => x.id === reservationId);
+    if (!r || !canManageReservation(r) || r.status === 'anulada') return;
+
+    const result = await showConfirmDialog({
+        title: 'Anular reserva',
+        message: `Anular o número ${r.formattedNumber} (${r.docName})?\nO número permanecerá no histórico como anulado e NÃO poderá ser reutilizado — será preciso reservar um novo número.`,
+        confirmText: 'Anular número',
+        cancelText: 'Voltar',
+        variant: 'danger',
+        fields: [
+            { name: 'reason', label: 'Motivo da anulação', type: 'textarea', required: true, placeholder: 'Ex: documento emitido em duplicidade', maxLength: 300 }
+        ]
+    });
+    if (!result.confirmed) return;
+
+    try {
+        const { data, error } = await supabase.rpc('cancel_reservation', {
+            p_reservation_id: reservationId,
+            p_user_id: state.currentUser.id,
+            p_reason: result.values.reason
+        });
+        if (error) throw error;
+
+        const idx = state.reservations.findIndex(x => x.id === reservationId);
+        if (idx >= 0) state.reservations[idx] = mapReservationRow(data);
+        renderHistory();
+        if (state.currentUser.role === 'admin') updateStats();
+        showToast(`Reserva ${r.formattedNumber} anulada.`, 'success');
+
+    } catch (err) {
+        console.error('Erro ao anular reserva:', err);
+        showToast('Erro ao anular: ' + err.message, 'error', 0);
+    }
+}
+
+async function editReservation(reservationId) {
+    const r = state.reservations.find(x => x.id === reservationId);
+    if (!r || !canManageReservation(r) || r.status === 'anulada') return;
+
+    const result = await showConfirmDialog({
+        title: 'Editar reserva',
+        message: `${r.formattedNumber} (${r.docName}) — o número não muda, apenas os dados abaixo.`,
+        confirmText: 'Salvar alterações',
+        cancelText: 'Cancelar',
+        fields: [
+            { name: 'subject', label: 'Ementa', type: 'textarea', required: true, value: r.subject || '', maxLength: 500 },
+            { name: 'destSecretaria', label: 'Secretaria de destino', type: 'select', required: true, options: [...state.secretariats, DEST_EXTERNO], value: r.destSecretaria || '' },
+            { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, value: r.destNome || '' }
+        ]
+    });
+    if (!result.confirmed) return;
+
+    try {
+        const { data, error } = await supabase.rpc('update_reservation', {
+            p_reservation_id: reservationId,
+            p_user_id: state.currentUser.id,
+            p_subject: result.values.subject,
+            p_dest_secretaria: result.values.destSecretaria,
+            p_dest_nome: result.values.destNome
+        });
+        if (error) throw error;
+
+        const idx = state.reservations.findIndex(x => x.id === reservationId);
+        if (idx >= 0) state.reservations[idx] = mapReservationRow(data);
+        renderHistory();
+        showToast('Reserva atualizada.', 'success');
+
+    } catch (err) {
+        console.error('Erro ao editar reserva:', err);
+        showToast('Erro ao editar: ' + err.message, 'error', 0);
+    }
+}
+
+// ========== EXPORTAÇÃO DO HISTÓRICO (Excel / PDF) ==========
+// As bibliotecas (~1MB) são carregadas do CDN apenas no primeiro clique,
+// para não pesar o carregamento normal da página (decisão do doc 06 §3).
+
+const _loadedScripts = {};
+function loadScriptOnce(url) {
+    if (!_loadedScripts[url]) {
+        _loadedScripts[url] = new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = url;
+            s.onload = resolve;
+            s.onerror = () => { delete _loadedScripts[url]; reject(new Error('Falha ao carregar biblioteca: ' + url)); };
+            document.head.appendChild(s);
+        });
+    }
+    return _loadedScripts[url];
+}
+
+// Linhas exportadas = exatamente o que o usuário vê (visibilidade + busca)
+function exportRows() {
+    return getFilteredReservations().map(r => ({
+        'Número': r.formattedNumber,
+        'Documento': r.docName,
+        'Ementa': r.subject || '',
+        'Destinatário': r.destNome || '',
+        'Secretaria destino': r.destSecretaria || '',
+        'Reservado por': r.userName,
+        'Secretaria origem': r.userSecretaria || '',
+        'Data/hora': `${formatDate(r.timestamp)} ${formatTime(r.timestamp)}`,
+        'Status': r.status === 'anulada' ? `Anulada — ${r.cancelReason || 'sem motivo'}` : 'Ativa'
+    }));
+}
+
+function exportFileName(ext) {
+    const d = new Date().toISOString().slice(0, 10);
+    return `historico-reservas-${d}.${ext}`;
+}
+
+async function exportHistoryExcel() {
+    const rows = exportRows();
+    if (rows.length === 0) return showToast('Nada para exportar com o filtro atual.', 'warning');
+
+    try {
+        showToast('Preparando exportação...', 'info', 2000);
+        await loadScriptOnce('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        // Larguras aproximadas por coluna para abrir legível no Excel
+        ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 45 }, { wch: 24 }, { wch: 22 }, { wch: 24 }, { wch: 22 }, { wch: 18 }, { wch: 28 }];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
+        XLSX.writeFile(wb, exportFileName('xlsx'));
+
+        addLog('sistema', 'Exportou histórico (Excel)', `${rows.length} linhas`);
+    } catch (err) {
+        console.error('Erro na exportação Excel:', err);
+        showToast('Erro ao exportar Excel: ' + err.message, 'error', 0);
+    }
+}
+
+async function exportHistoryPdf() {
+    const rows = exportRows();
+    if (rows.length === 0) return showToast('Nada para exportar com o filtro atual.', 'warning');
+
+    try {
+        showToast('Preparando exportação...', 'info', 2000);
+        await loadScriptOnce('https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js');
+        await loadScriptOnce('https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
+
+        const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        doc.setFontSize(14);
+        doc.text('Histórico de Reservas — Sistema de Numeração de Documentos', 14, 14);
+        doc.setFontSize(9);
+        doc.setTextColor(100);
+        const scope = state.currentUser.role === 'admin' ? 'todas as secretarias' : (state.currentUser.secretaria || 'minhas reservas');
+        doc.text(`Gerado em ${formatDate(new Date())} ${formatTime(new Date())} — escopo: ${scope} — ${rows.length} registro(s)`, 14, 20);
+
+        const headers = Object.keys(rows[0]);
+        doc.autoTable({
+            startY: 25,
+            head: [headers],
+            body: rows.map(r => headers.map(h => r[h])),
+            styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' },
+            headStyles: { fillColor: [37, 99, 235] },
+            columnStyles: { 2: { cellWidth: 60 } }, // Ementa mais larga
+            didParseCell: (data) => {
+                // Linhas anuladas em vermelho suave
+                if (data.section === 'body' && String(rows[data.row.index]['Status']).startsWith('Anulada')) {
+                    data.cell.styles.textColor = [185, 28, 28];
+                }
+            }
+        });
+
+        doc.save(exportFileName('pdf'));
+        addLog('sistema', 'Exportou histórico (PDF)', `${rows.length} linhas`);
+    } catch (err) {
+        console.error('Erro na exportação PDF:', err);
+        showToast('Erro ao exportar PDF: ' + err.message, 'error', 0);
+    }
 }
 
 // ========== INTERFACE ADMIN ==========
@@ -1428,8 +1767,12 @@ function renderAdminInterface() {
                     <h2>📄 Gerenciar Documentos</h2>
                     <p>Adicionar, editar e configurar tipos de documentos</p>
                 </div>
-                <div style="margin-bottom: 1.5rem;">
+                <div class="admin-toolbar">
                     <button class="btn-primary" onclick="openAddDocModal()">➕ Adicionar Documento</button>
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="adminDocsSearch" placeholder="Buscar documento..." oninput="renderAdminDocs()">
+                    </div>
                 </div>
                 <div id="adminDocsList" class="admin-docs-list"></div>
             </div>
@@ -1440,8 +1783,12 @@ function renderAdminInterface() {
                     <h2>👥 Gerenciar Usuários</h2>
                     <p>Cadastrar usuários e configurar permissões</p>
                 </div>
-                <div style="margin-bottom: 1.5rem;">
+                <div class="admin-toolbar">
                     <button class="btn-primary" onclick="openAddUserModal()">➕ Adicionar Usuário</button>
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" id="adminUsersSearch" placeholder="Buscar por nome, login ou secretaria..." oninput="renderAdminUsers()">
+                    </div>
                 </div>
                 <div id="adminUsersList" class="admin-docs-list"></div>
             </div>
@@ -1512,8 +1859,13 @@ function showAdminSubView(view) {
 function updateStats() {
     if (!document.getElementById('totalDocTypes')) return;
 
+    const ativas = state.reservations.filter(r => r.status !== 'anulada').length;
+    const anuladas = state.reservations.length - ativas;
+
     document.getElementById('totalDocTypes').textContent = state.documents.length;
-    document.getElementById('totalReservations').textContent = state.reservations.length;
+    document.getElementById('totalReservations').textContent = ativas;
+    const resLabel = document.getElementById('totalReservations').nextElementSibling;
+    if (resLabel) resLabel.textContent = anuladas > 0 ? `Reservas ativas (${anuladas} anulada${anuladas > 1 ? 's' : ''})` : 'Total de Reservas';
     document.getElementById('totalUsers').textContent = state.users.length;
 
     const today = new Date().toISOString().split('T')[0];
@@ -1574,19 +1926,38 @@ function renderAdminDocs() {
     const container = document.getElementById('adminDocsList');
     if (!container) return;
 
-    const sortedDocs = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const search = document.getElementById('adminDocsSearch')?.value.toLowerCase() || '';
+    let docs = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    if (search) {
+        docs = docs.filter(d =>
+            d.name.toLowerCase().includes(search) ||
+            (d.prefix || '').toLowerCase().includes(search)
+        );
+    }
 
-    container.innerHTML = sortedDocs.map(doc => `
-        <div class="admin-doc-item" style="opacity: ${doc.enabled ? '1' : '0.5'}">
+    if (docs.length === 0) {
+        container.innerHTML = '<p class="text-secondary" style="text-align:center; padding:2rem;">Nenhum documento encontrado.</p>';
+        return;
+    }
+
+    container.innerHTML = docs.map(doc => {
+        const totalRes = state.reservations.filter(r => r.docId === doc.id).length;
+        const nextInfo = doc.perSecretaria
+            ? `<a href="javascript:void(0)" onclick="switchView('admin'); showAdminSubView('secretariats')" title="Configurar na tela Secretarias">configurar por secretaria</a>`
+            : `próximo: <strong>${doc.currentNumber}</strong>`;
+
+        return `
+        <div class="admin-doc-item" style="opacity: ${doc.enabled ? '1' : '0.55'}">
             <div class="admin-doc-info">
-                <div class="admin-doc-name">${esc(doc.name)} ${!doc.enabled ? '(Desabilitado)' : ''}</div>
+                <div class="admin-doc-name">
+                    ${esc(doc.name)} ${doc.prefix ? `<span class="meta-chip" title="Prefixo">${esc(doc.prefix)}</span>` : ''}
+                    ${!doc.enabled ? '<span class="meta-chip meta-chip--danger">desabilitado</span>' : ''}
+                </div>
                 <div class="admin-doc-details">
-                    Prefixo: ${esc(doc.prefix) || 'Nenhum'} |
-                    Número atual: ${doc.perSecretaria
-                        ? `<a href="javascript:void(0)" onclick="switchView('admin'); showAdminSubView('secretariats')">por secretaria (configurar)</a>`
-                        : doc.currentNumber} |
-                    Reset anual: ${doc.yearlyReset ? 'Sim' : 'Não'}
-                    ${doc.perSecretaria ? ' | <span class="doc-badge-sec">por secretaria</span>' : ''}
+                    ${doc.perSecretaria ? '<span class="meta-chip meta-chip--accent">🏢 por secretaria</span>' : ''}
+                    ${doc.yearlyReset ? '<span class="meta-chip">📅 reinicia a cada ano</span>' : '<span class="meta-chip">∞ numeração contínua</span>'}
+                    <span class="meta-chip" title="Total de reservas deste tipo">🔢 ${totalRes} reserva(s)</span>
+                    <span class="meta-chip">${nextInfo}</span>
                 </div>
             </div>
             <div class="admin-doc-actions">
@@ -1594,8 +1965,8 @@ function renderAdminDocs() {
                 <button class="icon-btn" onclick="openEditDocModal('${doc.id}')" title="Editar">✏️</button>
                 <button class="icon-btn delete" onclick="deleteDocument('${doc.id}')" title="Excluir">🗑️</button>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 function openAddDocModal() {
@@ -1764,33 +2135,67 @@ async function deleteDocument(docId) {
 
 // ========== GERENCIAR USUÁRIOS (ADMIN) ==========
 
+// Iniciais para o avatar (ex.: "João da Silva" -> "JS")
+function userInitials(name) {
+    const parts = String(name || '?').trim().split(/\s+/);
+    const first = parts[0]?.[0] || '?';
+    const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+    return (first + last).toUpperCase();
+}
+
 function renderAdminUsers() {
     const container = document.getElementById('adminUsersList');
     if (!container) return;
 
-    container.innerHTML = state.users.map(user => {
+    const search = document.getElementById('adminUsersSearch')?.value.toLowerCase() || '';
+    let users = state.users;
+    if (search) {
+        users = users.filter(u =>
+            (u.name || '').toLowerCase().includes(search) ||
+            (u.username || '').toLowerCase().includes(search) ||
+            (u.secretaria || '').toLowerCase().includes(search)
+        );
+    }
+
+    // Pendentes de aprovação primeiro (precisam de ação), depois por nome
+    users = [...users].sort((a, b) => {
+        if (!a.approved !== !b.approved) return a.approved ? 1 : -1;
+        return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+    });
+
+    if (users.length === 0) {
+        container.innerHTML = '<p class="text-secondary" style="text-align:center; padding:2rem;">Nenhum usuário encontrado.</p>';
+        return;
+    }
+
+    const roleChipClass = { admin: 'role-chip--admin', user_full: 'role-chip--full', user_restricted: 'role-chip--restricted', user_readonly: 'role-chip--readonly' };
+
+    container.innerHTML = users.map(user => {
         const permLabel = PERMISSION_LEVELS[user.role]?.label || user.role;
-        const permIcon = user.role === 'admin' ? '🔑' : user.role === 'user_readonly' ? '👁️' : '👤';
+        const docCount = (user.role === 'user_restricted' || user.role === 'user_readonly')
+            ? `<span class="meta-chip" title="Documentos permitidos">📄 ${(user.allowedDocuments || []).length} doc(s)</span>` : '';
 
         return `
-            <div class="admin-doc-item">
+            <div class="admin-doc-item ${!user.approved ? 'admin-doc-item--pending' : ''}">
+                <div class="user-avatar" aria-hidden="true">${esc(userInitials(user.name))}</div>
                 <div class="admin-doc-info">
-                    <div class="admin-doc-name">${esc(user.name)} ${user.id === state.currentUser.id ? '(Você)' : ''}</div>
-                    <div class="admin-doc-details">
-                        Usuário: ${esc(user.username)} |
-                        Cargo: ${esc(user.cargo) || 'N/A'} |
-                        Setor: ${esc(user.setor) || 'N/A'}
-                        ${!user.approved ? '<br><span class="badge-disabled" style="background:#f59e0b; color:white">Pendente de Aprovação</span>' : ''}
+                    <div class="admin-doc-name">
+                        ${esc(user.name)} ${user.id === state.currentUser.id ? '<span class="meta-chip">Você</span>' : ''}
+                        ${!user.approved ? '<span class="meta-chip meta-chip--warning">⏳ Pendente de aprovação</span>' : ''}
                     </div>
                     <div class="admin-doc-details">
-                        ${permIcon} ${permLabel}
+                        <span class="role-chip ${roleChipClass[user.role] || ''}">${esc(permLabel)}</span>
+                        ${user.secretaria ? `<span class="meta-chip">🏢 ${esc(user.secretaria)}</span>` : '<span class="meta-chip meta-chip--warning">sem secretaria</span>'}
+                        ${docCount}
+                        <span class="meta-chip" title="Login">@${esc(user.username)}</span>
+                        ${user.cargo ? `<span class="meta-chip">${esc(user.cargo)}</span>` : ''}
                     </div>
                 </div>
                 <div class="admin-doc-actions">
-                    ${!user.approved ? `<button class="icon-btn" onclick="approveUser('${user.id}')" title="Aprovar" style="color:green">✅</button>` : ''}
+                    ${!user.approved ? `<button class="icon-btn icon-btn--approve" onclick="approveUser('${user.id}')" title="Aprovar usuário">✅ Aprovar</button>` : ''}
                     ${user.id !== state.currentUser.id ? `
-                        <button class="icon-btn" onclick="openEditUserModal('${user.id}')">✏️</button>
-                        <button class="icon-btn delete" onclick="deleteUser('${user.id}')">🗑️</button>
+                        <button class="icon-btn" onclick="openEditUserModal('${user.id}')" title="Editar">✏️</button>
+                        <button class="icon-btn delete" onclick="deleteUser('${user.id}')" title="Excluir">🗑️</button>
                     ` : ''}
                 </div>
             </div>
@@ -1798,17 +2203,63 @@ function renderAdminUsers() {
     }).join('');
 }
 
+// Preenche o select de secretaria do modal de usuário. Se o usuário tiver uma
+// secretaria fora da lista atual (removida depois), ela entra como opção extra
+// para não ser silenciosamente apagada ao salvar.
+function fillUserSecretariaSelect(currentValue) {
+    const secSelect = document.getElementById('userSecretaria');
+    const options = [...state.secretariats];
+    if (currentValue && !options.includes(currentValue)) options.push(currentValue);
+    secSelect.innerHTML = '<option value="">Selecione...</option>' +
+        options.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    secSelect.value = currentValue || '';
+}
+
+// Documentos padrão configurados para uma secretaria (tela Secretarias)
+function getSecretariaDefaults(sec) {
+    const perms = state.secretariaPermissions || {};
+    return Array.isArray(perms[sec]) ? perms[sec] : [];
+}
+
+// Marca no formulário os documentos padrão da secretaria selecionada.
+// fromButton=true quando o admin clica em "Restaurar padrão" (avisa se não houver).
+function applySecretariaDefaultsToForm(fromButton = false) {
+    const sec = document.getElementById('userSecretaria').value;
+    const defaults = getSecretariaDefaults(sec);
+    const hint = document.getElementById('secretariaDefaultsHint');
+
+    if (!sec || defaults.length === 0) {
+        if (hint) hint.style.display = 'none';
+        if (fromButton) showToast(sec ? `A secretaria "${sec}" não tem documentos padrão configurados (tela Secretarias).` : 'Selecione uma secretaria primeiro.', 'warning');
+        return;
+    }
+
+    document.querySelectorAll('.doc-checkbox').forEach(cb => {
+        cb.checked = defaults.includes(cb.value) && !cb.disabled;
+    });
+    if (hint) {
+        hint.textContent = `Padrão da secretaria aplicado (${defaults.length} documento(s)) — ajuste se necessário.`;
+        hint.style.display = 'block';
+    }
+}
+
+// Ao trocar a secretaria no modal: aplica o padrão dela automaticamente
+// (só para papéis com lista de documentos — restrito/leitura).
+function handleUserSecretariaChange() {
+    const role = document.getElementById('userRole').value;
+    if (role === 'user_restricted' || role === 'user_readonly') {
+        applySecretariaDefaultsToForm(false);
+    }
+}
+
 function openAddUserModal() {
     state.editingUserId = null;
     document.getElementById('userModalTitle').textContent = 'Adicionar Usuário';
     document.getElementById('userForm').reset();
     document.getElementById('userRole').value = 'user_restricted';
+    document.getElementById('secretariaDefaultsHint').style.display = 'none';
 
-    // Populate Secretariats
-    const secSelect = document.getElementById('userSecretaria');
-    secSelect.innerHTML = '<option value="">Selecione...</option>' +
-        state.secretariats.map(s => `<option value="${s}">${s}</option>`).join('');
-
+    fillUserSecretariaSelect('');
     handleRoleChange();
     document.getElementById('userModal').classList.add('active');
 }
@@ -1822,21 +2273,17 @@ function openEditUserModal(userId) {
     document.getElementById('userName').value = user.name;
     document.getElementById('userCargo').value = user.cargo || '';
     document.getElementById('userSetor').value = user.setor || '';
-    document.getElementById('userSetor').value = user.setor || '';
+    document.getElementById('secretariaDefaultsHint').style.display = 'none';
 
-    // Update Select options before setting value
-    const secSelect = document.getElementById('userSecretaria');
-    secSelect.innerHTML = '<option value="">Selecione...</option>' +
-        state.secretariats.map(s => `<option value="${s}">${s}</option>`).join('');
-    secSelect.value = user.secretaria || '';
-
-    // document.getElementById('userSecretaria').value = user.secretaria || ''; // Replaced by above
+    fillUserSecretariaSelect(user.secretaria || '');
     document.getElementById('userUsername').value = user.username;
     document.getElementById('userPassword').value = user.password;
     document.getElementById('userRole').value = user.role;
 
     handleRoleChange();
 
+    // Na edição, mostra as permissões ATUAIS do usuário (override individual),
+    // não o padrão da secretaria — o padrão só entra via botão "Restaurar".
     if (user.allowedDocuments) {
         setTimeout(() => {
             user.allowedDocuments.forEach(docId => {
@@ -2097,20 +2544,28 @@ function renderAdminSecretariats() {
 
     const perSecDocs = state.documents.filter(d => d.perSecretaria);
 
-    container.innerHTML = state.secretariats.sort().map(sec => `
-        <div class="admin-doc-item" style="flex-direction: column; align-items: stretch;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
+    container.innerHTML = state.secretariats.sort().map(sec => {
+        const userCount = state.users.filter(u => u.secretaria === sec).length;
+        const defaultsCount = getSecretariaDefaults(sec).length;
+        const expanded = state.expandedSecretariat === sec;
+        return `
+        <div class="admin-doc-item admin-doc-item--stack">
+            <div class="admin-doc-row">
                 <div class="admin-doc-info">
-                    <div class="admin-doc-name">${esc(sec)}</div>
+                    <div class="admin-doc-name">🏢 ${esc(sec)}</div>
+                    <div class="admin-doc-details">
+                        <span class="meta-chip">👥 ${userCount} usuário(s)</span>
+                        <span class="meta-chip">📄 ${defaultsCount ? `${defaultsCount} doc(s) padrão` : 'sem padrão definido'}</span>
+                    </div>
                 </div>
                 <div class="admin-doc-actions">
-                    <button class="icon-btn" onclick="toggleSecretariatConfig('${esc(sec)}')" title="Configurar numeração">⚙️ Configurar numeração</button>
+                    <button class="icon-btn" onclick="toggleSecretariatConfig('${esc(sec)}')" title="Configurar documentos padrão e numeração">${expanded ? '▴ Fechar' : '⚙️ Configurar'}</button>
                     <button class="icon-btn delete" onclick="removeSecretariat('${sec}')" title="Remover">🗑️</button>
                 </div>
             </div>
-            ${state.expandedSecretariat === sec ? renderSecretariatConfigPanel(sec, perSecDocs) : ''}
-        </div>
-    `).join('');
+            ${expanded ? renderSecretariatConfigPanel(sec, perSecDocs) : ''}
+        </div>`;
+    }).join('');
 }
 
 function toggleSecretariatConfig(sec) {
@@ -2118,30 +2573,121 @@ function toggleSecretariatConfig(sec) {
     renderAdminSecretariats();
 }
 
-// Painel inline: para cada tipo "por secretaria", mostra o próximo número
-// daquela secretaria com um input editável (chama set_secretaria_counter no servidor).
+// Painel inline de configuração da secretaria, em 2 seções:
+// 1) Documentos padrão — herdados pelos usuários da secretaria (override individual continua);
+// 2) Numeração — próximo número por tipo "por secretaria" (RPC set_secretaria_counter).
 function renderSecretariatConfigPanel(sec, perSecDocs) {
-    if (perSecDocs.length === 0) {
-        return `<div class="sec-config-panel"><p class="text-secondary">Nenhum tipo de documento está configurado como "por secretaria". Ative essa opção ao editar um documento.</p></div>`;
+    const defaults = getSecretariaDefaults(sec);
+    const secId = sec.replace(/[^a-zA-Z0-9]/g, '_');
+    const sortedDocs = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+    const defaultsSection = `
+        <div class="sec-config-section">
+            <h4 class="sec-config-title">📄 Documentos padrão desta secretaria</h4>
+            <p class="help-text">Novos usuários (e aprovações) desta secretaria começam com estes documentos. As permissões de cada usuário continuam ajustáveis individualmente.</p>
+            <div class="documents-checkboxes sec-defaults-grid">
+                ${sortedDocs.map(doc => `
+                    <label class="checkbox-label document-checkbox">
+                        <input type="checkbox" class="sec-default-checkbox-${secId}" value="${doc.id}" ${defaults.includes(doc.id) ? 'checked' : ''} ${doc.enabled ? '' : 'disabled'}>
+                        <span>${esc(doc.name)} ${doc.prefix ? `(${esc(doc.prefix)})` : ''}</span>
+                    </label>
+                `).join('')}
+            </div>
+            <div class="sec-config-actions">
+                <button class="btn-primary btn-compact" onclick="saveSecretariaDefaults('${esc(sec)}')">Salvar padrão</button>
+                <button class="btn-secondary btn-compact" onclick="applyDefaultsToUsers('${esc(sec)}')" title="Substitui as permissões dos usuários restritos desta secretaria pelo padrão salvo">Aplicar aos usuários existentes</button>
+            </div>
+        </div>`;
+
+    const numberingSection = perSecDocs.length === 0
+        ? `<div class="sec-config-section">
+               <h4 class="sec-config-title">🔢 Numeração própria</h4>
+               <p class="help-text">Nenhum tipo de documento está marcado como "Numerar por secretaria". Ative essa opção ao editar um documento para esta secretaria ter sequência própria.</p>
+           </div>`
+        : `<div class="sec-config-section">
+               <h4 class="sec-config-title">🔢 Numeração própria — próximo número</h4>
+               ${perSecDocs.map(doc => {
+                   const next = state.counters[bucketKeyFor(doc, sec)];
+                   const nextNumber = (next !== undefined && next !== null) ? next : doc.startNumber;
+                   const inputId = `secCounter_${doc.id}_${secId}`;
+                   return `
+                   <div class="form-row sec-counter-row">
+                       <div class="form-group" style="margin-bottom: 0; flex: 1;">
+                           <label>${esc(doc.name)} ${esc(doc.prefix) ? `(${esc(doc.prefix)})` : ''}</label>
+                           <input type="number" min="1" id="${inputId}" value="${nextNumber}">
+                       </div>
+                       <button class="btn-secondary btn-compact" onclick="saveSecretariatCounter('${doc.id}', '${esc(sec)}', '${inputId}')">Salvar</button>
+                   </div>`;
+               }).join('')}
+           </div>`;
+
+    return `<div class="sec-config-panel">${defaultsSection}${numberingSection}</div>`;
+}
+
+// Grava os documentos padrão da secretaria em app_config.secretariaPermissions
+// (a mesma chave que approveUser/modal de usuário leem para a herança).
+async function saveSecretariaDefaults(sec) {
+    const secId = sec.replace(/[^a-zA-Z0-9]/g, '_');
+    const selected = Array.from(document.querySelectorAll(`.sec-default-checkbox-${secId}:checked`)).map(cb => cb.value);
+
+    try {
+        const newPerms = { ...(state.secretariaPermissions || {}) };
+        newPerms[sec] = selected;
+
+        const { error } = await supabase
+            .from('app_config')
+            .upsert({ key: 'secretariaPermissions', value: newPerms });
+        if (error) throw error;
+
+        state.secretariaPermissions = newPerms;
+        renderAdminSecretariats();
+        showToast(`Padrão de "${sec}" salvo: ${selected.length} documento(s).`, 'success');
+        addLog('cadastro', `Definiu documentos padrão de ${sec}`, `${selected.length} documento(s)`);
+
+    } catch (err) {
+        console.error('Erro ao salvar padrão da secretaria:', err);
+        showToast('Erro ao salvar: ' + err.message, 'error');
+    }
+}
+
+// Aplica o padrão salvo aos usuários RESTRITOS já existentes da secretaria
+// (substitui as permissões individuais deles — por isso pede confirmação).
+async function applyDefaultsToUsers(sec) {
+    const defaults = getSecretariaDefaults(sec);
+    if (defaults.length === 0) {
+        return showToast('Salve um padrão com pelo menos um documento antes de aplicar.', 'warning');
     }
 
-    return `
-        <div class="sec-config-panel">
-            ${perSecDocs.map(doc => {
-                const next = state.counters[bucketKeyFor(doc, sec)];
-                const nextNumber = (next !== undefined && next !== null) ? next : doc.startNumber;
-                const inputId = `secCounter_${doc.id}_${sec.replace(/[^a-zA-Z0-9]/g, '_')}`;
-                return `
-                <div class="form-row" style="align-items: flex-end; gap: 0.75rem; margin-bottom: 0.75rem;">
-                    <div class="form-group" style="margin-bottom: 0; flex: 1;">
-                        <label>${esc(doc.name)} ${esc(doc.prefix) ? `(${esc(doc.prefix)})` : ''} — próximo número em ${esc(sec)}</label>
-                        <input type="number" min="1" id="${inputId}" value="${nextNumber}">
-                    </div>
-                    <button class="btn-secondary" onclick="saveSecretariatCounter('${doc.id}', '${esc(sec)}', '${inputId}')">Salvar</button>
-                </div>`;
-            }).join('')}
-        </div>
-    `;
+    const targets = state.users.filter(u => u.secretaria === sec && (u.role === 'user_restricted' || u.role === 'user_readonly'));
+    if (targets.length === 0) {
+        return showToast(`Nenhum usuário restrito/leitura vinculado a "${sec}".`, 'info');
+    }
+
+    const confirmed = await showConfirmDialog({
+        title: 'Aplicar padrão aos usuários',
+        message: `Substituir as permissões de ${targets.length} usuário(s) de "${sec}" pelo padrão salvo (${defaults.length} documento(s))?\nPersonalizações individuais serão sobrescritas.`,
+        confirmText: 'Aplicar',
+        variant: 'danger'
+    });
+    if (!confirmed) return;
+
+    try {
+        for (const u of targets) {
+            const { error } = await supabase
+                .from('users')
+                .update({ allowed_documents: defaults })
+                .eq('id', u.id);
+            if (error) throw error;
+            u.allowedDocuments = defaults;
+        }
+        renderAdminUsers();
+        showToast(`Padrão aplicado a ${targets.length} usuário(s) de "${sec}".`, 'success');
+        addLog('cadastro', `Aplicou padrão de ${sec} aos usuários`, `${targets.length} usuário(s)`);
+
+    } catch (err) {
+        console.error('Erro ao aplicar padrão:', err);
+        showToast('Erro ao aplicar: ' + err.message, 'error');
+    }
 }
 
 async function saveSecretariatCounter(docId, secretaria, inputId) {
@@ -2204,9 +2750,13 @@ async function addSecretariat() {
 }
 
 async function removeSecretariat(name) {
+    const linkedUsers = state.users.filter(u => u.secretaria === name).length;
     const confirmed = await showConfirmDialog({
         title: 'Remover secretaria',
-        message: `Remover "${name}"? Usuários vinculados manterão o nome, mas ele sumirá da lista.`,
+        message: `Remover "${name}"?` +
+            (linkedUsers > 0
+                ? `\n⚠️ ${linkedUsers} usuário(s) estão vinculados a ela — manterão o nome no cadastro, mas a secretaria sumirá das listas.`
+                : '\nNenhum usuário está vinculado a ela.'),
         confirmText: 'Remover',
         variant: 'danger'
     });
@@ -2245,15 +2795,13 @@ async function approveUser(userId) {
         // Update approved status
         const updates = { approved: true };
 
-        // Logica de Herança de Permissões da Secretaria
-        if (user.secretaria && state.secretariaPermissions && state.secretariaPermissions[user.secretaria]) {
-            const permissions = state.secretariaPermissions[user.secretaria];
-            if (Array.isArray(permissions) && permissions.length > 0) {
-                updates.allowed_documents = permissions;
-                // Também atualiza o objeto local para refletir na UI imediatamente
-                user.allowedDocuments = permissions;
-                console.log(`Aplicando permissões da secretaria ${user.secretaria}:`, permissions);
-            }
+        // Herança do padrão da secretaria — apenas quando o usuário ainda não
+        // tem permissões individuais (não sobrescreve personalização do admin)
+        const hasCustomPerms = Array.isArray(user.allowedDocuments) && user.allowedDocuments.length > 0;
+        const defaults = getSecretariaDefaults(user.secretaria);
+        if (!hasCustomPerms && defaults.length > 0) {
+            updates.allowed_documents = defaults;
+            user.allowedDocuments = defaults;
         }
 
         const { error } = await supabase

@@ -46,6 +46,36 @@ O schema alvo da seção 2 (`document_types`/`profiles`) ainda deve incorporar
 esse mesmo modelo de bucket quando for implementado — não faz sentido migrar
 para lá e perder a numeração por secretaria.
 
+### 1.2 Destinatário + anulação/edição (migração 0004, 17/07/2026)
+
+`supabase/migrations/0004_destinatario_anulacao.sql` acrescentou a
+`reservations`:
+
+- **Destinatário**: `dest_secretaria text` (secretaria de destino ou
+  "Externo / Outro órgão") e `dest_nome text` — obrigatórios na UI junto com
+  a ementa (`subject`);
+- **Ciclo de vida**: `status text default 'ativa'` (check `ativa|anulada`),
+  `cancel_reason`, `canceled_at`, `canceled_by`, `canceled_by_name`,
+  `edited_at`;
+- **`reserve_number`** ganhou `p_dest_secretaria`/`p_dest_nome` (a assinatura
+  antiga de 3 parâmetros foi dropada para evitar ambiguidade no PostgREST;
+  chamadas antigas seguem válidas pelos defaults);
+- **`cancel_reservation(id, user, motivo)`**: dono OU admin, motivo
+  obrigatório, reserva permanece no histórico como anulada e o contador
+  **não** regride — número anulado jamais é reemitido (RN-01);
+- **`update_reservation(id, user, ementa, dest_sec, dest_nome)`**: dono OU
+  admin, apenas em reservas ativas; número/tipo jamais mudam.
+
+**Visibilidade do histórico** (regra de UI desde 17/07/2026): admin vê tudo;
+usuário com secretaria vê as reservas da própria secretaria; usuário sem
+secretaria vê só as próprias. É filtro client-side — a garantia real por RLS
+continua sendo o item 1.5 da Fase 1 (doc 04).
+
+**Permissões padrão por secretaria**: `app_config.secretariaPermissions`
+(`{ "Administração": [doc_ids...] }`) é configurada na tela Secretarias;
+usuários herdam o padrão da sua secretaria ao serem criados/aprovados
+(sem sobrescrever personalizações individuais).
+
 ## 2. Schema alvo (to-be)
 
 ```sql
