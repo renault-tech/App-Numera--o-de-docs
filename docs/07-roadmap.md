@@ -46,7 +46,7 @@ por constraint + teste.
 
 | # | Item | Descrição | Prioridade |
 |---|---|---|---|
-| 3.1 | ✅ 17/07/2026 — **Anulação de reservas** | Dono ou admin, a qualquer momento, motivo obrigatório; selo ANULADA no histórico; número nunca reemitido (`cancel_reservation`, migração 0004). **Edição** de ementa/destinatário é **exclusiva do autor** (migração 0005 — nem o admin edita reserva alheia) | 🟡 |
+| 3.1 | ✅ 17/07/2026 — **Anulação de reservas** | Dono ou admin, a qualquer momento, motivo obrigatório; selo ANULADA no histórico; número nunca reemitido (`cancel_reservation`, migração 0004). **Edição** de ementa/destinatário é **exclusiva do autor** (migração 0005); o log de edição mostra o **antes→depois** de cada campo (migração 0006) | 🟡 |
 | 3.2 | ✅ 13/07/2026 — **Assunto na reserva**; ✅ 17/07/2026 obrigatório + **destinatário** (secretaria de destino + nome, migração 0004) | Diálogo de reserva com ementa/destino obrigatórios; salvos em `reservations`; exibidos e buscáveis no histórico | 🟡 |
 | 3.3 | **Busca avançada** | Filtros combinados: texto, tipo, período com presets, usuário, status; busca global ⌘K (busca simples já cobre tipo/número/ementa/destinatário/usuário) | 🟡 |
 | 3.4 | ✅ 13/07/2026 — **Botão copiar número** | Toast de sucesso com botão "Copiar" (Clipboard API + fallback) | 🟡 |
@@ -55,7 +55,8 @@ por constraint + teste.
 | 3.7 | ✅ parcial 15/07/2026 — **Ajuste manual de contador com trilha** | `set_secretaria_counter()` permite ao admin definir o próximo número por secretaria (com log); falta campo de motivo livre | 🟢 |
 | 3.8 | **Autocomplete de assunto** | Sugerir assuntos já usados (evoluir o `autocomplete.js` existente) | 🟢 |
 | 3.9 | ✅ 15/07/2026 — **Numeração independente por secretaria** | Flag `per_secretaria` por tipo de documento; contador em `document_counters` por `(doc, secretaria, ano)`; usuário sem secretaria é bloqueado (sem bucket "Geral"); admin configura o número inicial de cada secretaria na tela Secretarias e vê estatísticas globais por secretaria (`supabase/migrations/0003_per_secretaria_counters.sql`, doc 03 §1.1) | 🟡 |
-| 3.10 | ✅ 17/07/2026 — **Histórico por secretaria** | Admin vê tudo; usuário vê só as reservas da sua secretaria; sem secretaria, só as próprias. ⚠️ Filtro client-side — a garantia por RLS continua sendo o item 1.5 | 🟡 |
+| 3.10 | ✅ 17/07/2026 — **Histórico por secretaria** | Admin vê tudo; documento geral (não per_secretaria) tem histórico público; documento por secretaria fica restrito à secretaria (0006). ⚠️ Filtro client-side — a garantia por RLS continua sendo o item 1.5 | 🟡 |
+| 3.13 | ✅ 17/07/2026 — **Numeração 4+ dígitos** | O número cresce além de 3 dígitos quando necessário (1000+), mostrando 3 até lá; corrige truncamento do `lpad` no SQL (migração 0006) | 🟢 |
 | 3.11 | ✅ 17/07/2026 — **Permissões padrão por secretaria** | Tela Secretarias define documentos padrão; usuários herdam ao criar/aprovar (sem sobrescrever personalização); botão "Aplicar aos usuários existentes"; secretaria do usuário via lista suspensa (corrigido: campo era texto livre no modal) | 🟡 |
 | 3.12 | ✅ 17/07/2026 — **Redesign glass + telas admin** | Glassmorphism (tokens/raios/fundo), histórico compacto em 3 linhas, busca e chips nas telas de usuários/documentos, pendentes de aprovação no topo | 🟢 |
 

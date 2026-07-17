@@ -2267,6 +2267,7 @@ select:focus {
 .log-details {
     color: var(--text-secondary);
     font-size: 0.95rem;
+    white-space: pre-line; /* mostra o antes→depois multilinha da edição */
 }
 
 .log-user {

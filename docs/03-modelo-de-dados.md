@@ -67,10 +67,19 @@ para lá e perder a numeração por secretaria.
   do autor** (migração 0005 — nem o admin edita reserva de terceiro), apenas em
   reservas ativas; número/tipo jamais mudam. A anulação segue autor OU admin.
 
-**Visibilidade do histórico** (regra de UI desde 17/07/2026): admin vê tudo;
-usuário com secretaria vê as reservas da própria secretaria; usuário sem
-secretaria vê só as próprias. É filtro client-side — a garantia real por RLS
+**Visibilidade do histórico** (regra de UI desde 17/07/2026, refinada na 0006):
+admin vê tudo; reservas de documento **geral** (não `per_secretaria` — Lei,
+Decreto etc.) têm **histórico público** (todos veem); reservas de documento
+`per_secretaria` são visíveis só a quem é da mesma secretaria (usuário sem
+secretaria vê só as próprias). É filtro client-side — a garantia real por RLS
 continua sendo o item 1.5 da Fase 1 (doc 04).
+
+**Migração 0006**: (a) `reserve_number` formata o número com largura mínima
+de 3 dígitos **sem truncar** (`lpad(..., greatest(3, length(...)), '0')`) —
+001…999 e depois 1000+ automaticamente; corrige o `lpad(...,3,...)` anterior
+que cortava números de 4+ dígitos. (b) `update_reservation` grava no log de
+`edicao` o **antes→depois** de cada campo alterado (ementa, secretaria de
+destino, destinatário), exibido na tela de Logs.
 
 **Permissões padrão por secretaria**: `app_config.secretariaPermissions`
 (`{ "Administração": [doc_ids...] }`) é configurada na tela Secretarias;
