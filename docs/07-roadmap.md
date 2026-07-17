@@ -46,7 +46,7 @@ por constraint + teste.
 
 | # | Item | Descrição | Prioridade |
 |---|---|---|---|
-| 3.1 | ✅ 17/07/2026 — **Anulação de reservas** | Dono ou admin, a qualquer momento, motivo obrigatório; selo ANULADA no histórico; número nunca reemitido (`cancel_reservation`, migração 0004). **Edição** de ementa/destinatário também (`update_reservation`) | 🟡 |
+| 3.1 | ✅ 17/07/2026 — **Anulação de reservas** | Dono ou admin, a qualquer momento, motivo obrigatório; selo ANULADA no histórico; número nunca reemitido (`cancel_reservation`, migração 0004). **Edição** de ementa/destinatário é **exclusiva do autor** (migração 0005 — nem o admin edita reserva alheia) | 🟡 |
 | 3.2 | ✅ 13/07/2026 — **Assunto na reserva**; ✅ 17/07/2026 obrigatório + **destinatário** (secretaria de destino + nome, migração 0004) | Diálogo de reserva com ementa/destino obrigatórios; salvos em `reservations`; exibidos e buscáveis no histórico | 🟡 |
 | 3.3 | **Busca avançada** | Filtros combinados: texto, tipo, período com presets, usuário, status; busca global ⌘K (busca simples já cobre tipo/número/ementa/destinatário/usuário) | 🟡 |
 | 3.4 | ✅ 13/07/2026 — **Botão copiar número** | Toast de sucesso com botão "Copiar" (Clipboard API + fallback) | 🟡 |

@@ -63,8 +63,9 @@ para lá e perder a numeração por secretaria.
 - **`cancel_reservation(id, user, motivo)`**: dono OU admin, motivo
   obrigatório, reserva permanece no histórico como anulada e o contador
   **não** regride — número anulado jamais é reemitido (RN-01);
-- **`update_reservation(id, user, ementa, dest_sec, dest_nome)`**: dono OU
-  admin, apenas em reservas ativas; número/tipo jamais mudam.
+- **`update_reservation(id, user, ementa, dest_sec, dest_nome)`**: **exclusivo
+  do autor** (migração 0005 — nem o admin edita reserva de terceiro), apenas em
+  reservas ativas; número/tipo jamais mudam. A anulação segue autor OU admin.
 
 **Visibilidade do histórico** (regra de UI desde 17/07/2026): admin vê tudo;
 usuário com secretaria vê as reservas da própria secretaria; usuário sem
