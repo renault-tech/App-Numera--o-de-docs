@@ -1442,8 +1442,17 @@ function getFilteredReservations() {
     return filtered;
 }
 
-// Quem pode editar/anular uma reserva: o dono ou um admin (regra confirmada).
-function canManageReservation(r) {
+// Editar ementa/destinatário: SOMENTE quem reservou (nem o admin reescreve
+// dados de terceiros — a edição fica sempre atribuída ao autor).
+function canEditReservation(r) {
+    const user = state.currentUser;
+    if (!user) return false;
+    return r.userId === user.id;
+}
+
+// Anular: o dono OU um admin (rede de segurança — permite invalidar um número
+// errado mesmo se o autor sair/faltar; sempre com motivo e registro em log).
+function canCancelReservation(r) {
     const user = state.currentUser;
     if (!user) return false;
     return user.role === 'admin' || r.userId === user.id;
@@ -1473,10 +1482,12 @@ function renderHistory() {
     // ementa/destinatário, rodapé pequeno (quem/quando).
     container.innerHTML = filtered.slice(0, 50).map(r => {
         const anulada = r.status === 'anulada';
-        const actions = (!anulada && canManageReservation(r)) ? `
+        const canEdit = !anulada && canEditReservation(r);
+        const canCancel = !anulada && canCancelReservation(r);
+        const actions = (canEdit || canCancel) ? `
             <div class="history-actions">
-                <button class="icon-btn icon-btn--sm" onclick="editReservation('${r.id}')" title="Editar ementa/destinatário">✏️</button>
-                <button class="icon-btn icon-btn--sm delete" onclick="cancelReservation('${r.id}')" title="Anular reserva">🚫</button>
+                ${canEdit ? `<button class="icon-btn icon-btn--sm" onclick="editReservation('${r.id}')" title="Editar ementa/destinatário">✏️</button>` : ''}
+                ${canCancel ? `<button class="icon-btn icon-btn--sm delete" onclick="cancelReservation('${r.id}')" title="Anular reserva">🚫</button>` : ''}
             </div>` : '';
 
         return `
@@ -1505,7 +1516,7 @@ function renderHistory() {
 
 async function cancelReservation(reservationId) {
     const r = state.reservations.find(x => x.id === reservationId);
-    if (!r || !canManageReservation(r) || r.status === 'anulada') return;
+    if (!r || !canCancelReservation(r) || r.status === 'anulada') return;
 
     const result = await showConfirmDialog({
         title: 'Anular reserva',
@@ -1541,7 +1552,7 @@ async function cancelReservation(reservationId) {
 
 async function editReservation(reservationId) {
     const r = state.reservations.find(x => x.id === reservationId);
-    if (!r || !canManageReservation(r) || r.status === 'anulada') return;
+    if (!r || !canEditReservation(r) || r.status === 'anulada') return;
 
     const result = await showConfirmDialog({
         title: 'Editar reserva',
