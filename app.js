@@ -577,6 +577,32 @@ async function addLog(type, action, details) {
     }
 }
 
+// Re-consulta os logs e re-renderiza a tela (se estiver montada). Necessário
+// porque reservar/editar/anular gravam o log no servidor (dentro das RPCs),
+// então sem isso o registro só apareceria após recarregar a página.
+async function refreshLogs() {
+    try {
+        const { data, error } = await supabase
+            .from('logs')
+            .select('*')
+            .order('timestamp', { ascending: false })
+            .limit(500);
+        if (error || !data) return;
+        state.logs = data.map(l => ({
+            id: l.id,
+            type: l.type,
+            action: l.action,
+            details: l.details,
+            userId: l.user_id,
+            userName: l.user_name,
+            timestamp: l.timestamp
+        }));
+        if (document.getElementById('logsList')) renderLogs();
+    } catch (e) {
+        console.error('Erro ao atualizar logs:', e);
+    }
+}
+
 // Reset anual — obsoleto desde a migração 0003. O reset agora é estrutural:
 // cada ano tem seu próprio bucket em document_counters, semeado de start_number
 // na primeira reserva. Mantido como no-op para compatibilidade de chamadas antigas.
@@ -1337,6 +1363,7 @@ async function reserveNumber(docId) {
         renderHistory();
         if (state.currentUser.role === 'admin') {
             updateStats();
+            refreshLogs();
         }
 
         const finalNumber = reservationRow.formatted_number;
@@ -1410,19 +1437,27 @@ function mapReservationRow(r) {
 
 // ========== HISTÓRICO ==========
 
-// Reservas que o usuário logado pode ver no histórico.
-// Admin vê tudo; usuário com secretaria vê as reservas da SUA secretaria;
-// usuário sem secretaria vê apenas as próprias.
+// Reservas que o usuário logado pode ver no histórico. Regra por documento:
+// - admin vê tudo;
+// - documento GERAL (não per_secretaria — sequência única do município, ex.:
+//   Lei, Decreto) tem histórico público: visível a todos;
+// - documento POR SECRETARIA: visível só a quem é da mesma secretaria da
+//   reserva; usuário sem secretaria vê apenas as próprias.
 // Atenção: é um filtro de interface — a proteção real no banco (RLS por
 // secretaria) é pendência registrada da Fase 1 (doc 04).
 function getVisibleReservations() {
     const user = state.currentUser;
     if (!user) return [];
     if (user.role === 'admin') return state.reservations;
-    if (user.secretaria) {
-        return state.reservations.filter(r => r.userSecretaria === user.secretaria);
-    }
-    return state.reservations.filter(r => r.userId === user.id);
+
+    return state.reservations.filter(r => {
+        const doc = state.documents.find(d => d.id === r.docId);
+        // Documento geral (público). Doc não encontrado → tratar como restrito
+        // (conservador, evita vazar numeração de tipo por secretaria removido).
+        if (doc && !doc.perSecretaria) return true;
+        if (user.secretaria) return r.userSecretaria === user.secretaria;
+        return r.userId === user.id;
+    });
 }
 
 // Conjunto exibido no histórico após busca — também é o que a exportação usa.
@@ -1467,8 +1502,8 @@ function renderHistory() {
     if (note) {
         const user = state.currentUser;
         if (user.role === 'admin') note.textContent = 'Visão de administrador: todas as secretarias.';
-        else if (user.secretaria) note.textContent = `Exibindo reservas da secretaria: ${user.secretaria}.`;
-        else note.textContent = 'Exibindo apenas as suas reservas (defina sua secretaria para ver as da sua equipe).';
+        else if (user.secretaria) note.textContent = `Exibindo documentos gerais (todos) e as reservas da sua secretaria: ${user.secretaria}.`;
+        else note.textContent = 'Exibindo documentos gerais (todos) e as suas próprias reservas (defina sua secretaria para ver as da sua equipe).';
     }
 
     const filtered = getFilteredReservations();
@@ -1542,6 +1577,7 @@ async function cancelReservation(reservationId) {
         if (idx >= 0) state.reservations[idx] = mapReservationRow(data);
         renderHistory();
         if (state.currentUser.role === 'admin') updateStats();
+        refreshLogs();
         showToast(`Reserva ${r.formattedNumber} anulada.`, 'success');
 
     } catch (err) {
@@ -1580,6 +1616,7 @@ async function editReservation(reservationId) {
         const idx = state.reservations.findIndex(x => x.id === reservationId);
         if (idx >= 0) state.reservations[idx] = mapReservationRow(data);
         renderHistory();
+        refreshLogs();
         showToast('Reserva atualizada.', 'success');
 
     } catch (err) {
@@ -2494,15 +2531,23 @@ function renderLogs() {
         return;
     }
 
+    const LOG_STYLES = {
+        reserva:  { color: '#10b981', icon: '🔢' },
+        edicao:   { color: '#f59e0b', icon: '✏️' },
+        anulacao: { color: '#ef4444', icon: '⛔' },
+        cadastro: { color: '#3b82f6', icon: '📝' },
+        usuario:  { color: '#8b5cf6', icon: '👤' },
+        sistema:  { color: '#64748b', icon: '⚙️' }
+    };
+
     container.innerHTML = filtered.slice(0, 100).map(log => {
         const date = new Date(log.timestamp);
-        const typeColor = log.type === 'cadastro' ? '#3b82f6' : '#10b981';
-        const typeIcon = log.type === 'cadastro' ? '📝' : '🔢';
+        const s = LOG_STYLES[log.type] || LOG_STYLES.sistema;
 
         return `
-            <div class="log-item" style="border-left: 4px solid ${typeColor}">
+            <div class="log-item" style="border-left: 4px solid ${s.color}">
                 <div class="log-header">
-                    <span class="log-icon">${typeIcon}</span>
+                    <span class="log-icon">${s.icon}</span>
                     <span class="log-user">${esc(log.userName)}</span>
                     <span class="log-time">${formatDate(date)} às ${formatTime(date)}</span>
                 </div>
