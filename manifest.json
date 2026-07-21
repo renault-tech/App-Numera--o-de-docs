@@ -1,0 +1,16 @@
+{
+  "name": "Numeração de Documentos — Prefeitura de Cataguases",
+  "short_name": "Numeração",
+  "description": "Reserva e numeração de documentos oficiais",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f7",
+  "theme_color": "#eef1f7",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
