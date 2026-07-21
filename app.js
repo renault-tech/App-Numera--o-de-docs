@@ -428,7 +428,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function checkAutoLogin() {
     try {
         const user = await authService.getCurrentUser();
-        if (user) { state.currentUser = user; render(); }
+        if (user) { state.currentUser = user; await ensureCardOrderSynced(); render(); }
         else showLoginView();
     } catch (e) { console.error(e); showLoginView(); }
 }
@@ -444,6 +444,7 @@ async function handleLogin(e) {
         state.currentUser = result.user;
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         await loadData();
+        await ensureCardOrderSynced();
         state.view = 'inicio';
         render();
     } else {
@@ -673,10 +674,42 @@ function renderInicio() {
 // ============================================================
 // View: Gerar Número
 // ============================================================
-// Ordem dos cards personalizada por usuário (localStorage, individual).
+// Ordem dos cards personalizada por usuário. Fonte da verdade: coluna
+// users.card_order (migração 0007) — a preferência acompanha a conta em
+// qualquer dispositivo. Fallback para localStorage enquanto a migração não
+// estiver aplicada (ou se a gravação no banco falhar).
 function cardOrderKey() { return 'cardOrder:' + (state.currentUser?.id || 'anon'); }
-function getCardOrder() { try { return JSON.parse(localStorage.getItem(cardOrderKey())) || []; } catch (e) { return []; } }
+function getCardOrder() {
+    const dbOrder = (state.currentUser && Array.isArray(state.currentUser.cardOrder)) ? state.currentUser.cardOrder : [];
+    if (dbOrder.length) return dbOrder;
+    try { return JSON.parse(localStorage.getItem(cardOrderKey())) || []; } catch (e) { return []; }
+}
 function hasCustomOrder() { return getCardOrder().length > 0; }
+
+// Salva a ordem no banco (users.card_order). Atualiza o estado local na hora
+// e, se o banco falhar (coluna ausente antes da 0007), cai no localStorage.
+async function saveCardOrder(ids) {
+    if (state.currentUser) state.currentUser.cardOrder = ids;
+    try {
+        if (!state.currentUser) throw new Error('sem usuário');
+        const { error } = await supabase.from('users').update({ card_order: ids }).eq('id', state.currentUser.id);
+        if (error) throw error;
+        localStorage.removeItem(cardOrderKey()); // fonte agora é o banco
+    } catch (e) {
+        console.warn('Ordem dos cards salva localmente (aplique a migração 0007):', e.message);
+        localStorage.setItem(cardOrderKey(), JSON.stringify(ids));
+    }
+}
+
+// Migração suave: se o usuário já tinha uma ordem só no localStorage (versão
+// anterior) e o banco está vazio, sobe essa ordem para o banco uma vez.
+async function ensureCardOrderSynced() {
+    if (!state.currentUser) return;
+    const dbEmpty = !Array.isArray(state.currentUser.cardOrder) || state.currentUser.cardOrder.length === 0;
+    let local = [];
+    try { local = JSON.parse(localStorage.getItem(cardOrderKey())) || []; } catch (e) { }
+    if (dbEmpty && local.length) await saveCardOrder(local);
+}
 // Documentos visíveis reordenados pela preferência do usuário; novos tipos
 // (ainda sem posição salva) entram no fim, em ordem alfabética (padrão).
 function orderedGerarDocs() {
@@ -714,11 +747,11 @@ function cardDragEnd() {
     _dragId = null;
     if (!grid) return;
     const ids = [...grid.querySelectorAll('.doc-card[data-docid]')].map(el => el.getAttribute('data-docid'));
-    localStorage.setItem(cardOrderKey(), JSON.stringify(ids));
-    render(); // reflete a nova ordem + mostra o botão de restaurar
+    saveCardOrder(ids);        // persiste no banco (users.card_order)
+    render();                  // reflete a nova ordem + mostra o botão de restaurar
 }
 function resetCardOrder() {
-    localStorage.removeItem(cardOrderKey());
+    saveCardOrder([]);         // ordem padrão = vazio no banco
     showToast('Ordem padrão restaurada.', 'success', 2000);
     render();
 }
