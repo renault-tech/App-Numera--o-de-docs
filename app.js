@@ -673,8 +673,58 @@ function renderInicio() {
 // ============================================================
 // View: Gerar Número
 // ============================================================
+// Ordem dos cards personalizada por usuário (localStorage, individual).
+function cardOrderKey() { return 'cardOrder:' + (state.currentUser?.id || 'anon'); }
+function getCardOrder() { try { return JSON.parse(localStorage.getItem(cardOrderKey())) || []; } catch (e) { return []; } }
+function hasCustomOrder() { return getCardOrder().length > 0; }
+// Documentos visíveis reordenados pela preferência do usuário; novos tipos
+// (ainda sem posição salva) entram no fim, em ordem alfabética (padrão).
+function orderedGerarDocs() {
+    const docs = getVisibleDocuments();
+    const order = getCardOrder();
+    const byId = {}; docs.forEach(d => { byId[d.id] = d; });
+    const result = [];
+    order.forEach(id => { if (byId[id]) { result.push(byId[id]); delete byId[id]; } });
+    Object.values(byId).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).forEach(d => result.push(d));
+    return result;
+}
+
+let _dragId = null;
+function cardDragStart(e, id) {
+    _dragId = id;
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', id); } catch (_) { }
+    e.currentTarget.classList.add('dragging');
+}
+function cardDragOver(e, targetId) {
+    e.preventDefault();
+    if (!_dragId || _dragId === targetId) return;
+    const grid = document.getElementById('docGrid');
+    const dragging = grid && grid.querySelector('.doc-card.dragging');
+    const target = grid && grid.querySelector(`.doc-card[data-docid="${targetId}"]`);
+    if (!dragging || !target) return;
+    const box = target.getBoundingClientRect();
+    const before = e.clientX < box.left + box.width / 2;
+    grid.insertBefore(dragging, before ? target : target.nextSibling);
+}
+function cardDragEnd() {
+    const grid = document.getElementById('docGrid');
+    const dragging = grid && grid.querySelector('.doc-card.dragging');
+    if (dragging) dragging.classList.remove('dragging');
+    _dragId = null;
+    if (!grid) return;
+    const ids = [...grid.querySelectorAll('.doc-card[data-docid]')].map(el => el.getAttribute('data-docid'));
+    localStorage.setItem(cardOrderKey(), JSON.stringify(ids));
+    render(); // reflete a nova ordem + mostra o botão de restaurar
+}
+function resetCardOrder() {
+    localStorage.removeItem(cardOrderKey());
+    showToast('Ordem padrão restaurada.', 'success', 2000);
+    render();
+}
+
 function renderGerar() {
-    const docs = getVisibleDocuments().sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    const docs = orderedGerarDocs();
     const cards = docs.map(d => {
         const blocked = blockedBySecretaria(d);
         const display = blocked ? '—' : formatNumber(d);
@@ -682,7 +732,8 @@ function renderGerar() {
         if (blocked) btn = `<button class="reserve-btn reserve-btn--off" disabled title="Defina sua secretaria no perfil">${icon('building', 15, 2)} Defina sua secretaria</button>`;
         else if (canReserve(d.id)) btn = `<button class="reserve-btn" onclick="openReserve('${d.id}')">${icon('plus', 15, 2.3)} Reservar</button>`;
         else btn = `<button class="reserve-btn reserve-btn--off" disabled>🔒 Sem permissão</button>`;
-        return `<div class="doc-card">
+        return `<div class="doc-card" draggable="true" data-docid="${d.id}" title="Arraste para reorganizar"
+            ondragstart="cardDragStart(event,'${d.id}')" ondragover="cardDragOver(event,'${d.id}')" ondrop="event.preventDefault()" ondragend="cardDragEnd()">
           <div class="doc-card-top">
             <div class="chip chip--lg" style="${chipStyle(d.name)}">${esc(docAbbr(d))}</div>
             ${d.perSecretaria ? '<span class="tag-persec">por secretaria</span>' : ''}
@@ -693,12 +744,19 @@ function renderGerar() {
         </div>`;
     }).join('') || '<div class="empty">Nenhum documento disponível para você.</div>';
 
+    const resetBtn = hasCustomOrder()
+        ? `<button class="btn-reset-order" onclick="resetCardOrder()" title="Voltar à ordem padrão (alfabética)">↺ Ordem padrão</button>`
+        : '';
+
     return `<div class="view">
-      <div class="page-head"><div>
-        <div class="page-title">Gerar Número</div>
-        <div class="page-sub">Selecione um tipo de documento para reservar o próximo número</div>
-      </div></div>
-      <div class="doc-grid">${cards}</div>
+      <div class="page-head">
+        <div>
+          <div class="page-title">Gerar Número</div>
+          <div class="page-sub">Selecione um tipo de documento para reservar · arraste os cards para reorganizar</div>
+        </div>
+        ${resetBtn}
+      </div>
+      <div class="doc-grid" id="docGrid">${cards}</div>
     </div>`;
 }
 
