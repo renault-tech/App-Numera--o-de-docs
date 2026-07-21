@@ -12,6 +12,7 @@ function normalizeUser(row) {
     return {
         ...row,
         allowedDocuments: row.allowed_documents || [],
+        cardOrder: Array.isArray(row.card_order) ? row.card_order : [],
         createdAt: row.created_at
     };
 }
