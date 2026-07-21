@@ -59,6 +59,7 @@ por constraint + teste.
 | 3.13 | ✅ 17/07/2026 — **Numeração 4+ dígitos** | O número cresce além de 3 dígitos quando necessário (1000+), mostrando 3 até lá; corrige truncamento do `lpad` no SQL (migração 0006) | 🟢 |
 | 3.11 | ✅ 17/07/2026 — **Permissões padrão por secretaria** | Tela Secretarias define documentos padrão; usuários herdam ao criar/aprovar (sem sobrescrever personalização); botão "Aplicar aos usuários existentes"; secretaria do usuário via lista suspensa (corrigido: campo era texto livre no modal) | 🟡 |
 | 3.12 | ✅ 17/07/2026 — **Redesign glass + telas admin** | Glassmorphism (tokens/raios/fundo), histórico compacto em 3 linhas, busca e chips nas telas de usuários/documentos, pendentes de aprovação no topo | 🟢 |
+| 3.14 | ✅ 21/07/2026 — **Redesign completo (sidebar + dashboard)** | Reescrita do frontend (`app.js`/`styles.css`/`index.html`) seguindo o handoff de design (pasta "Redesign de plataforma numeração"): sidebar recolhível, 6 telas (Início/dashboard com gráficos reais, Gerar, Histórico com filtros, Tipos, Relatórios, Configurações), estilo Apple/glass, controle de zoom por conteúdo. Todas as regras de negócio preservadas (numeração por secretaria, destinatário obrigatório, anulação/edição, permissões, logs). Cores dos tipos por matiz HSL. Testado headless (24 checks) | 🟢 |
 
 ## Fase 4 — Evoluções (avaliar demanda real antes)
 
