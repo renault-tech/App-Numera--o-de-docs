@@ -104,7 +104,8 @@ function icon(name, size = 18, stroke = 1.9) {
         chevron: ['M15 18l-6-6 6-6'],
         users: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
-        list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01']
+        list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+        grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01']
     };
     const paths = (P[name] || []).map(d => `<path d="${d}"></path>`).join('');
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">${paths}</svg>`;
@@ -219,10 +220,12 @@ async function copyToClipboard(text) {
     }
 }
 
-// Modal genérico (overlay-root) para formulários ricos (admin)
-function openModal(innerHtml, { width = 460 } = {}) {
+// Modal genérico (overlay-root) para formulários ricos (admin).
+// sheet:true força o formato de bottom-sheet (usado no menu "Mais" do celular);
+// no celular, qualquer modal já vira bottom-sheet pelo CSS.
+function openModal(innerHtml, { width = 460, sheet = false } = {}) {
     const root = overlayRoot();
-    root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal-card" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
+    root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
     const back = document.getElementById('modalBackdrop');
     back.onclick = closeModal;
     requestAnimationFrame(() => back.classList.add('modal-backdrop--visible'));
@@ -494,8 +497,7 @@ function resetZoom() { state.zoom = 100; localStorage.setItem('zoomLevel', '100'
 function applyZoom() {
     const wrap = document.getElementById('content-zoom');
     if (wrap) wrap.style.zoom = state.zoom / 100;
-    const lbl = document.getElementById('zoomLabel');
-    if (lbl) lbl.textContent = state.zoom + '%';
+    document.querySelectorAll('[data-zoom-label]').forEach(el => { el.textContent = state.zoom + '%'; });
 }
 
 function navItemsFor(user) {
@@ -554,10 +556,42 @@ function render() {
 
         <div class="zoom-pill">
           <button onclick="setZoom(-10)" title="Diminuir">A−</button>
-          <button id="zoomLabel" onclick="resetZoom()" title="Redefinir zoom">${state.zoom}%</button>
+          <button id="zoomLabel" data-zoom-label onclick="resetZoom()" title="Redefinir zoom">${state.zoom}%</button>
           <button onclick="setZoom(10)" title="Aumentar">A+</button>
         </div>
+
+        <nav class="tabbar">
+          ${tabButton('inicio', 'Início', state.view === 'inicio')}
+          ${tabButton('gerar', 'Gerar', state.view === 'gerar')}
+          ${tabButton('historico', 'Histórico', state.view === 'historico')}
+          <button class="tab ${['tipos', 'relatorios', 'config'].includes(state.view) ? 'tab--active' : ''}" onclick="openMoreSheet()">
+            ${icon('list', 23, 2)}<span>Mais</span></button>
+        </nav>
       </div>`;
+}
+
+function tabButton(id, label, active) {
+    return `<button class="tab ${active ? 'tab--active' : ''}" onclick="setView('${id}')">${icon(id, 23, 2)}<span>${esc(label)}</span></button>`;
+}
+
+// Bottom sheet "Mais" (mobile) — acesso a todas as telas + zoom + sair.
+function openMoreSheet() {
+    const u = state.currentUser;
+    const link = (id, label) => `<button class="sheet-item ${state.view === id ? 'sheet-item--active' : ''}" onclick="closeModal(); setView('${id}')">${icon(id, 20, 1.9)}<span>${esc(label)}</span></button>`;
+    openModal(`
+      <div class="sheet-head">
+        <div class="avatar avatar--lg">${esc(initials(u.name))}</div>
+        <div><div class="sheet-name">${esc(u.name)}</div><div class="sheet-sub">${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}</div></div>
+      </div>
+      <div class="sheet-nav">
+        ${link('inicio', 'Início')}${link('gerar', 'Gerar Número')}${link('historico', 'Histórico')}
+        ${link('tipos', 'Tipos')}${link('relatorios', 'Relatórios')}${link('config', 'Configurações')}
+      </div>
+      <div class="sheet-zoom"><span>Tamanho do texto</span>
+        <div class="zoom-inline"><button onclick="setZoom(-10)">A−</button><span data-zoom-label>${state.zoom}%</span><button onclick="setZoom(10)">A+</button></div>
+      </div>
+      <button class="btn btn-ghost btn-block" onclick="closeModal(); handleLogout()">${icon('logout', 15, 2)} Sair</button>
+    `, { width: 460, sheet: true });
 }
 
 // ============================================================
@@ -722,36 +756,48 @@ function orderedGerarDocs() {
     return result;
 }
 
-let _dragId = null;
-function cardDragStart(e, id) {
-    _dragId = id;
-    e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', id); } catch (_) { }
-    e.currentTarget.classList.add('dragging');
+// Reordenação por ponteiro (mouse + toque) iniciada por uma alça dedicada,
+// para funcionar bem no celular sem conflitar com a rolagem.
+let _drag = null;
+function cardHandleDown(e, id) {
+    e.preventDefault(); e.stopPropagation();
+    const grid = document.getElementById('docGrid');
+    const card = grid && grid.querySelector(`.doc-card[data-docid="${id}"]`);
+    if (!card) return;
+    _drag = { card, handle: e.currentTarget };
+    card.classList.add('dragging');
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { }
+    e.currentTarget.addEventListener('pointermove', cardHandleMove);
+    e.currentTarget.addEventListener('pointerup', cardHandleUp);
+    e.currentTarget.addEventListener('pointercancel', cardHandleUp);
 }
-function cardDragOver(e, targetId) {
+function cardHandleMove(e) {
+    if (!_drag) return;
     e.preventDefault();
-    if (!_dragId || _dragId === targetId) return;
     const grid = document.getElementById('docGrid');
-    const dragging = grid && grid.querySelector('.doc-card.dragging');
-    const target = grid && grid.querySelector(`.doc-card[data-docid="${targetId}"]`);
-    if (!dragging || !target) return;
+    if (!grid) return;
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const target = under && under.closest('.doc-card');
+    if (!target || target === _drag.card || target.parentElement !== grid) return;
     const box = target.getBoundingClientRect();
-    const before = e.clientX < box.left + box.width / 2;
-    grid.insertBefore(dragging, before ? target : target.nextSibling);
+    const before = e.clientY < box.top + box.height / 2
+        || (Math.abs(e.clientY - (box.top + box.height / 2)) < box.height / 2 && e.clientX < box.left + box.width / 2);
+    grid.insertBefore(_drag.card, before ? target : target.nextSibling);
 }
-function cardDragEnd() {
+function cardHandleUp() {
+    const h = _drag && _drag.handle;
+    if (h) { h.removeEventListener('pointermove', cardHandleMove); h.removeEventListener('pointerup', cardHandleUp); h.removeEventListener('pointercancel', cardHandleUp); }
+    if (!_drag) return;
+    _drag.card.classList.remove('dragging');
+    _drag = null;
     const grid = document.getElementById('docGrid');
-    const dragging = grid && grid.querySelector('.doc-card.dragging');
-    if (dragging) dragging.classList.remove('dragging');
-    _dragId = null;
     if (!grid) return;
     const ids = [...grid.querySelectorAll('.doc-card[data-docid]')].map(el => el.getAttribute('data-docid'));
-    saveCardOrder(ids);        // persiste no banco (users.card_order)
-    render();                  // reflete a nova ordem + mostra o botão de restaurar
+    saveCardOrder(ids);  // persiste no banco (users.card_order)
+    render();            // reflete a nova ordem + mostra o botão de restaurar
 }
 function resetCardOrder() {
-    saveCardOrder([]);         // ordem padrão = vazio no banco
+    saveCardOrder([]);   // ordem padrão = vazio no banco
     showToast('Ordem padrão restaurada.', 'success', 2000);
     render();
 }
@@ -765,11 +811,13 @@ function renderGerar() {
         if (blocked) btn = `<button class="reserve-btn reserve-btn--off" disabled title="Defina sua secretaria no perfil">${icon('building', 15, 2)} Defina sua secretaria</button>`;
         else if (canReserve(d.id)) btn = `<button class="reserve-btn" onclick="openReserve('${d.id}')">${icon('plus', 15, 2.3)} Reservar</button>`;
         else btn = `<button class="reserve-btn reserve-btn--off" disabled>🔒 Sem permissão</button>`;
-        return `<div class="doc-card" draggable="true" data-docid="${d.id}" title="Arraste para reorganizar"
-            ondragstart="cardDragStart(event,'${d.id}')" ondragover="cardDragOver(event,'${d.id}')" ondrop="event.preventDefault()" ondragend="cardDragEnd()">
+        return `<div class="doc-card" data-docid="${d.id}">
           <div class="doc-card-top">
             <div class="chip chip--lg" style="${chipStyle(d.name)}">${esc(docAbbr(d))}</div>
-            ${d.perSecretaria ? '<span class="tag-persec">por secretaria</span>' : ''}
+            <div class="doc-card-top-right">
+              ${d.perSecretaria ? '<span class="tag-persec">por secretaria</span>' : ''}
+              <button class="drag-handle" aria-label="Reordenar" title="Arraste para reordenar" onpointerdown="cardHandleDown(event,'${d.id}')" onclick="event.preventDefault()">${icon('grip', 16, 2.6)}</button>
+            </div>
           </div>
           <div><div class="doc-name">${esc(d.name)}</div><div class="doc-prefix">${esc(d.prefix) || 'Sem prefixo'}</div></div>
           <div class="doc-number">${esc(display)}</div>
@@ -875,18 +923,21 @@ function renderHistorico() {
     return `<div class="view">
       <div class="page-head">
         <div><div class="page-title">Histórico</div><div class="page-sub" id="histLabel">${scope}</div></div>
-        <button class="btn btn-ghost btn-pill" onclick="clearFilters()">Limpar filtros</button>
+        <div class="head-actions">
+          <button class="btn btn-ghost btn-sm filters-toggle" id="filtersToggleBtn" onclick="toggleFilters()">${icon('list', 15, 2)} Filtros</button>
+          <button class="btn btn-ghost btn-pill" onclick="clearFilters()">Limpar</button>
+        </div>
       </div>
-      <div class="card filter-bar">
-        <div class="field"><label class="field-label">Buscar</label>
+      <div class="card filter-bar" id="filterBar">
+        <div class="field field--search"><label class="field-label">Buscar</label>
           <div class="search-box">${icon('search', 15, 2)}<input id="fSearch" value="${esc(f.search)}" oninput="onFilter('search',this.value)" placeholder="Número, assunto, usuário"></div></div>
-        <div class="field"><label class="field-label">Tipo</label>
+        <div class="field filter-adv"><label class="field-label">Tipo</label>
           <select class="field-input" onchange="onFilter('tipo',this.value)"><option value="">Todos os tipos</option>${typeOpts}</select></div>
-        <div class="field"><label class="field-label">Secretaria</label>
+        <div class="field filter-adv"><label class="field-label">Secretaria</label>
           <select class="field-input" onchange="onFilter('sec',this.value)"><option value="">Todas</option>${secOpts}</select></div>
-        <div class="field"><label class="field-label">De</label>
+        <div class="field filter-adv"><label class="field-label">De</label>
           <input type="date" class="field-input" value="${esc(f.from)}" oninput="onFilter('from',this.value)"></div>
-        <div class="field"><label class="field-label">Até</label>
+        <div class="field filter-adv"><label class="field-label">Até</label>
           <input type="date" class="field-input" value="${esc(f.to)}" oninput="onFilter('to',this.value)"></div>
       </div>
       <div class="card table-card">
@@ -914,8 +965,8 @@ function renderHistRows() {
         return `<div class="table-row ${anulada ? 'table-row--anulada' : ''}">
           <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}</span>
           <span class="cell-ell" title="${esc(r.subject || '')}${r.destNome ? ' — Para: ' + esc(r.destNome) : ''}">${esc(r.subject || '—')}</span>
-          <span class="cell-soft">${esc(r.userSecretaria || '—')}</span>
-          <span class="cell-soft">${esc(r.userName)}</span>
+          <span class="cell-soft" data-label="Secretaria">${esc(r.userSecretaria || '—')}</span>
+          <span class="cell-soft" data-label="Usuário">${esc(r.userName)}</span>
           <span class="cell-date">${brDate(r.timestamp)}${r.editedAt ? ' <span class="mini-editada">(ed.)</span>' : ''}${actions}</span>
         </div>`;
     }).join('');
@@ -929,6 +980,13 @@ function onFilter(key, value) {
 function clearFilters() {
     state.filters = { search: '', tipo: '', sec: '', from: '', to: '' };
     if (state.view === 'historico') render();
+}
+// Mostra/esconde os filtros avançados no celular (search fica sempre visível)
+function toggleFilters() {
+    const el = document.getElementById('filterBar');
+    if (el) el.classList.toggle('filter-bar--open');
+    const b = document.getElementById('filtersToggleBtn');
+    if (b) b.classList.toggle('active');
 }
 
 async function cancelReservation(id) {

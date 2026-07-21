@@ -3,12 +3,19 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="Sistema de reserva e numeração de documentos oficiais da Prefeitura de Cataguases">
-    <meta name="theme-color" content="#0071e3">
+    <meta name="theme-color" content="#eef1f7">
     <title>Numeração de Documentos — Prefeitura de Cataguases</title>
     <link rel="icon" type="image/png" href="logo.png">
-    <link rel="stylesheet" href="styles.css?v=202607211200">
+    <!-- Instalável como app (Add to Home Screen) -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Numeração">
+    <link rel="apple-touch-icon" href="logo.png">
+    <link rel="manifest" href="manifest.json?v=202607211900">
+    <link rel="stylesheet" href="styles.css?v=202607211900">
 </head>
 
 <body>
@@ -34,8 +41,8 @@
     <!-- Bibliotecas de exportação (jsPDF/XLSX/SheetJS) são carregadas SOB DEMANDA
          pelo app.js (loadScriptOnce) no primeiro clique de exportar. -->
 
-    <script src="auth-service.js?v=202607211200"></script>
-    <script src="app.js?v=202607211200"></script>
+    <script src="auth-service.js?v=202607211900"></script>
+    <script src="app.js?v=202607211900"></script>
 </body>
 
 </html>
