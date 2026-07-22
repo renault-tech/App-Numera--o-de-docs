@@ -1571,9 +1571,16 @@ function openSecretariaConfig(sec) {
       <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Fechar</button></div>`, { width: 480 });
 }
 
-async function saveSecretariaDefaults(sec) {
+// Lê o que está MARCADO agora na tela (não o que foi salvo da última vez) —
+// tanto "Salvar padrão" quanto "Aplicar aos usuários" partem sempre do
+// checklist atual, pra nunca aplicar uma seleção desatualizada.
+function selectedSecretariaDocs(sec) {
     const secId = sec.replace(/[^a-zA-Z0-9]/g, '_');
-    const selected = Array.from(document.querySelectorAll(`.secdef-${secId}:checked`)).map(cb => cb.value);
+    return Array.from(document.querySelectorAll(`.secdef-${secId}:checked`)).map(cb => cb.value);
+}
+
+async function saveSecretariaDefaults(sec) {
+    const selected = selectedSecretariaDocs(sec);
     try {
         const perms = { ...state.secretariaPermissions, [sec]: selected };
         const { error } = await supabase.from('app_config').upsert({ key: 'secretariaPermissions', value: perms });
@@ -1585,15 +1592,21 @@ async function saveSecretariaDefaults(sec) {
 }
 
 async function applyDefaultsToUsers(sec) {
-    const defaults = state.secretariaPermissions[sec] || [];
-    if (!defaults.length) return showToast('Salve um padrão primeiro.', 'warning');
+    const selected = selectedSecretariaDocs(sec);
+    if (!selected.length) return showToast('Marque ao menos um documento antes de aplicar.', 'warning');
     const targets = state.users.filter(u => u.secretaria === sec && (u.role === 'user_restricted' || u.role === 'user_readonly'));
     if (!targets.length) return showToast('Nenhum usuário restrito nessa secretaria.', 'info');
-    const res = await showConfirmDialog({ title: 'Aplicar padrão', variant: 'danger', confirmText: 'Aplicar', message: `Substituir permissões de ${targets.length} usuário(s) de "${sec}" pelo padrão salvo?` });
+    const res = await showConfirmDialog({ title: 'Aplicar padrão', variant: 'danger', confirmText: 'Aplicar', message: `Substituir permissões de ${targets.length} usuário(s) de "${sec}" pelos ${selected.length} documento(s) marcados agora?` });
     if (!res.confirmed) return;
     try {
-        for (const u of targets) { await supabase.from('users').update({ allowed_documents: defaults }).eq('id', u.id); u.allowedDocuments = defaults; }
-        showToast(`Padrão aplicado a ${targets.length} usuário(s).`, 'success');
+        // Salva o que está marcado como padrão da secretaria também — senão o
+        // padrão salvo ficaria diferente do que acabou de valer pros usuários.
+        const perms = { ...state.secretariaPermissions, [sec]: selected };
+        const { error: permErr } = await supabase.from('app_config').upsert({ key: 'secretariaPermissions', value: perms });
+        if (permErr) throw permErr;
+        state.secretariaPermissions = perms;
+        for (const u of targets) { await supabase.from('users').update({ allowed_documents: selected }).eq('id', u.id); u.allowedDocuments = selected; }
+        showToast(`Padrão salvo e aplicado a ${targets.length} usuário(s).`, 'success');
         addLog('cadastro', `Aplicou padrão de ${sec}`, `${targets.length} usuário(s)`);
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
