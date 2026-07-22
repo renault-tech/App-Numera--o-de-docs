@@ -1,7 +1,8 @@
-# Sistema de Numeração de Documentos
+# Numera — Sistema de Numeração de Documentos
 
 Plataforma web para reserva única e auditável de números de documentos oficiais
 (ofícios, memorandos, portarias etc.), substituindo o controle manual em papel.
+Nome do produto: **Numera**.
 
 ## Leia antes de implementar qualquer coisa
 

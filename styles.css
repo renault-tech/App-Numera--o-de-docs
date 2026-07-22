@@ -58,7 +58,11 @@ input::placeholder, textarea::placeholder { color: var(--placeholder); }
 .brand--center { justify-content: center; }
 .brand-logo { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; object-position: 50% 38%; box-shadow: 0 4px 12px rgba(20, 40, 80, 0.18); flex-shrink: 0; }
 .brand-text { line-height: 1.15; overflow: hidden; }
-.brand-name { font-size: 14.5px; font-weight: 700; letter-spacing: -0.2px; white-space: nowrap; }
+.brand-name { font-size: 15.5px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; }
+/* Wordmark "Numera": preenchimento em gradiente, mesmo tom do azul de destaque
+   usado no número reservado — a marca do produto ganha peso próprio sem
+   depender de fonte externa. */
+.brand-wordmark { background: var(--blue-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
 .brand-sub { font-size: 11.5px; color: var(--text-3); font-weight: 500; white-space: nowrap; }
 
 .collapse-btn {
@@ -383,8 +387,9 @@ select.field-input { cursor: pointer; }
 .login-blob--2 { bottom: -120px; right: -50px; width: 420px; height: 420px; background: radial-gradient(circle, rgba(88, 86, 214, 0.16), transparent 70%); }
 .login-card { position: relative; z-index: 1; width: 380px; max-width: 92vw; background: var(--glass-strong); backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); border: 1px solid rgba(255, 255, 255, 0.9); border-radius: 26px; box-shadow: 0 30px 80px rgba(20, 40, 80, 0.22); padding: 34px 30px; text-align: center; animation: apPop .3s ease; }
 .login-logo { width: 64px; height: 64px; border-radius: 16px; object-fit: cover; object-position: 50% 38%; box-shadow: 0 6px 16px rgba(20, 40, 80, 0.2); margin-bottom: 16px; }
-.login-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-.login-sub { font-size: 13px; color: var(--text-3); margin-top: 3px; margin-bottom: 22px; }
+.login-title { font-size: 36px; font-weight: 800; letter-spacing: -1px; line-height: 1; }
+.login-tagline { font-size: 13.5px; color: var(--text-2); font-weight: 500; margin-top: 8px; }
+.login-sub { font-size: 12px; color: var(--text-3); margin-top: 3px; margin-bottom: 22px; }
 .login-form { display: flex; flex-direction: column; gap: 6px; text-align: left; }
 .login-form .field-label { margin-top: 8px; }
 .login-wrap { height: 100dvh; }

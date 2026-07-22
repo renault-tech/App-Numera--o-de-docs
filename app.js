@@ -1,5 +1,5 @@
 // ============================================================
-// Sistema de Numeração de Documentos — Prefeitura de Cataguases
+// Numera — Sistema de Numeração de Documentos (Prefeitura de Cataguases)
 // Redesign Apple/glass (sidebar + dashboard) sobre Supabase.
 // Vanilla JS, sem build. A lógica de negócio (numeração por secretaria,
 // destinatário, anulação/edição, permissões) é preservada; muda a interface.
@@ -472,7 +472,8 @@ function showLoginView() {
         <div class="login-blob login-blob--2"></div>
         <div class="login-card">
           <img src="logo.png" alt="Prefeitura de Cataguases" class="login-logo">
-          <div class="login-title">Numeração de Documentos</div>
+          <div class="login-title brand-wordmark">Numera</div>
+          <div class="login-tagline">Numeração oficial de documentos</div>
           <div class="login-sub">Prefeitura de Cataguases</div>
           <form onsubmit="handleLogin(event)" class="login-form">
             <label class="field-label">Usuário ou e-mail</label>
@@ -539,7 +540,7 @@ function render() {
         <aside class="sidebar ${collapsed ? 'sidebar--collapsed' : ''}" style="width:${asideW}px">
           <div class="brand ${collapsed ? 'brand--center' : ''}">
             <img src="logo.png" alt="Prefeitura" class="brand-logo">
-            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name">Numeração</div><div class="brand-sub">Prefeitura de Cataguases</div></div>`}
+            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">Prefeitura de Cataguases</div></div>`}
           </div>
           <button class="collapse-btn ${collapsed ? 'collapse-btn--center' : ''}" onclick="toggleCollapse()" title="Recolher menu">
             <span class="collapse-chevron ${collapsed ? 'collapse-chevron--flip' : ''}">${icon('chevron', 18, 2)}</span>${collapsed ? '' : '<span>Recolher</span>'}
@@ -1250,7 +1251,7 @@ async function exportPdf() {
         await loadScriptOnce('https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js');
         await loadScriptOnce('https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
         const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        doc.setFontSize(14); doc.text('Relatório de Numeração — Prefeitura de Cataguases', 14, 14);
+        doc.setFontSize(14); doc.text('Numera — Relatório de Numeração — Prefeitura de Cataguases', 14, 14);
         doc.setFontSize(9); doc.setTextColor(120);
         const scope = state.currentUser.role === 'admin' ? 'todas as secretarias' : (state.currentUser.secretaria || 'minhas reservas');
         doc.text(`Gerado em ${formatDate(new Date())} ${formatTime(new Date())} — ${scope} — ${rows.length} registro(s)`, 14, 20);

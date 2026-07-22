@@ -1,4 +1,4 @@
-# 📚 Documentação — Sistema de Numeração de Documentos
+# 📚 Documentação — Numera (Sistema de Numeração de Documentos)
 
 Documentação completa de planejamento, arquitetura e evolução da plataforma.
 Este índice é o ponto de entrada para qualquer pessoa (ou agente de IA) que for
