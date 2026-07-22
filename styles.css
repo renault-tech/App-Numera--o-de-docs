@@ -331,7 +331,12 @@ select.field-input { cursor: pointer; }
 
 .sub-label { font-size: 13px; font-weight: 700; margin: 6px 0; }
 .hint { font-size: 12px; color: var(--text-3); margin-bottom: 8px; }
-.checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 12px; max-height: 220px; overflow-y: auto; margin: 6px 0; }
+/* flex-shrink:0 evita que o flexbox do .modal-card colapse esta lista a
+   altura zero quando o conteúdo do modal não cabe na tela (overflow:auto
+   torna o tamanho mínimo automático do item igual a 0 no eixo flex) — sem
+   isso a lista de documentos podia sumir por completo em telas mais baixas
+   ou com zoom do navegador, mesmo com checkboxes normalmente presentes. */
+.checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 12px; max-height: 220px; min-height: 90px; overflow-y: auto; overflow-x: hidden; margin: 6px 0; flex-shrink: 0; }
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); padding: 5px 0; cursor: pointer; }
 .check-row input { width: 16px; height: 16px; accent-color: var(--blue); }
 .counter-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 8px; }
