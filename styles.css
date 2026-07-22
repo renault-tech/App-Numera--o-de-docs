@@ -226,6 +226,13 @@ input::placeholder, textarea::placeholder { color: var(--placeholder); }
 .reserve-actions { display: flex; gap: 10px; margin-top: 2px; }
 .reserve-actions .btn { height: 44px; flex: 1; }
 
+/* ---------- Detalhe da reserva (modal do histórico) ---------- */
+.detail-row { display: flex; flex-direction: column; gap: 2px; }
+.detail-label { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.3px; }
+.detail-value { font-size: 14px; color: var(--text); line-height: 1.45; white-space: pre-line; }
+.detail-banner { font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 10px; }
+.detail-banner--danger { background: rgba(229, 72, 77, 0.1); color: var(--red); }
+
 /* ---------- Fields ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 11.5px; font-weight: 600; color: var(--text-3); }
@@ -244,6 +251,7 @@ select.field-input { cursor: pointer; }
 .table-head { display: grid; grid-template-columns: 1.1fr 2fr 1fr 1fr 0.9fr; gap: 10px; padding: 13px 20px; border-bottom: 1px solid rgba(120, 130, 150, 0.14); font-size: 11.5px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.4px; }
 .table-row { display: grid; grid-template-columns: 1.1fr 2fr 1fr 1fr 0.9fr; gap: 10px; padding: 12px 20px; border-bottom: 1px solid rgba(120, 130, 150, 0.1); align-items: center; }
 .table-row:hover { background: rgba(255, 255, 255, 0.35); }
+.table-row--clickable { cursor: pointer; }
 .table-row--anulada { opacity: 0.62; }
 .cell-num { font-size: 13.5px; font-weight: 700; color: var(--blue); display: flex; align-items: center; gap: 6px; }
 .cell-ell { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

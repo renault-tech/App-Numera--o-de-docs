@@ -81,6 +81,13 @@ que cortava números de 4+ dígitos. (b) `update_reservation` grava no log de
 `edicao` o **antes→depois** de cada campo alterado (ementa, secretaria de
 destino, destinatário), exibido na tela de Logs.
 
+**Migração 0008** — `dest_setor` (opcional, texto livre) e `observacoes`
+(opcional) na reserva: ao reservar, o usuário pode informar um setor
+específico da secretaria de destino e uma observação sobre o documento.
+Ambos aparecem no detalhe da reserva no Histórico (clique na linha) e são
+editáveis (mesmas regras da 0005/0006 — exclusivo do autor, log antes→depois).
+Incluídos também na exportação (Excel/PDF/JSON).
+
 **Permissões padrão por secretaria**: `app_config.secretariaPermissions`
 (`{ "Administração": [doc_ids...] }`) é configurada na tela Secretarias;
 usuários herdam o padrão da sua secretaria ao serem criados/aprovados
