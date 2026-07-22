@@ -246,6 +246,7 @@ function mapReservationRow(r) {
         id: r.id, docId: r.doc_id, docName: r.doc_name, number: r.number,
         formattedNumber: r.formatted_number, subject: r.subject, ementa: r.ementa,
         destSecretaria: r.dest_secretaria || '', destNome: r.dest_nome || '',
+        destSetor: r.dest_setor || '', observacoes: r.observacoes || '',
         status: r.status || 'ativa', cancelReason: r.cancel_reason || '',
         canceledByName: r.canceled_by_name || '', editedAt: r.edited_at || null,
         userId: r.user_id, userName: r.user_name, userCargo: r.user_cargo,
@@ -407,7 +408,7 @@ function getFilteredReservations() {
     if (f.to) list = list.filter(r => isoDate(r.timestamp) <= f.to);
     if (f.search) {
         const q = f.search.toLowerCase();
-        list = list.filter(r => `${r.formattedNumber} ${r.subject || ''} ${r.userName} ${r.docName} ${r.userSecretaria || ''} ${r.destNome || ''} ${r.destSecretaria || ''}`.toLowerCase().includes(q));
+        list = list.filter(r => `${r.formattedNumber} ${r.subject || ''} ${r.userName} ${r.docName} ${r.userSecretaria || ''} ${r.destNome || ''} ${r.destSecretaria || ''} ${r.destSetor || ''} ${r.observacoes || ''}`.toLowerCase().includes(q));
     }
     return list;
 }
@@ -861,8 +862,12 @@ function openReserve(docId) {
           <textarea id="rvSubject" class="field-input" rows="2" placeholder="Descreva o assunto do documento"></textarea></div>
         <div class="field"><label class="field-label">Secretaria de destino *</label>
           <select id="rvDestSec" class="field-input"><option value="">Selecione...</option>${secOptions}</select></div>
+        <div class="field"><label class="field-label">Setor (opcional)</label>
+          <input id="rvDestSetor" class="field-input" placeholder="Ex: Departamento Financeiro"></div>
         <div class="field"><label class="field-label">Nome do destinatário *</label>
           <input id="rvDestNome" class="field-input" placeholder="Ex: João da Silva"></div>
+        <div class="field"><label class="field-label">Observações (opcional)</label>
+          <textarea id="rvObs" class="field-input" rows="2" placeholder="Alguma observação sobre este documento"></textarea></div>
         <div class="reserve-actions">
           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
           <button class="btn btn-primary" style="flex:1.4" onclick="confirmReserve('${doc.id}')">Confirmar reserva</button>
@@ -875,7 +880,9 @@ async function confirmReserve(docId) {
     if (!doc) return;
     const subject = document.getElementById('rvSubject').value.trim();
     const destSec = document.getElementById('rvDestSec').value;
+    const destSetor = document.getElementById('rvDestSetor').value.trim();
     const destNome = document.getElementById('rvDestNome').value.trim();
+    const observacoes = document.getElementById('rvObs').value.trim();
     const invalid = (el) => el.classList.add('field-input--invalid');
     let bad = false;
     if (!subject) { invalid(document.getElementById('rvSubject')); bad = true; }
@@ -886,7 +893,8 @@ async function confirmReserve(docId) {
     try {
         const { data, error } = await supabase.rpc('reserve_number', {
             p_doc_id: doc.id, p_user_id: state.currentUser.id,
-            p_subject: subject, p_dest_secretaria: destSec, p_dest_nome: destNome
+            p_subject: subject, p_dest_secretaria: destSec, p_dest_nome: destNome,
+            p_dest_setor: destSetor, p_observacoes: observacoes
         });
         if (error) {
             const missing = error.code === 'PGRST202' || (/reserve_number/.test(error.message || '') && /not find|schema cache/i.test(error.message || ''));
@@ -960,10 +968,10 @@ function renderHistRows() {
         const canEdit = !anulada && canEditReservation(r);
         const canCancel = !anulada && canCancelReservation(r);
         const actions = (canEdit || canCancel) ? `<span class="row-actions">
-            ${canEdit ? `<button class="icon-btn-sm" title="Editar" onclick="editReservation('${r.id}')">${icon('edit', 14, 2)}</button>` : ''}
-            ${canCancel ? `<button class="icon-btn-sm danger" title="Anular" onclick="cancelReservation('${r.id}')">${icon('ban', 14, 2)}</button>` : ''}
+            ${canEdit ? `<button class="icon-btn-sm" title="Editar" onclick="event.stopPropagation();editReservation('${r.id}')">${icon('edit', 14, 2)}</button>` : ''}
+            ${canCancel ? `<button class="icon-btn-sm danger" title="Anular" onclick="event.stopPropagation();cancelReservation('${r.id}')">${icon('ban', 14, 2)}</button>` : ''}
           </span>` : '';
-        return `<div class="table-row ${anulada ? 'table-row--anulada' : ''}">
+        return `<div class="table-row table-row--clickable ${anulada ? 'table-row--anulada' : ''}" onclick="showReservationDetail('${r.id}')" title="Ver detalhes">
           <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}</span>
           <span class="cell-ell" title="${esc(r.subject || '')}${r.destNome ? ' — Para: ' + esc(r.destNome) : ''}">${esc(r.subject || '—')}</span>
           <span class="cell-soft" data-label="Secretaria">${esc(r.userSecretaria || '—')}</span>
@@ -971,6 +979,29 @@ function renderHistRows() {
           <span class="cell-date">${brDate(r.timestamp)}${r.editedAt ? ' <span class="mini-editada">(ed.)</span>' : ''}${actions}</span>
         </div>`;
     }).join('');
+}
+
+function showReservationDetail(id) {
+    const r = state.reservations.find(x => x.id === id);
+    if (!r) return;
+    const row = (label, value) => value ? `<div class="detail-row"><div class="detail-label">${esc(label)}</div><div class="detail-value">${esc(value)}</div></div>` : '';
+    openModal(`
+      <div class="reserve-modal">
+        <div class="reserve-head">
+          <div class="chip chip--xl" style="${chipStyle(r.docName)}">${esc(docAbbr({ name: r.docName, prefix: '' }))}</div>
+          <div><div class="reserve-eyebrow">${esc(r.docName)}</div><div class="reserve-name">${esc(r.formattedNumber)}</div></div>
+        </div>
+        ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>` : ''}
+        ${row('Ementa', r.subject)}
+        ${row('Secretaria de destino', r.destSecretaria)}
+        ${row('Setor', r.destSetor)}
+        ${row('Destinatário', r.destNome)}
+        ${row('Observações', r.observacoes)}
+        ${row('Reservado por', r.userName + (r.userSecretaria ? ' — ' + r.userSecretaria : ''))}
+        ${row('Data', `${brDate(r.timestamp)} ${formatTime(r.timestamp)}`)}
+        ${r.editedAt ? row('Editado em', `${brDate(r.editedAt)} ${formatTime(r.editedAt)}`) : ''}
+        <div class="reserve-actions"><button class="btn btn-primary" style="flex:1" onclick="closeModal()">Fechar</button></div>
+      </div>`, { width: 430 });
 }
 
 function onFilter(key, value) {
@@ -1018,14 +1049,17 @@ async function editReservation(id) {
         fields: [
             { name: 'subject', label: 'Ementa', type: 'textarea', required: true, value: r.subject || '' },
             { name: 'destSecretaria', label: 'Secretaria de destino', type: 'select', required: true, options: [...state.secretariats, DEST_EXTERNO], value: r.destSecretaria || '' },
-            { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, value: r.destNome || '' }
+            { name: 'destSetor', label: 'Setor (opcional)', type: 'text', required: false, value: r.destSetor || '' },
+            { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, value: r.destNome || '' },
+            { name: 'observacoes', label: 'Observações (opcional)', type: 'textarea', required: false, value: r.observacoes || '' }
         ]
     });
     if (!res.confirmed) return;
     try {
         const { data, error } = await supabase.rpc('update_reservation', {
             p_reservation_id: id, p_user_id: state.currentUser.id,
-            p_subject: res.values.subject, p_dest_secretaria: res.values.destSecretaria, p_dest_nome: res.values.destNome
+            p_subject: res.values.subject, p_dest_secretaria: res.values.destSecretaria, p_dest_nome: res.values.destNome,
+            p_dest_setor: res.values.destSetor, p_observacoes: res.values.observacoes
         });
         if (error) throw error;
         const i = state.reservations.findIndex(x => x.id === id);
@@ -1183,7 +1217,8 @@ function reportFilterDescription() {
 function exportRows() {
     return getReportReservations().map(r => ({
         'Número': r.formattedNumber, 'Documento': r.docName, 'Ementa': r.subject || '',
-        'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '',
+        'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '', 'Setor destino': r.destSetor || '',
+        'Observações': r.observacoes || '',
         'Reservado por': r.userName, 'Secretaria origem': r.userSecretaria || '',
         'Data/hora': `${formatDate(r.timestamp)} ${formatTime(r.timestamp)}`,
         'Status': r.status === 'anulada' ? `Anulada — ${r.cancelReason || ''}` : 'Ativa'
@@ -1198,7 +1233,7 @@ async function exportExcel() {
         showToast('Preparando Excel...', 'info', 2000);
         await loadScriptOnce('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 26 }];
+        ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 35 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 26 }];
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
         XLSX.writeFile(wb, exportFileName('xlsx'));
         addLog('sistema', 'Exportou histórico (Excel)', `${rows.length} linhas`);
