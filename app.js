@@ -815,14 +815,16 @@ function renderGerar() {
         else btn = `<button class="reserve-btn reserve-btn--off" disabled>🔒 Sem permissão</button>`;
         return `<div class="doc-card" data-docid="${d.id}">
           <div class="doc-card-top">
-            <div class="chip chip--lg" style="${chipStyle(d.name)}">${esc(docAbbr(d))}</div>
-            <div class="doc-card-top-right">
+            <div class="doc-tags">
+              <span class="doc-chip-mini" style="${chipStyle(d.name)}">${esc(docAbbr(d))}</span>
               ${d.perSecretaria ? '<span class="tag-persec">por secretaria</span>' : ''}
-              <button class="drag-handle" aria-label="Reordenar" title="Arraste para reordenar" onpointerdown="cardHandleDown(event,'${d.id}')" onclick="event.preventDefault()">${icon('grip', 16, 2.6)}</button>
             </div>
+            <button class="drag-handle" aria-label="Reordenar" title="Arraste para reordenar" onpointerdown="cardHandleDown(event,'${d.id}')" onclick="event.preventDefault()">${icon('grip', 16, 2.6)}</button>
           </div>
-          <div><div class="doc-name">${esc(d.name)}</div><div class="doc-prefix">${esc(d.prefix) || 'Sem prefixo'}</div></div>
-          <div class="doc-number">${esc(display)}</div>
+          <div class="doc-info">
+            <div class="doc-name">${esc(d.name)}</div>
+            <div class="doc-number">${esc(display)}</div>
+          </div>
           ${btn}
         </div>`;
     }).join('') || '<div class="empty">Nenhum documento disponível para você.</div>';
