@@ -53,7 +53,7 @@ const authService = {
             setor: userData.setor,
             secretaria: userData.secretaria,
             role: 'user_restricted', // Padrão: restrito até aprovação
-            allowed_documents: [], // Será preenchido pelo admin ou lógica de secretaria
+            allowed_documents: userData.allowedDocuments || [], // Padrão da secretaria escolhida (se configurado)
             approved: false // Pendente de aprovação
         };
 
