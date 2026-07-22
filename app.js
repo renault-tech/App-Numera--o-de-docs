@@ -1508,8 +1508,8 @@ function renderSecretariasPanel() {
           <div class="adm-info"><div class="adm-name">${esc(sec)}</div>
             <div class="adm-chips"><span class="meta-chip">${userCount} usuário(s)</span><span class="meta-chip">${defaults} doc(s) padrão</span></div></div>
           <div class="row-actions">
-            <button class="btn btn-ghost btn-sm" title="Escolher quais documentos os usuários desta secretaria já vêm habilitados" onclick="openSecretariaConfig('${esc(sec)}')">${icon('config', 14, 2)} Documentos padrão</button>
-            <button class="icon-btn-sm danger" title="Remover secretaria" onclick="removeSecretaria('${esc(sec)}')">${icon('trash', 15, 2)}</button>
+            <button class="icon-btn-sm" title="Configurar" onclick="openSecretariaConfig('${esc(sec)}')">${icon('config', 15, 2)}</button>
+            <button class="icon-btn-sm danger" title="Remover" onclick="removeSecretaria('${esc(sec)}')">${icon('trash', 15, 2)}</button>
           </div></div>`;
     }).join('');
     return `<div class="card">
