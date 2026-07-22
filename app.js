@@ -555,7 +555,10 @@ async function confirmRegister() {
     const btn = document.querySelector('#overlay-root .reserve-actions .btn-primary');
     const original = btn.textContent; btn.textContent = 'Cadastrando...'; btn.disabled = true;
 
-    const result = await authService.signUp({ name, email, username, password: p1, cargo, setor, secretaria });
+    // Já nasce com os documentos padrão da secretaria escolhida (editável
+    // depois pelo admin em Configurações → Usuários).
+    const allowedDocuments = state.secretariaPermissions[secretaria] || [];
+    const result = await authService.signUp({ name, email, username, password: p1, cargo, setor, secretaria, allowedDocuments });
     if (result.error) {
         showToast('Erro no cadastro: ' + result.error, 'error', 0);
         btn.textContent = original; btn.disabled = false;
@@ -1505,8 +1508,8 @@ function renderSecretariasPanel() {
           <div class="adm-info"><div class="adm-name">${esc(sec)}</div>
             <div class="adm-chips"><span class="meta-chip">${userCount} usuário(s)</span><span class="meta-chip">${defaults} doc(s) padrão</span></div></div>
           <div class="row-actions">
-            <button class="icon-btn-sm" title="Configurar" onclick="openSecretariaConfig('${esc(sec)}')">${icon('config', 15, 2)}</button>
-            <button class="icon-btn-sm danger" title="Remover" onclick="removeSecretaria('${esc(sec)}')">${icon('trash', 15, 2)}</button>
+            <button class="btn btn-ghost btn-sm" title="Escolher quais documentos os usuários desta secretaria já vêm habilitados" onclick="openSecretariaConfig('${esc(sec)}')">${icon('config', 14, 2)} Documentos padrão</button>
+            <button class="icon-btn-sm danger" title="Remover secretaria" onclick="removeSecretaria('${esc(sec)}')">${icon('trash', 15, 2)}</button>
           </div></div>`;
     }).join('');
     return `<div class="card">
