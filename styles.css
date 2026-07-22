@@ -280,6 +280,8 @@ select.field-input { cursor: pointer; }
 .export-title { font-size: 16px; font-weight: 700; }
 .export-desc { font-size: 13px; color: var(--text-3); margin-top: 3px; line-height: 1.45; }
 .export-btn { margin-top: auto; height: 40px; width: 100%; }
+.report-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+.report-count { font-size: 13px; font-weight: 600; color: var(--blue); margin: -6px 2px 0; }
 .summary > div { }
 .sum-val { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
 .sum-label { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
@@ -396,19 +398,19 @@ select.field-input { cursor: pointer; }
     .main { left: 0 !important; }
 
     /* Conteúdo: espaço para a tab bar inferior + área segura */
-    .view { padding: 20px 16px calc(88px + env(safe-area-inset-bottom, 0px)); gap: 18px; }
+    .view { padding: 20px 16px calc(70px + env(safe-area-inset-bottom, 0px)); gap: 18px; }
     .view--narrow { max-width: 100%; }
 
-    /* Tab bar inferior fixa (estilo app nativo) */
+    /* Tab bar inferior fixa (estilo app nativo) — compacta */
     .tabbar {
         display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
-        padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+        padding: 3px 6px calc(3px + env(safe-area-inset-bottom, 0px));
         background: var(--glass-strong); backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
         border-top: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 -4px 24px rgba(30, 50, 90, 0.06);
     }
-    .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0; border: none; background: none; color: var(--text-3); font-family: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; border-radius: 12px; -webkit-tap-highlight-color: transparent; }
+    .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 0; border: none; background: none; color: var(--text-3); font-family: inherit; font-size: 10px; font-weight: 600; cursor: pointer; border-radius: 10px; -webkit-tap-highlight-color: transparent; }
     .tab--active { color: var(--blue); }
-    .tab svg { width: 23px; height: 23px; }
+    .tab svg { width: 20px; height: 20px; }
 
     /* Cabeçalhos e tipografia mais compactos */
     .page-head { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
