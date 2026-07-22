@@ -263,6 +263,14 @@ function mapDoc(d) {
     };
 }
 
+function mapUserRow(u) {
+    return {
+        id: u.id, name: u.name, username: u.username, email: u.email, password: u.password,
+        cargo: u.cargo, setor: u.setor, secretaria: u.secretaria, role: u.role,
+        allowedDocuments: u.allowed_documents || [], approved: u.approved, createdAt: u.created_at
+    };
+}
+
 async function loadData() {
     if (!supabase) return;
     state.loading = true;
@@ -299,11 +307,7 @@ async function loadData() {
 
         // Usuários
         const { data: users } = await supabase.from('users').select('*');
-        if (users) state.users = users.map(u => ({
-            id: u.id, name: u.name, username: u.username, email: u.email, password: u.password,
-            cargo: u.cargo, setor: u.setor, secretaria: u.secretaria, role: u.role,
-            allowedDocuments: u.allowed_documents || [], approved: u.approved, createdAt: u.created_at
-        }));
+        if (users) state.users = users.map(mapUserRow);
 
         // Reservas
         const { data: reservations } = await supabase.from('reservations').select('*').order('timestamp', { ascending: false }).limit(1000);
@@ -317,6 +321,119 @@ async function loadData() {
         showToast('Erro ao carregar dados. Verifique o console.', 'error', 0);
     } finally {
         state.loading = false;
+    }
+}
+
+// ============================================================
+// Realtime (Supabase) — mantém a tela atualizada sem precisar de F5 e
+// avisa o admin na hora quando alguém se cadastra pedindo aprovação.
+// Tabelas escutadas: users, reservations, documents, document_counters,
+// app_config, logs (todas adicionadas à publicação supabase_realtime na
+// migração 0009).
+// ============================================================
+let realtimeChannel = null;
+let rerenderTimer = null;
+
+function scheduleRerender() {
+    if (!state.currentUser) return;
+    clearTimeout(rerenderTimer);
+    rerenderTimer = setTimeout(render, 200);
+}
+
+function subscribeRealtime() {
+    if (!supabase || typeof supabase.channel !== 'function' || realtimeChannel) return;
+    realtimeChannel = supabase.channel('numera-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, onUsersRealtime)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, onReservationsRealtime)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, onDocumentsRealtime)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'document_counters' }, onCountersRealtime)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, onConfigRealtime)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, onLogsRealtime)
+        .subscribe();
+}
+
+function unsubscribeRealtime() {
+    if (realtimeChannel && supabase?.removeChannel) supabase.removeChannel(realtimeChannel);
+    realtimeChannel = null;
+}
+
+function onUsersRealtime({ eventType, new: newRow, old: oldRow }) {
+    if (eventType === 'DELETE') {
+        state.users = state.users.filter(u => u.id !== oldRow.id);
+    } else {
+        const mapped = mapUserRow(newRow);
+        const idx = state.users.findIndex(u => u.id === mapped.id);
+        if (idx < 0) state.users.push(mapped); else state.users[idx] = mapped;
+        if (state.currentUser && mapped.id === state.currentUser.id) Object.assign(state.currentUser, mapped);
+        if (eventType === 'INSERT' && !mapped.approved && state.currentUser?.role === 'admin' && mapped.id !== state.currentUser?.id) {
+            notifyNewRegistration(mapped);
+        }
+    }
+    scheduleRerender();
+}
+
+function onReservationsRealtime({ eventType, new: newRow, old: oldRow }) {
+    if (eventType === 'DELETE') {
+        state.reservations = state.reservations.filter(r => r.id !== oldRow.id);
+    } else {
+        const mapped = mapReservationRow(newRow);
+        const idx = state.reservations.findIndex(r => r.id === mapped.id);
+        if (idx < 0) state.reservations.unshift(mapped); else state.reservations[idx] = mapped;
+    }
+    scheduleRerender();
+}
+
+function onDocumentsRealtime({ eventType, new: newRow, old: oldRow }) {
+    if (eventType === 'DELETE') {
+        state.documents = state.documents.filter(d => d.id !== oldRow.id);
+    } else {
+        const mapped = mapDoc(newRow);
+        const idx = state.documents.findIndex(d => d.id === mapped.id);
+        if (idx < 0) state.documents.push(mapped); else state.documents[idx] = mapped;
+    }
+    scheduleRerender();
+}
+
+function onCountersRealtime({ new: newRow }) {
+    if (!newRow) return;
+    state.counters[`${newRow.doc_id}|${newRow.secretaria}|${newRow.year}`] = newRow.current_number;
+    scheduleRerender();
+}
+
+function onConfigRealtime({ new: newRow }) {
+    if (!newRow) return;
+    if (newRow.key === 'secretaria_list' && Array.isArray(newRow.value)) state.secretariats = [...newRow.value].sort();
+    else if (newRow.key === 'secretariaPermissions' && newRow.value) state.secretariaPermissions = newRow.value;
+    scheduleRerender();
+}
+
+function onLogsRealtime({ new: newRow }) {
+    if (!newRow) return;
+    if (state.logs.some(l => l.id === newRow.id)) return;
+    state.logs.unshift({ id: newRow.id, type: newRow.type, action: newRow.action, details: newRow.details, userId: newRow.user_id, userName: newRow.user_name, timestamp: newRow.timestamp });
+    if (state.view === 'config' && document.getElementById('logsList')) renderLogsList();
+}
+
+// Toast + notificação nativa do navegador (funciona até com a aba em segundo
+// plano) quando alguém se cadastra e fica pendente de aprovação.
+function notifyNewRegistration(u) {
+    showToast(`Novo cadastro pendente: ${u.name}${u.secretaria ? ' — ' + u.secretaria : ''}`, 'info', 8000, {
+        label: 'Ver', onClick: () => { state.view = 'config'; render(); }
+    });
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try {
+            const n = new Notification('Numera — novo cadastro pendente', {
+                body: `${u.name}${u.secretaria ? ' (' + u.secretaria + ')' : ''} solicitou acesso.`,
+                icon: 'logo.png', tag: 'numera-pending-' + u.id
+            });
+            n.onclick = () => { window.focus(); state.view = 'config'; render(); };
+        } catch (e) { /* navegador sem suporte a Notification */ }
+    }
+}
+
+function requestNotificationPermission() {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => { });
     }
 }
 
@@ -433,7 +550,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function checkAutoLogin() {
     try {
         const user = await authService.getCurrentUser();
-        if (user) { state.currentUser = user; await ensureCardOrderSynced(); render(); }
+        if (user) {
+            state.currentUser = user; await ensureCardOrderSynced(); render();
+            subscribeRealtime();
+            if (user.role === 'admin') requestNotificationPermission();
+        }
         else showLoginView();
     } catch (e) { console.error(e); showLoginView(); }
 }
@@ -452,6 +573,8 @@ async function handleLogin(e) {
         await ensureCardOrderSynced();
         state.view = 'inicio';
         render();
+        subscribeRealtime();
+        if (result.user.role === 'admin') requestNotificationPermission();
     } else {
         showToast(result.error || 'Credenciais inválidas.', 'error');
         btn.textContent = original; btn.disabled = false;
@@ -459,6 +582,7 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+    unsubscribeRealtime();
     if (state.currentUser) addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu`);
     await authService.signOut();
     state.currentUser = null;
@@ -587,6 +711,10 @@ function applyZoom() {
     document.querySelectorAll('[data-zoom-label]').forEach(el => { el.textContent = state.zoom + '%'; });
 }
 
+function pendingUsersCount() {
+    return state.currentUser?.role === 'admin' ? state.users.filter(u => !u.approved).length : 0;
+}
+
 function navItemsFor(user) {
     const items = [
         { id: 'inicio', label: 'Início' },
@@ -605,10 +733,12 @@ function render() {
     const collapsed = state.collapsed;
     const asideW = collapsed ? 78 : 236;
 
+    const pending = pendingUsersCount();
     const nav = navItemsFor(u).map(it => {
         const active = state.view === it.id;
+        const badge = (it.id === 'config' && pending > 0) ? `<span class="nav-badge">${pending}</span>` : '';
         return `<button class="nav-item ${active ? 'nav-item--active' : ''} ${collapsed ? 'nav-item--collapsed' : ''}" title="${esc(it.label)}" onclick="setView('${it.id}')">
-            ${icon(it.id)}${collapsed ? '' : `<span>${esc(it.label)}</span>`}
+            ${icon(it.id)}${collapsed ? '' : `<span>${esc(it.label)}</span>`}${badge}
         </button>`;
     }).join('');
 
@@ -652,7 +782,7 @@ function render() {
           ${tabButton('gerar', 'Gerar', state.view === 'gerar')}
           ${tabButton('historico', 'Histórico', state.view === 'historico')}
           <button class="tab ${['tipos', 'relatorios', 'config'].includes(state.view) ? 'tab--active' : ''}" onclick="openMoreSheet()">
-            ${icon('list', 23, 2)}<span>Mais</span></button>
+            ${icon('list', 23, 2)}<span>Mais</span>${pending > 0 ? `<span class="nav-badge">${pending}</span>` : ''}</button>
         </nav>
       </div>`;
 }
@@ -664,7 +794,8 @@ function tabButton(id, label, active) {
 // Bottom sheet "Mais" (mobile) — acesso a todas as telas + zoom + sair.
 function openMoreSheet() {
     const u = state.currentUser;
-    const link = (id, label) => `<button class="sheet-item ${state.view === id ? 'sheet-item--active' : ''}" onclick="closeModal(); setView('${id}')">${icon(id, 20, 1.9)}<span>${esc(label)}</span></button>`;
+    const pending = pendingUsersCount();
+    const link = (id, label) => `<button class="sheet-item ${state.view === id ? 'sheet-item--active' : ''}" onclick="closeModal(); setView('${id}')">${icon(id, 20, 1.9)}<span>${esc(label)}</span>${id === 'config' && pending > 0 ? `<span class="nav-badge">${pending}</span>` : ''}</button>`;
     openModal(`
       <div class="sheet-head">
         <div class="avatar avatar--lg">${esc(initials(u.name))}</div>
@@ -1091,10 +1222,10 @@ function showReservationDetail(id) {
       </div>`, { width: 430 });
 }
 
+function refreshHistRows() { const rows = document.getElementById('histRows'); if (rows) rows.innerHTML = renderHistRows(); }
 function onFilter(key, value) {
     state.filters[key] = value;
-    const rows = document.getElementById('histRows');
-    if (rows) rows.innerHTML = renderHistRows();
+    refreshHistRows();
 }
 function clearFilters() {
     state.filters = { search: '', tipo: '', sec: '', from: '', to: '' };
