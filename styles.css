@@ -405,13 +405,20 @@ select.field-input { cursor: pointer; }
     .zoom-pill { display: none !important; }
     .main { left: 0 !important; }
 
+    /* app-shell vira coluna flex: a tab bar fica encaixada no fim do próprio
+       100dvh (não mais "position: fixed"), grudada na barra do navegador sem
+       o espaço em branco que o Safari mobile deixa sob elementos fixed quando
+       a barra de endereço está expandida. .sidebar/.main continuam absolute,
+       então não são afetados pelo flex. */
+    .app-shell { display: flex; flex-direction: column; }
+
     /* Conteúdo: espaço para a tab bar inferior + área segura */
     .view { padding: 20px 16px calc(70px + env(safe-area-inset-bottom, 0px)); gap: 18px; }
     .view--narrow { max-width: 100%; }
 
-    /* Tab bar inferior fixa (estilo app nativo) — compacta */
+    /* Tab bar inferior (estilo app nativo) — compacta, encaixada no fim do shell */
     .tabbar {
-        display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+        display: flex; position: relative; z-index: 40; flex-shrink: 0; margin-top: auto; width: 100%;
         padding: 3px 6px calc(3px + env(safe-area-inset-bottom, 0px));
         background: var(--glass-strong); backdrop-filter: blur(28px) saturate(1.6); -webkit-backdrop-filter: blur(28px) saturate(1.6);
         border-top: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 -4px 24px rgba(30, 50, 90, 0.06);
