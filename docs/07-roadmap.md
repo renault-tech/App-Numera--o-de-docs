@@ -51,7 +51,7 @@ por constraint + teste.
 | 3.3 | **Busca avançada** | Filtros combinados: texto, tipo, período com presets, usuário, status; busca global ⌘K (busca simples já cobre tipo/número/ementa/destinatário/usuário) | 🟡 |
 | 3.4 | ✅ 13/07/2026 — **Botão copiar número** | Toast de sucesso com botão "Copiar" (Clipboard API + fallback) | 🟡 |
 | 3.5 | **"Meus números"** | Tela com as reservas do próprio usuário (visibilidade por secretaria já cobre parte: usuário sem secretaria só vê as próprias) | 🟢 |
-| 3.6 | ✅ parcial 17/07/2026 — **Relatórios** | Exportação Excel/PDF do histórico respeitando filtro e visibilidade (libs lazy-load no clique). Pendente: filtros por período e gráficos | 🟢 |
+| 3.6 | ✅ 22/07/2026 — **Relatórios** | Exportação Excel/PDF/JSON com **parâmetros escolhidos** (tipo de documento, secretaria, período De/Até, status) + contagem ao vivo e resumo da seleção; filtros descritos no cabeçalho do PDF. Respeita a visibilidade do usuário. Pendente: gráficos no relatório | 🟢 |
 | 3.7 | ✅ parcial 15/07/2026 — **Ajuste manual de contador com trilha** | `set_secretaria_counter()` permite ao admin definir o próximo número por secretaria (com log); falta campo de motivo livre | 🟢 |
 | 3.8 | **Autocomplete de assunto** | Sugerir assuntos já usados (evoluir o `autocomplete.js` existente) | 🟢 |
 | 3.9 | ✅ 15/07/2026 — **Numeração independente por secretaria** | Flag `per_secretaria` por tipo de documento; contador em `document_counters` por `(doc, secretaria, ano)`; usuário sem secretaria é bloqueado (sem bucket "Geral"); admin configura o número inicial de cada secretaria na tela Secretarias e vê estatísticas globais por secretaria (`supabase/migrations/0003_per_secretaria_counters.sql`, doc 03 §1.1) | 🟡 |

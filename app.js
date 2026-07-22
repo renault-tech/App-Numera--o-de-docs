@@ -42,6 +42,7 @@ let state = {
     secretariats: [...DEFAULT_SECRETARIATS],
     secretariaPermissions: {}, // { secretaria: [docIds] }
     filters: { search: '', tipo: '', sec: '', from: '', to: '' },
+    reportFilters: { tipo: '', sec: '', from: '', to: '', status: '' },
     logFilter: 'todos',
     prefs: { yearlyReset: true, notify: true, autoBackup: false },
     loading: false
@@ -1155,8 +1156,32 @@ function loadScriptOnce(url) {
     });
     return _loadedScripts[url];
 }
+// Reservas do relatório após aplicar os parâmetros escolhidos pelo usuário
+// (tipo, secretaria, período e status), sempre dentro do que ele pode ver.
+function getReportReservations() {
+    const f = state.reportFilters || {};
+    let list = getVisibleReservations();
+    if (f.tipo) list = list.filter(r => r.docName === f.tipo);
+    if (f.sec) list = list.filter(r => (r.userSecretaria || '') === f.sec);
+    if (f.from) list = list.filter(r => isoDate(r.timestamp) >= f.from);
+    if (f.to) list = list.filter(r => isoDate(r.timestamp) <= f.to);
+    if (f.status === 'ativa') list = list.filter(r => r.status !== 'anulada');
+    else if (f.status === 'anulada') list = list.filter(r => r.status === 'anulada');
+    return list;
+}
+// Descrição legível dos filtros aplicados (para o cabeçalho do PDF/toast)
+function reportFilterDescription() {
+    const f = state.reportFilters || {};
+    const parts = [];
+    if (f.tipo) parts.push(`Tipo: ${f.tipo}`);
+    if (f.sec) parts.push(`Secretaria: ${f.sec}`);
+    if (f.from || f.to) parts.push(`Período: ${f.from ? formatDate(f.from) : '…'} a ${f.to ? formatDate(f.to) : '…'}`);
+    if (f.status === 'ativa') parts.push('Somente ativas');
+    else if (f.status === 'anulada') parts.push('Somente anuladas');
+    return parts.length ? parts.join(' · ') : 'Todos os registros';
+}
 function exportRows() {
-    return getVisibleReservations().map(r => ({
+    return getReportReservations().map(r => ({
         'Número': r.formattedNumber, 'Documento': r.docName, 'Ementa': r.subject || '',
         'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '',
         'Reservado por': r.userName, 'Secretaria origem': r.userSecretaria || '',
@@ -1164,7 +1189,7 @@ function exportRows() {
         'Status': r.status === 'anulada' ? `Anulada — ${r.cancelReason || ''}` : 'Ativa'
     }));
 }
-function exportFileName(ext) { return `historico-reservas-${new Date().toISOString().slice(0, 10)}.${ext}`; }
+function exportFileName(ext) { return `relatorio-numeracao-${new Date().toISOString().slice(0, 10)}.${ext}`; }
 
 async function exportExcel() {
     const rows = exportRows();
@@ -1188,13 +1213,14 @@ async function exportPdf() {
         await loadScriptOnce('https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js');
         await loadScriptOnce('https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
         const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        doc.setFontSize(14); doc.text('Histórico de Reservas — Prefeitura de Cataguases', 14, 14);
+        doc.setFontSize(14); doc.text('Relatório de Numeração — Prefeitura de Cataguases', 14, 14);
         doc.setFontSize(9); doc.setTextColor(120);
         const scope = state.currentUser.role === 'admin' ? 'todas as secretarias' : (state.currentUser.secretaria || 'minhas reservas');
         doc.text(`Gerado em ${formatDate(new Date())} ${formatTime(new Date())} — ${scope} — ${rows.length} registro(s)`, 14, 20);
+        doc.text(`Filtros: ${reportFilterDescription()}`, 14, 25);
         const headers = Object.keys(rows[0]);
         doc.autoTable({
-            startY: 25, head: [headers], body: rows.map(r => headers.map(h => r[h])),
+            startY: 30, head: [headers], body: rows.map(r => headers.map(h => r[h])),
             styles: { fontSize: 7, cellPadding: 1.5, overflow: 'linebreak' }, headStyles: { fillColor: [0, 113, 227] },
             columnStyles: { 2: { cellWidth: 60 } },
             didParseCell: (data) => { if (data.section === 'body' && String(rows[data.row.index]['Status']).startsWith('Anulada')) data.cell.styles.textColor = [185, 28, 28]; }
@@ -1208,8 +1234,9 @@ function exportBackup() {
     try {
         const backup = {
             geradoEm: new Date().toISOString(),
+            filtros: reportFilterDescription(),
             documentos: state.documents,
-            reservas: getVisibleReservations(),
+            reservas: getReportReservations(),
             secretarias: state.secretariats
         };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -1221,14 +1248,38 @@ function exportBackup() {
     } catch (err) { showToast('Erro no backup: ' + err.message, 'error'); }
 }
 
+function onReportFilter(key, value) {
+    state.reportFilters[key] = value;
+    refreshReportSummary();
+}
+function clearReportFilters() {
+    state.reportFilters = { tipo: '', sec: '', from: '', to: '', status: '' };
+    if (state.view === 'relatorios') render();
+}
+function reportSummaryHtml() {
+    const sel = getReportReservations();
+    const ativas = sel.filter(r => r.status !== 'anulada').length;
+    const anuladas = sel.length - ativas;
+    const tiposN = new Set(sel.map(r => r.docName)).size;
+    const tile = (v, l) => `<div><div class="sum-val">${v}</div><div class="sum-label">${l}</div></div>`;
+    return tile(sel.length.toLocaleString('pt-BR'), 'Registros selecionados') +
+        tile(ativas.toLocaleString('pt-BR'), 'Ativas') +
+        tile(anuladas.toLocaleString('pt-BR'), 'Anuladas') +
+        tile(tiposN, 'Tipos');
+}
+function refreshReportSummary() {
+    const n = getReportReservations().length;
+    const c = document.getElementById('reportCount'); if (c) c.textContent = `${n} registro(s) selecionado(s)`;
+    const s = document.getElementById('reportSummary'); if (s) s.innerHTML = reportSummaryHtml();
+    const d = document.getElementById('reportFilterDesc'); if (d) d.textContent = reportFilterDescription();
+}
+
 function renderRelatorios() {
-    const year = new Date().getFullYear();
-    const ativas = getVisibleReservations().filter(r => r.status !== 'anulada');
-    const noAno = ativas.filter(r => new Date(r.timestamp).getFullYear() === year);
-    const tipos = new Set(noAno.map(r => r.docName)).size;
-    const secs = new Set(noAno.map(r => r.userSecretaria).filter(Boolean)).size;
-    const dayOfYear = Math.max(1, Math.ceil((Date.now() - new Date(year, 0, 0)) / 86400000));
-    const media = (noAno.length / dayOfYear).toFixed(1).replace('.', ',');
+    const f = state.reportFilters;
+    const typeOpts = state.documents.map(d => d.name).sort((a, b) => a.localeCompare(b, 'pt-BR'))
+        .map(n => `<option value="${esc(n)}" ${f.tipo === n ? 'selected' : ''}>${esc(n)}</option>`).join('');
+    const secOpts = state.secretariats.map(s => `<option value="${esc(s)}" ${f.sec === s ? 'selected' : ''}>${esc(s)}</option>`).join('');
+    const n = getReportReservations().length;
 
     const card = (hue, ic, title, desc, btn, action) => `
       <div class="card export-card">
@@ -1238,22 +1289,40 @@ function renderRelatorios() {
       </div>`;
 
     return `<div class="view">
-      <div class="page-head"><div><div class="page-title">Relatórios</div>
-        <div class="page-sub">Exporte os dados de numeração por período e formato</div></div></div>
-      <div class="grid-3">
-        ${card(354, icon('tipos', 22, 1.9), 'Relatório PDF', 'Documento formatado, pronto para arquivo e impressão.', 'Exportar PDF', 'exportPdf()')}
-        ${card(145, icon('list', 22, 1.9), 'Planilha Excel', 'Tabela completa de reservas para análise e conferência.', 'Exportar Excel', 'exportExcel()')}
-        ${card(210, icon('relatorios', 22, 1.9), 'Backup JSON', 'Cópia dos dados de numeração para importação futura.', 'Baixar backup', 'exportBackup()')}
+      <div class="page-head">
+        <div><div class="page-title">Relatórios</div>
+          <div class="page-sub">Escolha os parâmetros e exporte no formato desejado</div></div>
+        <button class="btn btn-ghost btn-pill" onclick="clearReportFilters()">Limpar</button>
       </div>
+
+      <div class="card report-filter">
+        <div class="field"><label class="field-label">Tipo de documento</label>
+          <select class="field-input" onchange="onReportFilter('tipo',this.value)"><option value="">Todos os tipos</option>${typeOpts}</select></div>
+        <div class="field"><label class="field-label">Secretaria</label>
+          <select class="field-input" onchange="onReportFilter('sec',this.value)"><option value="">Todas</option>${secOpts}</select></div>
+        <div class="field"><label class="field-label">Status</label>
+          <select class="field-input" onchange="onReportFilter('status',this.value)">
+            <option value="" ${f.status === '' ? 'selected' : ''}>Todos</option>
+            <option value="ativa" ${f.status === 'ativa' ? 'selected' : ''}>Somente ativas</option>
+            <option value="anulada" ${f.status === 'anulada' ? 'selected' : ''}>Somente anuladas</option>
+          </select></div>
+        <div class="field"><label class="field-label">De</label>
+          <input type="date" class="field-input" value="${esc(f.from)}" oninput="onReportFilter('from',this.value)"></div>
+        <div class="field"><label class="field-label">Até</label>
+          <input type="date" class="field-input" value="${esc(f.to)}" oninput="onReportFilter('to',this.value)"></div>
+      </div>
+      <div class="report-count" id="reportCount">${n} registro(s) selecionado(s)</div>
+
+      <div class="grid-3">
+        ${card(354, icon('tipos', 22, 1.9), 'Relatório PDF', 'Documento formatado com os filtros aplicados, pronto para arquivo.', 'Exportar PDF', 'exportPdf()')}
+        ${card(145, icon('list', 22, 1.9), 'Planilha Excel', 'Tabela dos registros selecionados para análise e conferência.', 'Exportar Excel', 'exportExcel()')}
+        ${card(210, icon('relatorios', 22, 1.9), 'Backup JSON', 'Cópia dos dados (respeitando os filtros) para importação futura.', 'Baixar backup', 'exportBackup()')}
+      </div>
+
       <div class="card">
-        <div class="card-title">Resumo do período</div>
-        <div class="card-note" style="margin:4px 0 18px;">Ano de ${year}</div>
-        <div class="grid-4 summary">
-          <div><div class="sum-val">${noAno.length.toLocaleString('pt-BR')}</div><div class="sum-label">Documentos numerados</div></div>
-          <div><div class="sum-val">${tipos}</div><div class="sum-label">Tipos utilizados</div></div>
-          <div><div class="sum-val">${secs}</div><div class="sum-label">Secretarias ativas</div></div>
-          <div><div class="sum-val">${media}</div><div class="sum-label">Média por dia</div></div>
-        </div>
+        <div class="card-title">Resumo da seleção</div>
+        <div class="card-note" id="reportFilterDesc" style="margin:4px 0 18px;">${esc(reportFilterDescription())}</div>
+        <div class="grid-4 summary" id="reportSummary">${reportSummaryHtml()}</div>
       </div>
     </div>`;
 }
