@@ -33,6 +33,7 @@ let state = {
     view: 'inicio',
     collapsed: false,
     zoom: 100,
+    demoMode: false,
     currentUser: null,
     documents: [],
     counters: {},              // `${doc_id}|${secretaria}|${year}` -> próximo número
@@ -437,6 +438,287 @@ function requestNotificationPermission() {
     }
 }
 
+// ============================================================
+// Modo demonstração — sandbox 100% em memória.
+//
+// Troca a variável global `supabase` por um cliente falso (mesma
+// interface .from()/.rpc()/.auth) que lê e escreve só num objeto JS local
+// (`demoDb`). Todo o resto do app (reservar, aprovar, editar, anular,
+// configurar secretaria/documento...) continua usando exatamente as
+// mesmas funções de sempre — elas simplesmente deixam de conseguir
+// alcançar o Supabase real enquanto o modo está ativo, então uma ação de
+// demonstração não tem como afetar dado real. Sair = recarregar a página,
+// o que recria o cliente real do zero e não deixa nenhum resquício.
+// ============================================================
+function institutionName() { return state.demoMode ? 'Prefeitura Modelo — Demonstração' : 'Prefeitura de Cataguases'; }
+
+function demoNextId() { return 'demo-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8); }
+
+function DEMO_SEED() {
+    const yr = new Date().getFullYear();
+    const dOficio = 'demo-doc-oficio', dMemo = 'demo-doc-memo', dDecreto = 'demo-doc-decreto',
+        dContrato = 'demo-doc-contrato', dPortaria = 'demo-doc-portaria';
+    const adminId = 'demo-admin', userJoaoId = 'demo-user-joao', userMarciaId = 'demo-user-marcia', userPendId = 'demo-user-pendente';
+    const daysAgo = (n) => new Date(Date.now() - n * 86400000).toISOString();
+
+    const documents = [
+        { id: dOficio, name: 'Ofício', prefix: 'Of.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: yr, per_secretaria: true, enabled: true },
+        { id: dMemo, name: 'Memorando', prefix: 'Mem.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: yr, per_secretaria: true, enabled: true },
+        { id: dDecreto, name: 'Decreto', prefix: 'Dec.', start_number: 1, current_number: 1, yearly_reset: false, last_reset_year: yr, per_secretaria: false, enabled: true },
+        { id: dContrato, name: 'Contrato', prefix: 'Contr.', start_number: 1, current_number: 1, yearly_reset: true, last_reset_year: yr, per_secretaria: true, enabled: true },
+        { id: dPortaria, name: 'Portaria', prefix: 'Port.', start_number: 1, current_number: 1, yearly_reset: false, last_reset_year: yr, per_secretaria: false, enabled: true }
+    ];
+
+    const document_counters = [
+        { doc_id: dOficio, secretaria: 'Administração', year: yr, current_number: 13 },
+        { doc_id: dOficio, secretaria: 'Fazenda', year: yr, current_number: 6 },
+        { doc_id: dMemo, secretaria: 'Administração', year: yr, current_number: 4 },
+        { doc_id: dContrato, secretaria: 'Educação', year: yr, current_number: 2 },
+        { doc_id: dDecreto, secretaria: '', year: 0, current_number: 8 },
+        { doc_id: dPortaria, secretaria: '', year: 0, current_number: 15 }
+    ];
+
+    const app_config = [
+        { key: 'secretaria_list', value: ['Administração', 'Educação', 'Fazenda'] },
+        { key: 'secretariaPermissions', value: { 'Administração': [dOficio, dMemo, dDecreto] } }
+    ];
+
+    const users = [
+        { id: adminId, username: 'demo.admin', name: 'Ana Demonstração', email: 'demo@numera.app', password: 'demo', cargo: 'Administradora do sistema', setor: 'TI', secretaria: 'Administração', role: 'admin', allowed_documents: [], approved: true, card_order: [], created_at: daysAgo(60) },
+        { id: userJoaoId, username: 'joao.demo', name: 'João da Demonstração', email: 'joao@numera.app', password: 'demo', cargo: 'Assistente Administrativo', setor: 'Protocolo', secretaria: 'Administração', role: 'user_restricted', allowed_documents: [dOficio, dMemo, dDecreto], approved: true, card_order: [], created_at: daysAgo(40) },
+        { id: userMarciaId, username: 'marcia.demo', name: 'Márcia Exemplo', email: 'marcia@numera.app', password: 'demo', cargo: 'Analista', setor: 'Contratos', secretaria: 'Fazenda', role: 'user_full', allowed_documents: [], approved: true, card_order: [], created_at: daysAgo(20) },
+        { id: userPendId, username: 'pedro.demo', name: 'Pedro Solicitante', email: 'pedro@numera.app', password: 'demo', cargo: 'Estagiário', setor: 'Secretaria', secretaria: 'Educação', role: 'user_restricted', allowed_documents: [], approved: false, card_order: [], created_at: daysAgo(0) }
+    ];
+
+    const R = (id, docId, docName, number, formatted, sec, status, opts = {}) => ({
+        id, doc_id: docId, doc_name: docName, number, formatted_number: formatted,
+        subject: opts.subject || 'Assunto de exemplo',
+        dest_secretaria: opts.destSec !== undefined ? opts.destSec : 'Fazenda',
+        dest_nome: opts.destNome !== undefined ? opts.destNome : 'Fulano de Tal',
+        dest_setor: opts.destSetor || null, observacoes: opts.observacoes || null,
+        status, cancel_reason: status === 'anulada' ? (opts.cancelReason || 'Emitido em duplicidade') : null,
+        canceled_by_name: status === 'anulada' ? 'Ana Demonstração' : null, edited_at: opts.editedAt || null,
+        user_id: userJoaoId, user_name: 'João da Demonstração', user_cargo: 'Assistente Administrativo', user_setor: 'Protocolo', user_secretaria: sec, bucket_secretaria: sec,
+        timestamp: opts.timestamp || daysAgo(Math.floor(Math.random() * 15) + 1)
+    });
+
+    const reservations = [
+        R('demo-res-1', dOficio, 'Ofício', 10, `Of. 010/${yr}`, 'Administração', 'ativa', { subject: 'Solicitação de manutenção predial', destNome: 'Carlos Souza' }),
+        R('demo-res-2', dOficio, 'Ofício', 11, `Of. 011/${yr}`, 'Administração', 'ativa', { subject: 'Convite para reunião de planejamento', destSetor: 'Gabinete', observacoes: 'Enviar com 5 dias de antecedência' }),
+        R('demo-res-3', dOficio, 'Ofício', 12, `Of. 012/${yr}`, 'Administração', 'anulada', { subject: 'Ofício emitido em duplicidade' }),
+        R('demo-res-4', dMemo, 'Memorando', 3, `Mem. 003/${yr}`, 'Administração', 'ativa', { subject: 'Comunicado interno sobre férias' }),
+        R('demo-res-5', dDecreto, 'Decreto', 7, 'Dec. 007', 'Fazenda', 'ativa', { subject: 'Institui comissão de licitação' }),
+        R('demo-res-6', dContrato, 'Contrato', 1, `Contr. 001/${yr}`, 'Educação', 'ativa', { subject: 'Contratação de serviço de limpeza', editedAt: new Date().toISOString() })
+    ];
+
+    const logs = [
+        { id: demoNextId(), type: 'reserva', action: 'Reservou Ofício', details: `Número: Of. 012/${yr}`, user_id: userJoaoId, user_name: 'João da Demonstração', timestamp: reservations[2].timestamp },
+        { id: demoNextId(), type: 'anulacao', action: `Anulou reserva Of. 012/${yr}`, details: 'Documento: Ofício | Motivo: Emitido em duplicidade', user_id: adminId, user_name: 'Ana Demonstração', timestamp: daysAgo(1) },
+        { id: demoNextId(), type: 'cadastro', action: 'Aprovou usuário', details: 'Márcia Exemplo', user_id: adminId, user_name: 'Ana Demonstração', timestamp: daysAgo(15) }
+    ];
+
+    return { documents, document_counters, app_config, users, reservations, logs };
+}
+
+function rpcReserveNumber(demoDb, p) {
+    const doc = demoDb.documents.find(d => d.id === p.p_doc_id);
+    if (!doc) return { data: null, error: { message: 'Documento não encontrado' } };
+    if (doc.enabled === false) return { data: null, error: { message: 'Documento desativado' } };
+    const user = demoDb.users.find(u => u.id === p.p_user_id);
+    if (!user) return { data: null, error: { message: 'Usuário não encontrado' } };
+    if (user.approved === false && user.role !== 'admin') return { data: null, error: { message: 'Usuário aguarda aprovação do administrador' } };
+    if (user.role === 'user_readonly') return { data: null, error: { message: 'Usuário somente leitura não pode reservar números' } };
+    if (user.role === 'user_restricted' && !(user.allowed_documents || []).includes(doc.id)) return { data: null, error: { message: 'Sem permissão para este tipo de documento' } };
+
+    let bucketSec = '';
+    if (doc.per_secretaria) {
+        bucketSec = (user.secretaria || '').trim();
+        if (!bucketSec) return { data: null, error: { message: 'Defina sua secretaria para reservar este documento' } };
+    }
+    const year = new Date().getFullYear();
+    const bucketYear = doc.yearly_reset ? year : 0;
+
+    let counter = demoDb.document_counters.find(c => c.doc_id === doc.id && c.secretaria === bucketSec && c.year === bucketYear);
+    if (!counter) { counter = { doc_id: doc.id, secretaria: bucketSec, year: bucketYear, current_number: doc.start_number || 1 }; demoDb.document_counters.push(counter); }
+
+    const number = counter.current_number;
+    const padded = String(number).padStart(Math.max(3, String(number).length), '0');
+    const formatted = `${doc.prefix ? doc.prefix + ' ' : ''}${padded}${doc.yearly_reset ? '/' + year : ''}`.trim();
+
+    const row = {
+        id: demoNextId(), doc_id: doc.id, doc_name: doc.name, number, formatted_number: formatted,
+        subject: (p.p_subject || '').trim() || null,
+        dest_secretaria: (p.p_dest_secretaria || '').trim() || null,
+        dest_nome: (p.p_dest_nome || '').trim() || null,
+        dest_setor: (p.p_dest_setor || '').trim() || null,
+        observacoes: (p.p_observacoes || '').trim() || null,
+        status: 'ativa', cancel_reason: null, canceled_by_name: null, edited_at: null,
+        user_id: user.id, user_name: user.name, user_cargo: user.cargo, user_setor: user.setor, user_secretaria: user.secretaria,
+        bucket_secretaria: bucketSec, timestamp: new Date().toISOString()
+    };
+    demoDb.reservations.unshift(row);
+    counter.current_number = number + 1;
+    demoDb.logs.unshift({ id: demoNextId(), type: 'reserva', action: 'Reservou ' + doc.name, details: 'Número: ' + formatted, user_id: user.id, user_name: user.name, timestamp: row.timestamp });
+    return { data: row, error: null };
+}
+
+function rpcCancelReservation(demoDb, p) {
+    const res = demoDb.reservations.find(r => r.id === p.p_reservation_id);
+    if (!res) return { data: null, error: { message: 'Reserva não encontrada' } };
+    if (res.status !== 'ativa') return { data: null, error: { message: 'Esta reserva já foi anulada' } };
+    const user = demoDb.users.find(u => u.id === p.p_user_id);
+    if (!user) return { data: null, error: { message: 'Usuário não encontrado' } };
+    if (res.user_id !== user.id && user.role !== 'admin') return { data: null, error: { message: 'Apenas quem reservou (ou um administrador) pode anular esta reserva' } };
+    const reason = (p.p_reason || '').trim();
+    if (!reason) return { data: null, error: { message: 'Informe o motivo da anulação' } };
+    res.status = 'anulada'; res.cancel_reason = reason; res.canceled_at = new Date().toISOString();
+    res.canceled_by = user.id; res.canceled_by_name = user.name;
+    demoDb.logs.unshift({ id: demoNextId(), type: 'anulacao', action: 'Anulou reserva ' + res.formatted_number, details: 'Documento: ' + res.doc_name + ' | Motivo: ' + reason, user_id: user.id, user_name: user.name, timestamp: res.canceled_at });
+    return { data: res, error: null };
+}
+
+function rpcUpdateReservation(demoDb, p) {
+    const res = demoDb.reservations.find(r => r.id === p.p_reservation_id);
+    if (!res) return { data: null, error: { message: 'Reserva não encontrada' } };
+    if (res.status !== 'ativa') return { data: null, error: { message: 'Reserva anulada não pode ser editada' } };
+    const user = demoDb.users.find(u => u.id === p.p_user_id);
+    if (!user) return { data: null, error: { message: 'Usuário não encontrado' } };
+    if (res.user_id !== user.id) return { data: null, error: { message: 'Apenas quem reservou pode editar esta reserva' } };
+
+    const norm = v => (v || '').trim();
+    const oldVals = { subject: res.subject || '', dest_secretaria: res.dest_secretaria || '', dest_nome: res.dest_nome || '', dest_setor: res.dest_setor || '', observacoes: res.observacoes || '' };
+    const newVals = { subject: norm(p.p_subject), dest_secretaria: norm(p.p_dest_secretaria), dest_nome: norm(p.p_dest_nome), dest_setor: norm(p.p_dest_setor), observacoes: norm(p.p_observacoes) };
+    const labels = { subject: 'Ementa', dest_secretaria: 'Secretaria de destino', dest_nome: 'Destinatário', dest_setor: 'Setor de destino', observacoes: 'Observações' };
+    const changes = Object.keys(labels).filter(k => oldVals[k] !== newVals[k]).map(k => `${labels[k]}: "${oldVals[k]}" → "${newVals[k]}"`);
+    const changeText = changes.length ? changes.join('\n') : 'Sem alterações de conteúdo';
+
+    Object.assign(res, {
+        subject: newVals.subject || null, dest_secretaria: newVals.dest_secretaria || null,
+        dest_nome: newVals.dest_nome || null, dest_setor: newVals.dest_setor || null,
+        observacoes: newVals.observacoes || null, edited_at: new Date().toISOString()
+    });
+    demoDb.logs.unshift({ id: demoNextId(), type: 'edicao', action: 'Editou reserva ' + res.formatted_number, details: res.doc_name + '\n' + changeText, user_id: user.id, user_name: user.name, timestamp: res.edited_at });
+    return { data: res, error: null };
+}
+
+function rpcSetSecretariaCounter(demoDb, p) {
+    const doc = demoDb.documents.find(d => d.id === p.p_doc_id);
+    if (!doc) return { data: null, error: { message: 'Documento não encontrado' } };
+    if (!p.p_next_number || p.p_next_number < 1) return { data: null, error: { message: 'Número inicial inválido' } };
+    let sec = '';
+    if (doc.per_secretaria) {
+        sec = (p.p_secretaria || '').trim();
+        if (!sec) return { data: null, error: { message: 'Informe a secretaria' } };
+    }
+    const year = doc.yearly_reset ? (p.p_year || new Date().getFullYear()) : 0;
+    const maxUsed = demoDb.reservations
+        .filter(r => r.doc_id === doc.id && r.bucket_secretaria === sec && (!doc.yearly_reset || String(r.formatted_number).endsWith('/' + year)))
+        .reduce((m, r) => Math.max(m, r.number), 0);
+    if (maxUsed && p.p_next_number <= maxUsed) {
+        return { data: null, error: { message: `Já existe o número ${maxUsed} reservado nesta secretaria; escolha um valor maior que ${maxUsed}` } };
+    }
+    let counter = demoDb.document_counters.find(c => c.doc_id === doc.id && c.secretaria === sec && c.year === year);
+    if (counter) counter.current_number = p.p_next_number;
+    else { counter = { doc_id: doc.id, secretaria: sec, year, current_number: p.p_next_number }; demoDb.document_counters.push(counter); }
+    return { data: counter, error: null };
+}
+
+// Cliente Supabase falso: mesma interface (.from()/.rpc()/.auth/.channel),
+// lendo/escrevendo só em `demoDb` (objeto em memória). Nunca sai da aba.
+function createDemoClient(demoDb) {
+    function matchRow(row, filters) {
+        return filters.every(f => f.type === 'eq' ? row[f.col] == f.val : f.conds.some(c => row[c.col] == c.val));
+    }
+    function builder(table) {
+        let filters = [], single = false, orderCol = null, asc = true, lim = null, updateVals = null, doDelete = false, insertedRows = null;
+        const b = {
+            select() { return b; },
+            eq(col, val) { filters.push({ type: 'eq', col, val }); return b; },
+            or(expr) {
+                const conds = String(expr).replace(/^\(|\)$/g, '').split(',').map(part => {
+                    const m = part.match(/^([^.]+)\.eq\.(.*)$/);
+                    return m ? { col: m[1], val: decodeURIComponent(m[2]) } : null;
+                }).filter(Boolean);
+                filters.push({ type: 'or', conds });
+                return b;
+            },
+            order(col, opts) { orderCol = col; asc = !(opts && opts.ascending === false); return b; },
+            limit(n) { lim = n; return b; },
+            single() { single = true; return b; },
+            insert(rows) {
+                const arr = (Array.isArray(rows) ? rows : [rows]).map(r => ({ id: r.id || demoNextId(), ...r }));
+                demoDb[table] = demoDb[table] || [];
+                demoDb[table].push(...arr);
+                insertedRows = arr;
+                return b;
+            },
+            update(vals) { updateVals = vals; return b; },
+            upsert(row) {
+                demoDb[table] = demoDb[table] || [];
+                const key = table === 'app_config' ? 'key' : 'id';
+                const i = demoDb[table].findIndex(r => r[key] === row[key]);
+                if (i >= 0) Object.assign(demoDb[table][i], row); else demoDb[table].push({ ...row });
+                insertedRows = [row];
+                return b;
+            },
+            delete() { doDelete = true; return b; },
+            then(resolve) {
+                demoDb[table] = demoDb[table] || [];
+                if (insertedRows) { resolve(single ? { data: insertedRows[0] || null, error: null } : { data: insertedRows, error: null }); return; }
+                let rows = demoDb[table].filter(r => matchRow(r, filters));
+                if (doDelete) {
+                    const ids = new Set(rows.map(r => r.id));
+                    demoDb[table] = demoDb[table].filter(r => !ids.has(r.id));
+                    resolve({ data: null, error: null }); return;
+                }
+                if (updateVals) rows.forEach(r => Object.assign(r, updateVals));
+                if (orderCol) rows = [...rows].sort((a, z) => (a[orderCol] < z[orderCol] ? -1 : 1) * (asc ? 1 : -1));
+                if (lim != null) rows = rows.slice(0, lim);
+                resolve(single ? { data: rows[0] || null, error: rows[0] ? null : { code: 'PGRST116' } } : { data: rows, error: null });
+            }
+        };
+        return b;
+    }
+    return {
+        from: builder,
+        rpc(name, params) {
+            const impl = { reserve_number: rpcReserveNumber, cancel_reservation: rpcCancelReservation, update_reservation: rpcUpdateReservation, set_secretaria_counter: rpcSetSecretariaCounter }[name];
+            return Promise.resolve(impl ? impl(demoDb, params) : { data: null, error: { message: 'RPC indisponível no modo demonstração: ' + name } });
+        },
+        auth: {
+            getSession: () => Promise.resolve({ data: { session: null } }),
+            signOut: () => Promise.resolve({ error: null }),
+            signInWithPassword: () => Promise.resolve({ data: {}, error: { message: 'Indisponível no modo demonstração' } }),
+            signUp: () => Promise.resolve({ data: {}, error: { message: 'Indisponível no modo demonstração' } })
+        },
+        channel() { const dead = { on() { return dead; }, subscribe() { return dead; } }; return dead; },
+        removeChannel() { }
+    };
+}
+
+async function enterDemoMode() {
+    const demoDb = DEMO_SEED();
+    supabase = createDemoClient(demoDb);
+    state.demoMode = true;
+    state.currentUser = mapUserRow(demoDb.users[0]);
+    await loadData();
+    state.view = 'inicio';
+    render();
+}
+
+function exitDemoMode() { location.reload(); }
+
+function demoBanner() {
+    if (!state.demoMode) return '';
+    return `<div class="demo-banner">
+      <span class="demo-banner-text">🔧 <b>Modo demonstração</b><span class="demo-banner-desc"> — dados fictícios, nada aqui afeta o sistema real.</span></span>
+      <div class="demo-banner-actions">
+        <button class="btn btn-ghost btn-sm" onclick="enterDemoMode()">Reiniciar</button>
+        <button class="btn btn-primary btn-sm" onclick="exitDemoMode()">Sair</button>
+      </div>
+    </div>`;
+}
+
 async function addLog(type, action, details) {
     try {
         await supabase.from('logs').insert([{ type, action, details, user_id: state.currentUser?.id, user_name: state.currentUser?.name || 'Sistema', timestamp: new Date().toISOString() }]);
@@ -582,6 +864,7 @@ async function handleLogin(e) {
 }
 
 async function handleLogout() {
+    if (state.demoMode) { location.reload(); return; }
     unsubscribeRealtime();
     if (state.currentUser) addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu`);
     await authService.signOut();
@@ -607,6 +890,7 @@ function showLoginView() {
             <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Entrar</button>
           </form>
           <button type="button" class="login-link" onclick="openRegisterModal()">Não tem conta? <b>Criar conta</b></button>
+          <button type="button" class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="enterDemoMode()">${icon('eye', 15, 2)} Ver demonstração</button>
         </div>
       </div>`;
 }
@@ -732,6 +1016,7 @@ function render() {
     const u = state.currentUser;
     const collapsed = state.collapsed;
     const asideW = collapsed ? 78 : 236;
+    document.body.classList.toggle('demo-mode', state.demoMode);
 
     const pending = pendingUsersCount();
     const nav = navItemsFor(u).map(it => {
@@ -748,13 +1033,14 @@ function render() {
     }[state.view] || renderInicio)();
 
     document.getElementById('app-root').innerHTML = `
+      ${demoBanner()}
       <div class="app-shell">
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
 
         <aside class="sidebar ${collapsed ? 'sidebar--collapsed' : ''}" style="width:${asideW}px">
           <div class="brand ${collapsed ? 'brand--center' : ''}">
             <img src="logo.png" alt="Prefeitura" class="brand-logo">
-            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">Prefeitura de Cataguases</div></div>`}
+            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">${esc(institutionName())}</div></div>`}
           </div>
           <button class="collapse-btn ${collapsed ? 'collapse-btn--center' : ''}" onclick="toggleCollapse()" title="Recolher menu">
             <span class="collapse-chevron ${collapsed ? 'collapse-chevron--flip' : ''}">${icon('chevron', 18, 2)}</span>${collapsed ? '' : '<span>Recolher</span>'}
@@ -1466,7 +1752,7 @@ async function exportPdf() {
         await loadScriptOnce('https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js');
         await loadScriptOnce('https://unpkg.com/jspdf-autotable@3.8.2/dist/jspdf.plugin.autotable.min.js');
         const doc = new window.jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        doc.setFontSize(14); doc.text('Numera — Relatório de Numeração — Prefeitura de Cataguases', 14, 14);
+        doc.setFontSize(14); doc.text(`Numera — Relatório de Numeração — ${institutionName()}`, 14, 14);
         doc.setFontSize(9); doc.setTextColor(120);
         const scope = state.currentUser.role === 'admin' ? 'todas as secretarias' : (state.currentUser.secretaria || 'minhas reservas');
         doc.text(`Gerado em ${formatDate(new Date())} ${formatTime(new Date())} — ${scope} — ${rows.length} registro(s)`, 14, 20);
