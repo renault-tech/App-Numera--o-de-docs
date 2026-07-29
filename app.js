@@ -1009,7 +1009,6 @@ function navItemsFor(user) {
         { id: 'inicio', label: 'Início' },
         { id: 'gerar', label: 'Gerar Número' },
         { id: 'historico', label: 'Histórico' },
-        { id: 'tipos', label: 'Tipos' },
         { id: 'relatorios', label: 'Relatórios' },
         { id: 'config', label: 'Configurações' }
     ];
@@ -1034,7 +1033,7 @@ function render() {
 
     const viewHtml = ({
         inicio: renderInicio, gerar: renderGerar, historico: renderHistorico,
-        tipos: renderTipos, relatorios: renderRelatorios, config: renderConfig
+        relatorios: renderRelatorios, config: renderConfig
     }[state.view] || renderInicio)();
 
     document.getElementById('app-root').innerHTML = `
@@ -1072,7 +1071,7 @@ function render() {
           ${tabButton('inicio', 'Início', state.view === 'inicio')}
           ${tabButton('gerar', 'Gerar', state.view === 'gerar')}
           ${tabButton('historico', 'Histórico', state.view === 'historico')}
-          <button class="tab ${['tipos', 'relatorios', 'config'].includes(state.view) ? 'tab--active' : ''}" onclick="openMoreSheet()">
+          <button class="tab ${['relatorios', 'config'].includes(state.view) ? 'tab--active' : ''}" onclick="openMoreSheet()">
             ${icon('list', 23, 2)}<span>Mais</span>${pending > 0 ? `<span class="nav-badge">${pending}</span>` : ''}</button>
         </nav>
       </div>`;
@@ -1094,7 +1093,7 @@ function openMoreSheet() {
       </div>
       <div class="sheet-nav">
         ${link('inicio', 'Início')}${link('gerar', 'Gerar Número')}${link('historico', 'Histórico')}
-        ${link('tipos', 'Tipos')}${link('relatorios', 'Relatórios')}${link('config', 'Configurações')}
+        ${link('relatorios', 'Relatórios')}${link('config', 'Configurações')}
       </div>
       <div class="sheet-zoom"><span>Tamanho do texto</span>
         <div class="zoom-inline"><button onclick="setZoom(-10)">A−</button><span data-zoom-label>${state.zoom}%</span><button onclick="setZoom(10)">A+</button></div>
@@ -1580,10 +1579,9 @@ async function editReservation(id) {
 }
 
 // ============================================================
-// View: Tipos de Documento
+// Configurações › Tipos de Documento
 // ============================================================
-function renderTipos() {
-    const isAdmin = state.currentUser.role === 'admin';
+function renderTiposPanel(isAdmin) {
     const docs = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     const rows = docs.map(d => {
         const resetBadge = d.yearly ? '' : '';
@@ -1607,14 +1605,10 @@ function renderTipos() {
         </div>`;
     }).join('');
 
-    return `<div class="view">
-      <div class="page-head">
-        <div><div class="page-title">Tipos de Documento</div>
-          <div class="page-sub">${state.documents.length} tipos configurados · prefixo e numeração</div></div>
-        ${isAdmin ? `<button class="btn btn-primary btn-pill" onclick="openDocModal()">${icon('plus', 16, 2.3)} Novo tipo</button>` : ''}
-      </div>
-      <div class="card table-card">${rows}</div>
-    </div>`;
+    return `${isAdmin ? `<div class="adm-add" style="justify-content:flex-end;">
+        <button class="btn btn-primary btn-pill" onclick="openDocModal()">${icon('plus', 16, 2.3)} Novo tipo</button>
+      </div>` : ''}
+      <div class="card table-card">${rows}</div>`;
 }
 
 function openDocModal(docId) {
@@ -1878,17 +1872,18 @@ function renderRelatorios() {
 // isolada, com botão "Voltar", em vez de empilhar tudo numa lista só —
 // importante à medida que a lista de usuários crescer.
 const CONFIG_SECTIONS = {
-    preferencias: { title: 'Preferências', icon: 'config', hue: 210 },
-    secretarias: { title: 'Secretarias', icon: 'building', hue: 265 },
-    usuarios: { title: 'Usuários', icon: 'users', hue: 150 },
-    logs: { title: 'Logs do sistema', icon: 'list', hue: 30 }
+    preferencias: { title: 'Preferências', icon: 'config', hue: 210, adminOnly: false },
+    tipos: { title: 'Tipos de documento', icon: 'tipos', hue: 340, adminOnly: false },
+    secretarias: { title: 'Secretarias', icon: 'building', hue: 265, adminOnly: true },
+    usuarios: { title: 'Usuários', icon: 'users', hue: 150, adminOnly: true },
+    logs: { title: 'Logs do sistema', icon: 'list', hue: 30, adminOnly: true }
 };
 
 function renderConfig() {
     const u = state.currentUser;
     const isAdmin = u.role === 'admin';
     const sec = state.configSection;
-    if (sec && CONFIG_SECTIONS[sec] && (sec === 'preferencias' || isAdmin)) {
+    if (sec && CONFIG_SECTIONS[sec] && (!CONFIG_SECTIONS[sec].adminOnly || isAdmin)) {
         return renderConfigSection(sec, u, isAdmin);
     }
     return renderConfigMenu(u, isAdmin);
@@ -1902,6 +1897,7 @@ function renderConfigMenu(u, isAdmin) {
         const count = id === 'secretarias' ? `${state.secretariats.length} secretaria(s)`
             : id === 'usuarios' ? `${state.users.length} usuário(s)`
             : id === 'logs' ? `${state.logs.length} registro(s)`
+            : id === 'tipos' ? `${state.documents.length} tipo(s)`
             : 'Notificações e backup';
         return `<button class="card config-menu-item" onclick="openConfigSection('${id}')">
           <div class="config-menu-icon" style="background:hsl(${s.hue} 85% 94%);color:hsl(${s.hue} 65% 42%)">${icon(s.icon, 20, 2)}</div>
@@ -1913,7 +1909,7 @@ function renderConfigMenu(u, isAdmin) {
 
     return `<div class="view view--narrow">
       <div class="page-head"><div><div class="page-title">Configurações</div>
-        <div class="page-sub">Perfil, preferências${isAdmin ? ', secretarias, usuários e logs' : ''}</div></div></div>
+        <div class="page-sub">Perfil, preferências, tipos de documento${isAdmin ? ', secretarias, usuários e logs' : ''}</div></div></div>
 
       <div class="card profile-card">
         <div class="avatar avatar--lg">${esc(initials(u.name))}</div>
@@ -1924,6 +1920,7 @@ function renderConfigMenu(u, isAdmin) {
 
       <div class="config-menu">
         ${menuItem('preferencias')}
+        ${menuItem('tipos')}
         ${isAdmin ? menuItem('secretarias') : ''}
         ${isAdmin ? menuItem('usuarios') : ''}
         ${isAdmin ? menuItem('logs') : ''}
@@ -1943,6 +1940,7 @@ function renderConfigSection(id, u, isAdmin) {
           ${toggle('notify', 'Notificar novas reservas', 'Aviso quando um número é gerado')}
           ${toggle('autoBackup', 'Backup automático', 'Lembrete diário para exportar os dados')}
         </div>`,
+        tipos: () => renderTiposPanel(isAdmin),
         secretarias: () => renderSecretariasPanel(),
         usuarios: () => renderUsersPanel(),
         logs: () => `<div class="card"><div class="logs-filter">
