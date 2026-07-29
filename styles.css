@@ -439,6 +439,40 @@ select.field-input { cursor: pointer; }
 .login-link:hover b { text-decoration: underline; }
 .login-wrap { height: 100dvh; }
 
+/* ============================================================
+   Tutorial guiado (balões contextuais + botão "?")
+   ============================================================ */
+.tutorial-help-btn {
+    position: fixed; top: 18px; right: 18px; z-index: 3500;
+    width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--glass-border);
+    background: var(--glass-strong); backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    box-shadow: 0 8px 24px rgba(30, 50, 90, 0.16);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 800; color: var(--blue); cursor: pointer;
+    font-family: inherit; transition: transform .15s ease, box-shadow .15s ease;
+}
+.tutorial-help-btn:hover { transform: scale(1.08); box-shadow: 0 10px 28px rgba(30, 50, 90, 0.22); }
+body.demo-mode .tutorial-help-btn { top: 58px; }
+
+/* Recorte iluminado sobre o elemento explicado; o box-shadow gigante
+   escurece o resto da tela sem precisar de um overlay full-screen à parte. */
+.tutorial-highlight {
+    position: fixed; z-index: 5001; border-radius: 14px; pointer-events: none;
+    box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.6), 0 0 0 9999px rgba(10, 16, 30, 0.55);
+}
+.tutorial-balloon {
+    position: fixed; z-index: 5002; width: 300px; max-width: calc(100vw - 24px);
+    background: var(--glass-strong); backdrop-filter: blur(34px) saturate(1.6); -webkit-backdrop-filter: blur(34px) saturate(1.6);
+    border: 1px solid var(--glass-border); border-radius: 18px; padding: 18px 20px;
+    box-shadow: 0 20px 55px rgba(10, 16, 30, 0.35); animation: apPop .22s ease;
+}
+.tutorial-balloon--center { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.tutorial-step-count { font-size: 11px; font-weight: 700; color: var(--blue); letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 6px; }
+.tutorial-title { font-size: 15.5px; font-weight: 700; margin-bottom: 6px; }
+.tutorial-text { font-size: 13.5px; color: var(--text-2); line-height: 1.5; }
+.tutorial-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.tutorial-actions-right { display: flex; gap: 8px; }
+
 /* ---------- Responsivo (tablet) ---------- */
 @media (max-width: 1000px) {
     .grid-4 { grid-template-columns: repeat(2, 1fr); }
@@ -549,6 +583,11 @@ select.field-input { cursor: pointer; }
 
     /* Toast: respeita o topo (notch) e não gruda nas bordas */
     .notification-root { top: calc(12px + env(safe-area-inset-top, 0px)); }
+
+    /* Botão de ajuda "?" e balão do tutorial também respeitam o notch */
+    .tutorial-help-btn { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; }
+    body.demo-mode .tutorial-help-btn { top: calc(52px + env(safe-area-inset-top, 0px)); }
+    .tutorial-balloon { width: calc(100vw - 24px); }
 
     /* Botões um pouco maiores para o toque */
     .btn { height: 46px; }

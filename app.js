@@ -47,7 +47,8 @@ let state = {
     logFilter: 'todos',
     prefs: { yearlyReset: true, notify: true, autoBackup: false },
     loading: false,
-    configSection: null        // null = menu de Configurações; string = seção aberta
+    configSection: null,       // null = menu de Configurações; string = seção aberta
+    tutorialTour: null         // { steps, index, context } enquanto um tutorial guiado está aberto
 };
 
 // ============================================================
@@ -1038,6 +1039,7 @@ function render() {
 
     document.getElementById('app-root').innerHTML = `
       ${demoBanner()}
+      <button class="tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela">?</button>
       <div class="app-shell">
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
 
@@ -1075,6 +1077,13 @@ function render() {
             ${icon('list', 23, 2)}<span>Mais</span>${pending > 0 ? `<span class="nav-badge">${pending}</span>` : ''}</button>
         </nav>
       </div>`;
+
+    // Tutorial guiado: se a tela mudou embaixo do tour, encerra (o passo
+    // aponta pra um elemento que não existe mais); senão, ou continua o
+    // passo atual (reaproveita a mesma posição/DOM) ou, sem tour ativo,
+    // confere se esta tela/seção tem passos ainda não vistos.
+    if (state.tutorialTour && state.tutorialTour.context !== tutorialContextKey()) tutorialEnd();
+    if (state.tutorialTour) renderTutorialStep(); else maybeAutoShowTutorial();
 }
 
 function tabButton(id, label, active) {
@@ -1100,6 +1109,221 @@ function openMoreSheet() {
       </div>
       <button class="btn btn-ghost btn-block" onclick="closeModal(); handleLogout()">${icon('logout', 15, 2)} Sair</button>
     `, { width: 460, sheet: true });
+}
+
+// ============================================================
+// Tutorial guiado (balões contextuais)
+// ============================================================
+// CONTRATO PARA MANTER ISSO ATUALIZADO SOZINHO: ao criar uma tela nova ou
+// uma seção nova em Configurações, basta acrescentar uma entrada aqui —
+// nada mais precisa mudar. O motor abaixo cuida de tudo:
+//   • cada passo tem um "id" único e permanente; quando um usuário já
+//     logado vê uma tela e mais tarde ganha passos novos (feature nova),
+//     só os passos com id ainda não visto aparecem sozinhos — o resto do
+//     tutorial (já visto) não volta a incomodar;
+//   • o botão "?" sempre mostra a lista inteira da tela atual, sob
+//     demanda, não importa o que já foi visto;
+//   • se o elemento apontado (selector) não existir no momento (ex.:
+//     lista vazia, botão só de admin), o passo é pulado sem quebrar nada.
+// A chave de cada grupo é o "contexto": o nome da view (state.view) ou,
+// dentro de Configurações, "config:<seção>" (config:menu quando é o menu
+// de cartões, config:preferencias, config:tipos, config:secretarias,
+// config:usuarios, config:logs).
+const TUTORIAL_STEPS = {
+    inicio: [
+        { id: 'inicio-boasvindas', title: 'Bem-vindo ao Numera', text: 'Este é o painel geral: um resumo de tudo que já foi numerado. Vamos dar uma volta rápida pelas telas principais.' },
+        { id: 'inicio-stats', selector: '.grid-4', title: 'Números em destaque', text: 'Total do ano, do mês, a média por dia e quantos tipos de documento estão ativos agora.' },
+        { id: 'inicio-graficos', selector: '.grid-chart', title: 'Evolução e distribuição', text: 'Quantos documentos saíram por mês e quais tipos são mais usados.' },
+        { id: 'inicio-secundo', selector: '.grid-bottom', title: 'Por secretaria e os mais recentes', text: 'Distribuição por secretaria e os últimos números gerados, para conferência rápida.' },
+        { id: 'inicio-cta', selector: '.page-head .btn-primary', title: 'Gerar um número', text: 'Atalho para a tela de gerar número — o mesmo que a aba "Gerar" no menu.' },
+        { id: 'inicio-ajuda', selector: '.tutorial-help-btn', title: 'Precisa rever isso depois?', text: 'Toque neste "?" a qualquer momento, em qualquer tela, para ver as dicas de novo.' }
+    ],
+    gerar: [
+        { id: 'gerar-grid', selector: '#docGrid', title: 'Tipos de documento', text: 'Cada cartão é um tipo habilitado para você. O número mostrado é o próximo disponível.' },
+        { id: 'gerar-drag', selector: '.drag-handle', title: 'Reorganize do seu jeito', text: 'Arraste pelo ícone de pontinhos para reordenar os cartões — a ordem fica salva na sua conta em qualquer aparelho.' },
+        { id: 'gerar-reservar', selector: '.reserve-btn', title: 'Reservar um número', text: 'Toque em Reservar, preencha a ementa e o destinatário e confirme. O número é atribuído na hora e nunca se repete.' }
+    ],
+    historico: [
+        { id: 'hist-filtros', selector: '#filterBar', title: 'Buscar e filtrar', text: 'Busque por número, assunto ou usuário, e refine por tipo, secretaria ou período.' },
+        { id: 'hist-linha', selector: '.table-row', title: 'Detalhes da reserva', text: 'Toque em qualquer linha para ver todos os dados: ementa, destinatário, setor e observações.' },
+        { id: 'hist-acoes', selector: '.row-actions', title: 'Editar ou anular', text: 'Quando você tem permissão, editar e anular aparecem aqui. Anular não libera o número — ele fica marcado como anulado no histórico e nunca é reutilizado.' }
+    ],
+    relatorios: [
+        { id: 'rel-filtros', selector: '.report-filter', title: 'Parâmetros do relatório', text: 'Escolha tipo, secretaria, status e período antes de exportar.' },
+        { id: 'rel-formatos', selector: '.grid-3', title: 'Três formatos de exportação', text: 'PDF pronto para arquivo, Excel para conferência e um backup em JSON dos dados filtrados.' },
+        { id: 'rel-resumo', selector: '#reportSummary', title: 'Resumo da seleção', text: 'Um resumo rápido de quantos registros e como eles se distribuem, sem precisar exportar nada.' }
+    ],
+    'config:menu': [
+        { id: 'cfgmenu-cartoes', selector: '.config-menu', title: 'Configurações em cartões', text: 'Cada cartão abre uma seção isolada, com botão de voltar — nada de lista longa para rolar.' },
+        { id: 'cfgmenu-perfil', selector: '.profile-card', title: 'Seu perfil', text: 'Seu nome, secretaria e nível de acesso ficam sempre visíveis aqui, com o botão de sair ao lado.' }
+    ],
+    'config:preferencias': [
+        { id: 'cfgpref-toggles', selector: '.pref-row', title: 'Notificações e backup', text: 'Ative avisos de novas reservas e o lembrete diário de backup dos dados.' }
+    ],
+    'config:tipos': [
+        { id: 'cfgtipos-lista', selector: '.table-card', title: 'Tipos de documento', text: 'Prefixo e número atual de cada tipo — "por secretaria" quer dizer que a numeração é independente para cada secretaria.' },
+        { id: 'cfgtipos-novo', selector: '.adm-add .btn-primary', title: 'Criar um novo tipo', text: 'Defina nome, prefixo, número inicial e se a numeração reinicia todo ano ou é por secretaria.' }
+    ],
+    'config:secretarias': [
+        { id: 'cfgsec-add', selector: '.adm-add', title: 'Adicionar secretaria', text: 'Cadastre uma secretaria nova para organizar usuários e numeração por setor.' },
+        { id: 'cfgsec-config', selector: '.adm-row', title: 'Configurar cada secretaria', text: 'Defina quais documentos um usuário novo dessa secretaria já recebe por padrão, e a numeração própria quando aplicável.' }
+    ],
+    'config:usuarios': [
+        { id: 'cfgusu-add', selector: '.adm-add', title: 'Buscar ou criar usuário', text: 'Encontre um usuário existente ou crie uma conta nova diretamente por aqui.' },
+        { id: 'cfgusu-aprovar', selector: '.adm-row', title: 'Aprovar cadastros', text: 'Quem se cadastra sozinho fica pendente até um admin aprovar — o selo de aviso aparece até isso acontecer.' }
+    ],
+    'config:logs': [
+        { id: 'cfglogs-filtro', selector: '.logs-filter', title: 'Filtrar por tipo de ação', text: 'Reserva, edição, anulação, cadastro ou sistema — filtre a auditoria pelo que você procura.' },
+        { id: 'cfglogs-lista', selector: '#logsList', title: 'Auditoria completa', text: 'Cada ação relevante fica registrada aqui: quem fez, o quê e quando.' }
+    ]
+};
+
+function tutorialContextKey() {
+    if (state.view === 'config') return 'config:' + (state.configSection || 'menu');
+    return state.view;
+}
+
+function getTutorialSeenIds() {
+    try { return new Set(JSON.parse(localStorage.getItem('tutorialSeen') || '[]')); } catch (e) { return new Set(); }
+}
+function markTutorialSeen(ids) {
+    const seen = getTutorialSeenIds();
+    ids.forEach(id => seen.add(id));
+    localStorage.setItem('tutorialSeen', JSON.stringify([...seen]));
+}
+
+// Chamado ao final de todo render(): mostra sozinho só o que ainda não foi
+// visto nesta tela/seção. Uma tela sem passos (ainda) simplesmente não faz nada.
+function maybeAutoShowTutorial() {
+    if (state.tutorialTour) return;
+    const steps = TUTORIAL_STEPS[tutorialContextKey()];
+    if (!steps || !steps.length) return;
+    const seen = getTutorialSeenIds();
+    const unseen = steps.filter(s => !seen.has(s.id));
+    if (unseen.length) startTutorialSteps(unseen, tutorialContextKey());
+}
+
+// Chamado pelo botão "?": sempre mostra tudo da tela atual, visto ou não.
+function startTutorial() {
+    const key = tutorialContextKey();
+    const steps = TUTORIAL_STEPS[key];
+    if (!steps || !steps.length) { showToast('Ainda não há tutorial para esta tela.', 'info'); return; }
+    startTutorialSteps(steps, key);
+}
+
+function startTutorialSteps(steps, context) {
+    state.tutorialTour = { steps, index: 0, context };
+    renderTutorialStep();
+}
+
+function tutorialRoot() {
+    let r = document.getElementById('tutorial-root');
+    if (!r) { r = document.createElement('div'); r.id = 'tutorial-root'; document.body.appendChild(r); }
+    return r;
+}
+
+let _tutorialCleanup = null;
+function clearTutorialDom() {
+    if (_tutorialCleanup) { _tutorialCleanup(); _tutorialCleanup = null; }
+    tutorialRoot().innerHTML = '';
+}
+
+function renderTutorialStep() {
+    const tour = state.tutorialTour;
+    clearTutorialDom();
+    if (!tour) return;
+    const step = tour.steps[tour.index];
+    const target = step.selector ? document.querySelector(step.selector) : null;
+
+    // Alvo não existe agora (lista vazia, botão só de admin etc.) — pula.
+    if (step.selector && !target) {
+        markTutorialSeen([step.id]);
+        if (tour.index < tour.steps.length - 1) { tour.index++; renderTutorialStep(); }
+        else tutorialEnd();
+        return;
+    }
+    if (target) target.scrollIntoView({ block: 'center', behavior: 'instant' });
+
+    const root = tutorialRoot();
+    const last = tour.index === tour.steps.length - 1;
+    const balloon = document.createElement('div');
+    balloon.className = 'tutorial-balloon' + (target ? '' : ' tutorial-balloon--center');
+    balloon.innerHTML = `
+      <div class="tutorial-step-count">${tour.index + 1} de ${tour.steps.length}</div>
+      <div class="tutorial-title">${esc(step.title)}</div>
+      <div class="tutorial-text">${esc(step.text)}</div>
+      <div class="tutorial-actions">
+        <button class="link-btn" id="tutSkip">Pular tutorial</button>
+        <div class="tutorial-actions-right">
+          ${tour.index > 0 ? '<button class="btn btn-ghost btn-sm" id="tutPrev">Voltar</button>' : ''}
+          <button class="btn btn-primary btn-sm" id="tutNext">${last ? 'Concluir' : 'Próximo'}</button>
+        </div>
+      </div>`;
+
+    let highlight = null;
+    if (target) {
+        highlight = document.createElement('div');
+        highlight.className = 'tutorial-highlight';
+        root.appendChild(highlight);
+    }
+    root.appendChild(balloon);
+
+    document.getElementById('tutSkip').onclick = tutorialSkip;
+    document.getElementById('tutNext').onclick = tutorialNext;
+    const prevBtn = document.getElementById('tutPrev');
+    if (prevBtn) prevBtn.onclick = tutorialPrev;
+
+    function position() {
+        if (!target) return;
+        const r = target.getBoundingClientRect();
+        highlight.style.top = (r.top - 6) + 'px';
+        highlight.style.left = (r.left - 6) + 'px';
+        highlight.style.width = (r.width + 12) + 'px';
+        highlight.style.height = (r.height + 12) + 'px';
+
+        const bw = balloon.offsetWidth, bh = balloon.offsetHeight;
+        const placement = step.placement || (r.bottom + bh + 24 < window.innerHeight ? 'bottom' : 'top');
+        let top = placement === 'top' ? (r.top - bh - 16) : (r.bottom + 16);
+        let left = r.left + r.width / 2 - bw / 2;
+        left = Math.max(12, Math.min(left, window.innerWidth - bw - 12));
+        top = Math.max(12, Math.min(top, window.innerHeight - bh - 12));
+        balloon.style.top = top + 'px';
+        balloon.style.left = left + 'px';
+    }
+    if (target) {
+        position();
+        const reposition = () => position();
+        window.addEventListener('resize', reposition);
+        const mainEl = document.querySelector('.main');
+        if (mainEl) mainEl.addEventListener('scroll', reposition, true);
+        _tutorialCleanup = () => {
+            window.removeEventListener('resize', reposition);
+            if (mainEl) mainEl.removeEventListener('scroll', reposition, true);
+        };
+    }
+
+    markTutorialSeen([step.id]);
+}
+
+function tutorialNext() {
+    const t = state.tutorialTour;
+    if (!t) return;
+    if (t.index < t.steps.length - 1) { t.index++; renderTutorialStep(); }
+    else tutorialEnd();
+}
+function tutorialPrev() {
+    const t = state.tutorialTour;
+    if (!t || t.index === 0) return;
+    t.index--; renderTutorialStep();
+}
+function tutorialSkip() {
+    const t = state.tutorialTour;
+    if (t) markTutorialSeen(t.steps.map(s => s.id));
+    tutorialEnd();
+}
+function tutorialEnd() {
+    clearTutorialDom();
+    state.tutorialTour = null;
 }
 
 // ============================================================
