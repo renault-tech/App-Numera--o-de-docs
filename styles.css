@@ -383,7 +383,7 @@ select.field-input { cursor: pointer; }
 .grid-2-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
 /* ---------- Notifications (toast + dialog) ---------- */
-.notification-root { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 4000; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 460px; padding: 0 1rem; pointer-events: none; }
+.notification-root { position: fixed; top: 20px; left: 0; right: 0; margin: 0 auto; z-index: 4000; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; max-width: 460px; padding: 0 1rem; pointer-events: none; }
 .toast { pointer-events: auto; width: 100%; display: flex; align-items: center; gap: 12px; padding: 13px 16px; background: rgba(28, 32, 42, 0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); color: #fff; border-radius: 14px; box-shadow: 0 16px 40px rgba(20, 30, 60, 0.35); opacity: 0; transform: translateY(-14px); transition: opacity .2s ease, transform .2s ease; }
 .toast--visible { opacity: 1; transform: translateY(0); }
 .toast--leaving { opacity: 0; transform: translateY(-10px); }
@@ -518,15 +518,17 @@ select.field-input { cursor: pointer; }
     .admin-toolbar, .adm-add { flex-direction: column; align-items: stretch; }
     .grid-2-mini { grid-template-columns: 1fr; }
 
-    /* Modais e diálogos viram bottom-sheets */
-    .modal-backdrop, .dialog-backdrop { align-items: flex-end; padding: 0; }
-    .modal-card, .confirm-dialog, .modal-card--sheet {
+    /* Modais viram bottom-sheets (diálogos de confirmação continuam centralizados) */
+    .modal-backdrop { align-items: flex-end; padding: 0; }
+    .modal-card, .modal-card--sheet {
         width: 100% !important; max-width: 100%; max-height: 88dvh;
         border-radius: 22px 22px 0 0; padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px));
         animation: apSheetUp .28s cubic-bezier(0.25, 0.1, 0.25, 1);
     }
     /* "Pega" visual do sheet */
-    .modal-card::before, .confirm-dialog::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 999px; background: rgba(120, 130, 150, 0.3); margin: -6px auto 10px; }
+    .modal-card::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 999px; background: rgba(120, 130, 150, 0.3); margin: -6px auto 10px; }
+    .dialog-backdrop { padding: 16px; }
+    .confirm-dialog { width: 420px; max-width: 100%; }
 
     /* Toast: respeita o topo (notch) e não gruda nas bordas */
     .notification-root { top: calc(12px + env(safe-area-inset-top, 0px)); }
