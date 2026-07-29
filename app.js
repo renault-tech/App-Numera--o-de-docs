@@ -46,7 +46,8 @@ let state = {
     reportFilters: { tipo: '', sec: '', from: '', to: '', status: '' },
     logFilter: 'todos',
     prefs: { yearlyReset: true, notify: true, autoBackup: false },
-    loading: false
+    loading: false,
+    configSection: null        // null = menu de Configurações; string = seção aberta
 };
 
 // ============================================================
@@ -419,7 +420,7 @@ function onLogsRealtime({ new: newRow }) {
 // plano) quando alguém se cadastra e fica pendente de aprovação.
 function notifyNewRegistration(u) {
     showToast(`Novo cadastro pendente: ${u.name}${u.secretaria ? ' — ' + u.secretaria : ''}`, 'info', 8000, {
-        label: 'Ver', onClick: () => { state.view = 'config'; render(); }
+        label: 'Ver', onClick: () => openConfigSection('usuarios')
     });
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
@@ -427,7 +428,7 @@ function notifyNewRegistration(u) {
                 body: `${u.name}${u.secretaria ? ' (' + u.secretaria + ')' : ''} solicitou acesso.`,
                 icon: 'logo.png', tag: 'numera-pending-' + u.id
             });
-            n.onclick = () => { window.focus(); state.view = 'config'; render(); };
+            n.onclick = () => { window.focus(); openConfigSection('usuarios'); };
         } catch (e) { /* navegador sem suporte a Notification */ }
     }
 }
@@ -981,7 +982,11 @@ async function confirmRegister() {
 // ============================================================
 // Shell (sidebar + main) e navegação
 // ============================================================
-function setView(v) { state.view = v; render(); }
+function setView(v) { if (v === 'config') state.configSection = null; state.view = v; render(); }
+
+// Navega direto para uma seção de Configurações (ex.: link "por secretaria" em Tipos).
+function openConfigSection(id) { state.view = 'config'; state.configSection = id; render(); }
+function closeConfigSection() { state.configSection = null; render(); }
 function toggleCollapse() { state.collapsed = !state.collapsed; render(); }
 function setZoom(delta) {
     state.zoom = Math.max(80, Math.min(150, state.zoom + delta));
@@ -1585,7 +1590,7 @@ function renderTipos() {
         const badge = d.yearlyReset ? '<span class="badge badge--blue">Reinicia anual</span>' : '<span class="badge badge--gray">Sequencial</span>';
         const perSec = d.perSecretaria ? '<span class="badge badge--purple">por secretaria</span>' : '';
         const display = d.perSecretaria
-            ? `<a class="link-btn" onclick="setView('config')">por secretaria</a>`
+            ? `<a class="link-btn" onclick="openConfigSection('secretarias')">por secretaria</a>`
             : formatNumber(d, nextNumberFor(d));
         const adminActions = isAdmin ? `<div class="row-actions">
             <button class="icon-btn-sm" title="${d.enabled ? 'Desativar' : 'Ativar'}" onclick="toggleDoc('${d.id}')">${icon(d.enabled ? 'eye' : 'eyeOff', 15, 2)}</button>
@@ -1867,28 +1872,44 @@ function renderRelatorios() {
 }
 
 // ============================================================
-// View: Configurações (perfil + preferências + admin)
+// View: Configurações (perfil + menu segmentado + admin)
 // ============================================================
+// state.configSection === null mostra o menu (cartões); cada seção abre
+// isolada, com botão "Voltar", em vez de empilhar tudo numa lista só —
+// importante à medida que a lista de usuários crescer.
+const CONFIG_SECTIONS = {
+    preferencias: { title: 'Preferências', icon: 'config', hue: 210 },
+    secretarias: { title: 'Secretarias', icon: 'building', hue: 265 },
+    usuarios: { title: 'Usuários', icon: 'users', hue: 150 },
+    logs: { title: 'Logs do sistema', icon: 'list', hue: 30 }
+};
+
 function renderConfig() {
     const u = state.currentUser;
     const isAdmin = u.role === 'admin';
+    const sec = state.configSection;
+    if (sec && CONFIG_SECTIONS[sec] && (sec === 'preferencias' || isAdmin)) {
+        return renderConfigSection(sec, u, isAdmin);
+    }
+    return renderConfigMenu(u, isAdmin);
+}
 
-    const toggle = (key, title, desc) => {
-        const on = !!state.prefs[key];
-        return `<div class="pref-row"><div><div class="pref-title">${esc(title)}</div><div class="pref-desc">${esc(desc)}</div></div>
-          <div class="ios-toggle ${on ? 'ios-toggle--on' : ''}" onclick="togglePref('${key}')"><div class="ios-knob"></div></div></div>`;
+function renderConfigMenu(u, isAdmin) {
+    const pending = pendingUsersCount();
+    const menuItem = (id) => {
+        const s = CONFIG_SECTIONS[id];
+        const badge = id === 'usuarios' && pending > 0 ? `<span class="nav-badge">${pending}</span>` : '';
+        const count = id === 'secretarias' ? `${state.secretariats.length} secretaria(s)`
+            : id === 'usuarios' ? `${state.users.length} usuário(s)`
+            : id === 'logs' ? `${state.logs.length} registro(s)`
+            : 'Notificações e backup';
+        return `<button class="card config-menu-item" onclick="openConfigSection('${id}')">
+          <div class="config-menu-icon" style="background:hsl(${s.hue} 85% 94%);color:hsl(${s.hue} 65% 42%)">${icon(s.icon, 20, 2)}</div>
+          <div class="config-menu-text"><div class="config-menu-title">${esc(s.title)}</div><div class="config-menu-desc">${esc(count)}</div></div>
+          ${badge}
+          <span class="config-menu-chevron">${icon('chevron', 18, 2)}</span>
+        </button>`;
     };
-
-    const adminBlocks = isAdmin ? `
-      <div class="section-label">${icon('building', 15, 2)} Secretarias</div>
-      ${renderSecretariasPanel()}
-      <div class="section-label">${icon('users', 15, 2)} Usuários</div>
-      ${renderUsersPanel()}
-      <div class="section-label">${icon('list', 15, 2)} Logs do sistema</div>
-      <div class="card"><div class="logs-filter">
-        ${['todos', 'reserva', 'edicao', 'anulacao', 'cadastro', 'sistema'].map(t => `<button class="logf ${state.logFilter === t ? 'logf--active' : ''}" onclick="setLogFilter('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
-      </div><div id="logsList">${renderLogsListInner()}</div></div>
-    ` : '';
 
     return `<div class="view view--narrow">
       <div class="page-head"><div><div class="page-title">Configurações</div>
@@ -1901,12 +1922,40 @@ function renderConfig() {
         <button class="btn btn-ghost btn-pill" onclick="handleLogout()">${icon('logout', 15, 2)} Sair</button>
       </div>
 
-      <div class="card">
-        ${toggle('notify', 'Notificar novas reservas', 'Aviso quando um número é gerado')}
-        ${toggle('autoBackup', 'Backup automático', 'Lembrete diário para exportar os dados')}
+      <div class="config-menu">
+        ${menuItem('preferencias')}
+        ${isAdmin ? menuItem('secretarias') : ''}
+        ${isAdmin ? menuItem('usuarios') : ''}
+        ${isAdmin ? menuItem('logs') : ''}
       </div>
+    </div>`;
+}
 
-      ${adminBlocks}
+function renderConfigSection(id, u, isAdmin) {
+    const toggle = (key, title, desc) => {
+        const on = !!state.prefs[key];
+        return `<div class="pref-row"><div><div class="pref-title">${esc(title)}</div><div class="pref-desc">${esc(desc)}</div></div>
+          <div class="ios-toggle ${on ? 'ios-toggle--on' : ''}" onclick="togglePref('${key}')"><div class="ios-knob"></div></div></div>`;
+    };
+
+    const bodies = {
+        preferencias: () => `<div class="card">
+          ${toggle('notify', 'Notificar novas reservas', 'Aviso quando um número é gerado')}
+          ${toggle('autoBackup', 'Backup automático', 'Lembrete diário para exportar os dados')}
+        </div>`,
+        secretarias: () => renderSecretariasPanel(),
+        usuarios: () => renderUsersPanel(),
+        logs: () => `<div class="card"><div class="logs-filter">
+          ${['todos', 'reserva', 'edicao', 'anulacao', 'cadastro', 'sistema'].map(t => `<button class="logf ${state.logFilter === t ? 'logf--active' : ''}" onclick="setLogFilter('${t}')">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
+        </div><div id="logsList">${renderLogsListInner()}</div></div>`
+    };
+
+    return `<div class="view view--narrow">
+      <div class="config-section-head">
+        <button class="btn-back" onclick="closeConfigSection()">${icon('chevron', 18, 2)} Voltar</button>
+        <div class="config-section-title">${esc(CONFIG_SECTIONS[id].title)}</div>
+      </div>
+      ${bodies[id]()}
     </div>`;
 }
 
