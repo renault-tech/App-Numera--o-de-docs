@@ -7,9 +7,9 @@ Tabelas existentes (ver `schema.sql`): `documents`, `users`, `reservations`,
 
 | Tabela | Problema |
 |---|---|
-| `documents` | Sem controle de formato/padding; `current_number` atualizado pelo cliente (corrida); sem trilha de quem criou/alterou |
+| `documents` | Sem controle de formato/padding; `current_number` é **legado desde a 0003** (a fonte real do próximo número é `document_counters`, ver §1.1); sem trilha de quem criou/alterou |
 | `users` | Coluna `password` em texto puro; sem flag de "ativo/desativado" (só `approved`) |
-| `reservations` | **Sem constraint de unicidade** `(doc_id, ano, number)`; sem coluna de status (não há anulação); sem coluna `year` |
+| `reservations` | Status/anulação e `bucket_year` já existem (0004/0010); ✅ **unicidade numérica garantida** por `uq_reservations_doc_bucket_year_number (doc_id, bucket_secretaria, bucket_year, number)`, ver §1.3 |
 | `logs` | Mutável/deletável (política aberta) |
 | `app_config` | OK para chave-valor (secretarias etc.) |
 
@@ -92,6 +92,30 @@ Incluídos também na exportação (Excel/PDF/JSON).
 (`{ "Administração": [doc_ids...] }`) é configurada na tela Secretarias;
 usuários herdam o padrão da sua secretaria ao serem criados/aprovados
 (sem sobrescrever personalizações individuais).
+
+### 1.3 Data de envio + unicidade numérica (migração 0010, 30/07/2026)
+
+`supabase/migrations/0010_data_envio_e_unicidade_numerica.sql` fez duas coisas
+independentes:
+
+- **`reservations.sent_at date`** (opcional): quando o documento foi
+  efetivamente enviado. Preenchível no momento da reserva ou depois, editando
+  a reserva (mesma regra de autoria da 0005). O formulário de reserva mostra
+  um aviso para enviar o documento o quanto antes após pegar o número. Uma
+  reserva ativa sem `sent_at` mostra o selo "envio pendente" no Histórico —
+  só para quem reservou, já que só o autor pode editar.
+- **`reservations.bucket_year integer`** (backfill a partir do sufixo
+  `/AAAA` de `formatted_number`, ou `0` para numeração contínua) +
+  **`uq_reservations_doc_bucket_year_number (doc_id, bucket_secretaria,
+  bucket_year, number)`**: a rede de segurança da RN-01 deixa de depender de
+  uma *string* (`formatted_number` — vulnerável se o prefixo/formato mudar) e
+  passa a ser sobre o número em si, como o schema alvo da seção 2 já previa.
+  O índice antigo (`uq_reservations_doc_bucket_formatted`) permanece; os dois
+  se complementam. `set_secretaria_counter` também passou a comparar
+  `bucket_year` em vez de casar a string do sufixo.
+
+Importante: a atomicidade da reserva **já existia antes desta migração** —
+ver a nota no início da seção 3.
 
 ## 2. Schema alvo (to-be)
 
@@ -201,7 +225,23 @@ create index idx_logs_type        on public.audit_logs (type, created_at desc);
 
 ## 3. Reserva atômica — a função mais importante do sistema
 
-Elimina a condição de corrida atual (leitura no cliente → insert → update).
+> **Status real (atualizado 30/07/2026): já implementado em produção, com um
+> desenho diferente deste rascunho.** O `reserve_number()` que está no ar
+> (última versão em `supabase/migrations/0010_data_envio_e_unicidade_numerica.sql`)
+> já roda numa única transação com `insert ... on conflict do nothing` para
+> criar o bucket + `select ... for update` travando a linha de
+> `document_counters` — dois cliques simultâneos já recebem números distintos
+> hoje, sem precisar do schema `document_types`/`profiles` abaixo. As
+> diferenças do que foi implementado para este rascunho: o lock é na linha do
+> **bucket** (`document_counters`), não no tipo de documento inteiro — não
+> serializa reservas de secretarias diferentes umas atrás das outras;
+> identidade vem de `p_user_id` (o app ainda não usa Supabase Auth, ver item
+> 1.4 do roadmap), não de `auth.uid()`; o reset anual é estrutural (bucket por
+> ano), não um `current_year` com verificação preguiçosa. O que este
+> rascunho previa como "rede de segurança" (constraint numérica) chegou na
+> migração 0010, ver §1.3. O texto abaixo continua valendo como referência de
+> desenho para uma eventual migração para Supabase Auth (roadmap 1.4/1.5).
+
 Tudo acontece numa transação com lock de linha:
 
 ```sql

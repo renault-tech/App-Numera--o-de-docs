@@ -19,14 +19,14 @@ dev não aponta para produção.
 
 | # | Item | Ref | Prioridade |
 |---|---|---|---|
-| 1.1 | Constraint de unicidade — ✅ parcial 13/07/2026: índice `UNIQUE (doc_id, formatted_number)` na migração 0002 (colunas `year`/`status`/anulação seguem pendentes) | doc 03 | 🔴 |
-| 1.2 | ✅ 13/07/2026 — Função `reserve_number()` criada (`supabase/migrations/0002_reserve_number_rpc.sql`) e frontend chama via RPC com fallback legado. **Pendente: rodar a migração no projeto Supabase de produção** | doc 03 §3 | 🔴 |
+| 1.1 | ✅ 30/07/2026 — Constraint de unicidade **numérica**: `uq_reservations_doc_bucket_year_number (doc_id, bucket_secretaria, bucket_year, number)`, migração 0010. `status`/anulação já existiam desde a 0004 | doc 03 §1.3 | ✅ |
+| 1.2 | ✅ 13/07/2026 (e reforçado 30/07/2026) — `reserve_number()` roda numa transação com `insert ... on conflict do nothing` + `select ... for update` na linha do bucket em `document_counters`; dois cliques simultâneos já recebem números distintos hoje. Migração aplicada em produção; não há mais fallback legado no frontend (`confirmReserve` exige a RPC) | doc 03 §3 | ✅ |
 | 1.3 | Reset anual server-side (pg_cron + verificação na função) | doc 03 §5 | 🔴 |
 | 1.4 | Migração para Supabase Auth exclusivo; remover senhas em texto puro | doc 04 S1 | 🔴 |
 | 1.5 | Políticas RLS reais em todas as tabelas | doc 04 S2 | 🔴 |
 | 1.6 | Logs imutáveis (insert-only) | doc 04 | 🔴 |
 | 1.7 | Corrigir XSS (eliminar `innerHTML` com dados) | doc 04 S3 | 🟡 |
-| 1.8 | Teste de corrida automatizado (2+ reservas simultâneas) | doc 09 | 🟡 |
+| 1.8 | Teste de corrida automatizado (2+ reservas simultâneas) — a atomicidade está provada por desenho (lock de linha, ver 1.2), mas falta um teste que dispare 2 chamadas HTTP reais simultâneas ao RPC (fora do navegador) e confirme números distintos no banco | doc 09 | 🟡 |
 
 **Critério de conclusão**: checklist do doc 04 §4 todo verde; RN-01 garantida
 por constraint + teste.
@@ -64,6 +64,8 @@ por constraint + teste.
 | 3.15 | ✅ 21/07/2026 — **Otimização mobile (PWA app-like)** | No celular: barra de navegação inferior (tab bar) + sheet "Mais", modais/diálogos viram bottom-sheets, histórico vira cartões (com rótulos), filtros recolhíveis, cards em 2 colunas, reordenação por toque (alça pointer/touch), áreas seguras (notch), 100dvh, sem rolagem horizontal. Instalável na tela inicial (manifest.json + meta apple/mobile, `logo.png` como ícone). Desktop inalterado. Testado headless em viewport de celular (19 checks) | 🟢 |
 | 3.17 | ✅ 22/07/2026 — **Realtime (sem F5) + notificação de cadastro pendente** | `supabase.channel(...).on('postgres_changes', ...)` nas tabelas users/reservations/documents/document_counters/app_config/logs (habilitadas na publicação `supabase_realtime`, migração 0009) — a tela atualiza sozinha quando outro usuário/aba muda algo. Quando alguém se cadastra pendente de aprovação, o admin recebe toast + notificação nativa do navegador (mesmo com a aba em segundo plano) e um selo com a contagem de pendentes aparece no menu "Configurações" (sidebar, tab bar e sheet "Mais" no celular) | 🟢 |
 | 3.18 | ✅ 23/07/2026 — **Modo demonstração** | Botão "Ver demonstração" na tela de login: troca a variável global `supabase` por um cliente falso (`createDemoClient`) que reimplementa `reserve_number`/`cancel_reservation`/`update_reservation`/`set_secretaria_counter` e o CRUD das tabelas 100% em memória (`DEMO_SEED`) — nenhuma ação de demonstração chega ao Supabase real (garantido estruturalmente, não só por convenção). Faixa laranja fixa no topo com "Reiniciar"/"Sair"; instituição exibida como "Prefeitura Modelo — Demonstração"; sair recarrega a página (sem resquício de estado). Testado headless (12 checks, incluindo prova de isolamento: zero chamadas ao cliente real durante todo o fluxo) | 🟢 |
+| 3.19 | ✅ 30/07/2026 — **Data de envio do documento** | Campo opcional na reserva (`reservations.sent_at`, migração 0010), com aviso para enviar o documento o quanto antes após pegar o número; editável depois pelo Histórico. Reserva ativa sem `sent_at` mostra o selo "envio pendente" só para quem reservou (exclusivo do autor editar, migração 0005). Incluído na exportação | 🟢 |
+| 3.20 | ✅ 30/07/2026 — **Aviso de número alterado (corrida na reserva)** | O preview de "próximo número" no modal de reserva é relido do servidor ao abrir; se, ainda assim, outra pessoa confirmar uma reserva no mesmo bucket entre a abertura do modal e a confirmação, a reserva desta pessoa sai íntegra (números nunca colidem — ver 1.1/1.2) e um diálogo avisa qual foi o número final. Reforçada a rede de segurança numérica da RN-01 (migração 0010, doc 03 §1.3) | 🟢 |
 
 ## Fase 4 — Evoluções (avaliar demanda real antes)
 

@@ -61,7 +61,7 @@ resolvidas antes de novas funcionalidades grandes.
 
 ## Prioridade imediata (resumo do roadmap)
 
-1. 🔴 **Corrigir condição de corrida da reserva** (dois usuários podem receber o mesmo número) — ver doc 03.
+1. ✅ **Condição de corrida da reserva** — resolvida (lock de linha + unicidade numérica) desde a migração 0010, 30/07/2026 — ver doc 03 §1.3/§3.
 2. 🔴 **Segurança**: remover senhas em texto puro, fechar RLS — ver doc 04.
 3. 🟡 **Limpeza do repositório**: remover ~15 arquivos de backup/patch — ver doc 08.
 4. 🟡 **Refatorar frontend em módulos** — ver doc 02.

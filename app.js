@@ -74,6 +74,14 @@ function brDate(iso) {
     return dd && m ? `${dd}/${m}` : formatDate(iso);
 }
 function isoDate(d) { return new Date(d).toISOString().slice(0, 10); }
+// Data-só (sem hora) formatada sem passar por Date() — evita o deslize de um
+// dia que new Date('AAAA-MM-DD') causa em fusos atrás de UTC (ex.: Brasil).
+function brDateFull(iso) {
+    if (!iso) return '-';
+    const s = String(iso).slice(0, 10);
+    const [y, m, dd] = s.split('-');
+    return dd && m && y ? `${dd}/${m}/${y}` : formatDate(iso);
+}
 
 function initials(name) {
     const parts = String(name || '?').trim().split(/\s+/);
@@ -152,6 +160,8 @@ function showToast(message, type = 'info', duration = 3600, action = null) {
 
 // Diálogo com campos (text/textarea/select). Resolve { confirmed, values }.
 function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'primary', fields = null } = {}) {
+    // Mesma razão do openModal: este diálogo não passa pelo render() principal.
+    if (state.tutorialTour) clearTutorialDom();
     return new Promise((resolve) => {
         const root = notifRoot();
         const back = document.createElement('div'); back.className = 'dialog-backdrop';
@@ -183,10 +193,15 @@ function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'C
             });
             dlg.appendChild(wrap);
         }
+        // cancelText: null => diálogo de aviso, um botão só (ex.: número
+        // alterado por corrida na reserva) — não há o que "cancelar".
+        const singleButton = cancelText === null;
         const actions = document.createElement('div'); actions.className = 'confirm-dialog__actions';
-        const cancel = document.createElement('button'); cancel.className = 'btn btn-ghost'; cancel.textContent = cancelText;
+        const cancel = singleButton ? null : document.createElement('button');
+        if (cancel) { cancel.className = 'btn btn-ghost'; cancel.textContent = cancelText; }
         const ok = document.createElement('button'); ok.className = variant === 'danger' ? 'btn btn-danger' : 'btn btn-primary'; ok.textContent = confirmText;
-        actions.appendChild(cancel); actions.appendChild(ok); dlg.appendChild(actions);
+        if (cancel) actions.appendChild(cancel);
+        actions.appendChild(ok); dlg.appendChild(actions);
         back.appendChild(dlg); root.appendChild(back);
         requestAnimationFrame(() => back.classList.add('dialog-backdrop--visible'));
 
@@ -204,10 +219,10 @@ function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'C
             const values = {}; Object.keys(fieldEls).forEach(k => values[k] = fieldEls[k].value.trim());
             resolve({ confirmed, values });
         };
-        const onKey = (e) => { if (e.key === 'Escape') finish(false); };
-        cancel.onclick = () => finish(false);
+        const onKey = (e) => { if (e.key === 'Escape') finish(singleButton); };
+        if (cancel) cancel.onclick = () => finish(false);
         ok.onclick = () => finish(true);
-        back.onclick = (e) => { if (e.target === back) finish(false); };
+        back.onclick = (e) => { if (e.target === back) finish(singleButton); };
         document.addEventListener('keydown', onKey);
         const firstField = fields && fields.length ? fieldEls[fields[0].name] : ok;
         requestAnimationFrame(() => firstField.focus());
@@ -228,6 +243,10 @@ async function copyToClipboard(text) {
 // sheet:true força o formato de bottom-sheet (usado no menu "Mais" do celular);
 // no celular, qualquer modal já vira bottom-sheet pelo CSS.
 function openModal(innerHtml, { width = 460, sheet = false } = {}) {
+    // Um modal nunca pode ficar bloqueado por um balão do tutorial por cima
+    // (openModal não passa pelo render() principal, então o guard de lá não
+    // alcança este caminho — precisa ser feito aqui também).
+    if (state.tutorialTour) clearTutorialDom();
     const root = overlayRoot();
     root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
     const back = document.getElementById('modalBackdrop');
@@ -254,7 +273,8 @@ function mapReservationRow(r) {
         canceledByName: r.canceled_by_name || '', editedAt: r.edited_at || null,
         userId: r.user_id, userName: r.user_name, userCargo: r.user_cargo,
         userSetor: r.user_setor, userSecretaria: r.user_secretaria,
-        bucketSecretaria: r.bucket_secretaria || '', timestamp: r.timestamp
+        bucketSecretaria: r.bucket_secretaria || '', bucketYear: r.bucket_year,
+        sentAt: r.sent_at || null, timestamp: r.timestamp
     };
 }
 
@@ -492,23 +512,29 @@ function DEMO_SEED() {
         { id: userPendId, username: 'pedro.demo', name: 'Pedro Solicitante', email: 'pedro@numera.app', password: 'demo', cargo: 'Estagiário', setor: 'Secretaria', secretaria: 'Educação', role: 'user_restricted', allowed_documents: [], approved: false, card_order: [], created_at: daysAgo(0) }
     ];
 
-    const R = (id, docId, docName, number, formatted, sec, status, opts = {}) => ({
-        id, doc_id: docId, doc_name: docName, number, formatted_number: formatted,
-        subject: opts.subject || 'Assunto de exemplo',
-        dest_secretaria: opts.destSec !== undefined ? opts.destSec : 'Fazenda',
-        dest_nome: opts.destNome !== undefined ? opts.destNome : 'Fulano de Tal',
-        dest_setor: opts.destSetor || null, observacoes: opts.observacoes || null,
-        status, cancel_reason: status === 'anulada' ? (opts.cancelReason || 'Emitido em duplicidade') : null,
-        canceled_by_name: status === 'anulada' ? 'Ana Demonstração' : null, edited_at: opts.editedAt || null,
-        user_id: userJoaoId, user_name: 'João da Demonstração', user_cargo: 'Assistente Administrativo', user_setor: 'Protocolo', user_secretaria: sec, bucket_secretaria: sec,
-        timestamp: opts.timestamp || daysAgo(Math.floor(Math.random() * 15) + 1)
-    });
+    const daysAgoDate = (n) => daysAgo(n).slice(0, 10);
+    const R = (id, docId, docName, number, formatted, sec, status, opts = {}) => {
+        const doc = documents.find(d => d.id === docId);
+        return {
+            id, doc_id: docId, doc_name: docName, number, formatted_number: formatted,
+            subject: opts.subject || 'Assunto de exemplo',
+            dest_secretaria: opts.destSec !== undefined ? opts.destSec : 'Fazenda',
+            dest_nome: opts.destNome !== undefined ? opts.destNome : 'Fulano de Tal',
+            dest_setor: opts.destSetor || null, observacoes: opts.observacoes || null,
+            sent_at: opts.sentAt || null,
+            status, cancel_reason: status === 'anulada' ? (opts.cancelReason || 'Emitido em duplicidade') : null,
+            canceled_by_name: status === 'anulada' ? 'Ana Demonstração' : null, edited_at: opts.editedAt || null,
+            user_id: userJoaoId, user_name: 'João da Demonstração', user_cargo: 'Assistente Administrativo', user_setor: 'Protocolo', user_secretaria: sec,
+            bucket_secretaria: sec, bucket_year: doc && doc.yearly_reset ? yr : 0,
+            timestamp: opts.timestamp || daysAgo(Math.floor(Math.random() * 15) + 1)
+        };
+    };
 
     const reservations = [
-        R('demo-res-1', dOficio, 'Ofício', 10, `Of. 010/${yr}`, 'Administração', 'ativa', { subject: 'Solicitação de manutenção predial', destNome: 'Carlos Souza' }),
+        R('demo-res-1', dOficio, 'Ofício', 10, `Of. 010/${yr}`, 'Administração', 'ativa', { subject: 'Solicitação de manutenção predial', destNome: 'Carlos Souza', sentAt: daysAgoDate(2) }),
         R('demo-res-2', dOficio, 'Ofício', 11, `Of. 011/${yr}`, 'Administração', 'ativa', { subject: 'Convite para reunião de planejamento', destSetor: 'Gabinete', observacoes: 'Enviar com 5 dias de antecedência' }),
         R('demo-res-3', dOficio, 'Ofício', 12, `Of. 012/${yr}`, 'Administração', 'anulada', { subject: 'Ofício emitido em duplicidade' }),
-        R('demo-res-4', dMemo, 'Memorando', 3, `Mem. 003/${yr}`, 'Administração', 'ativa', { subject: 'Comunicado interno sobre férias' }),
+        R('demo-res-4', dMemo, 'Memorando', 3, `Mem. 003/${yr}`, 'Administração', 'ativa', { subject: 'Comunicado interno sobre férias', sentAt: daysAgoDate(1) }),
         R('demo-res-5', dDecreto, 'Decreto', 7, 'Dec. 007', 'Fazenda', 'ativa', { subject: 'Institui comissão de licitação' }),
         R('demo-res-6', dContrato, 'Contrato', 1, `Contr. 001/${yr}`, 'Educação', 'ativa', { subject: 'Contratação de serviço de limpeza', editedAt: new Date().toISOString() })
     ];
@@ -554,9 +580,10 @@ function rpcReserveNumber(demoDb, p) {
         dest_nome: (p.p_dest_nome || '').trim() || null,
         dest_setor: (p.p_dest_setor || '').trim() || null,
         observacoes: (p.p_observacoes || '').trim() || null,
+        sent_at: p.p_sent_at || null,
         status: 'ativa', cancel_reason: null, canceled_by_name: null, edited_at: null,
         user_id: user.id, user_name: user.name, user_cargo: user.cargo, user_setor: user.setor, user_secretaria: user.secretaria,
-        bucket_secretaria: bucketSec, timestamp: new Date().toISOString()
+        bucket_secretaria: bucketSec, bucket_year: bucketYear, timestamp: new Date().toISOString()
     };
     demoDb.reservations.unshift(row);
     counter.current_number = number + 1;
@@ -588,16 +615,16 @@ function rpcUpdateReservation(demoDb, p) {
     if (res.user_id !== user.id) return { data: null, error: { message: 'Apenas quem reservou pode editar esta reserva' } };
 
     const norm = v => (v || '').trim();
-    const oldVals = { subject: res.subject || '', dest_secretaria: res.dest_secretaria || '', dest_nome: res.dest_nome || '', dest_setor: res.dest_setor || '', observacoes: res.observacoes || '' };
-    const newVals = { subject: norm(p.p_subject), dest_secretaria: norm(p.p_dest_secretaria), dest_nome: norm(p.p_dest_nome), dest_setor: norm(p.p_dest_setor), observacoes: norm(p.p_observacoes) };
-    const labels = { subject: 'Ementa', dest_secretaria: 'Secretaria de destino', dest_nome: 'Destinatário', dest_setor: 'Setor de destino', observacoes: 'Observações' };
+    const oldVals = { subject: res.subject || '', dest_secretaria: res.dest_secretaria || '', dest_nome: res.dest_nome || '', dest_setor: res.dest_setor || '', observacoes: res.observacoes || '', sent_at: res.sent_at || '' };
+    const newVals = { subject: norm(p.p_subject), dest_secretaria: norm(p.p_dest_secretaria), dest_nome: norm(p.p_dest_nome), dest_setor: norm(p.p_dest_setor), observacoes: norm(p.p_observacoes), sent_at: p.p_sent_at || '' };
+    const labels = { subject: 'Ementa', dest_secretaria: 'Secretaria de destino', dest_nome: 'Destinatário', dest_setor: 'Setor de destino', observacoes: 'Observações', sent_at: 'Data de envio' };
     const changes = Object.keys(labels).filter(k => oldVals[k] !== newVals[k]).map(k => `${labels[k]}: "${oldVals[k]}" → "${newVals[k]}"`);
     const changeText = changes.length ? changes.join('\n') : 'Sem alterações de conteúdo';
 
     Object.assign(res, {
         subject: newVals.subject || null, dest_secretaria: newVals.dest_secretaria || null,
         dest_nome: newVals.dest_nome || null, dest_setor: newVals.dest_setor || null,
-        observacoes: newVals.observacoes || null, edited_at: new Date().toISOString()
+        observacoes: newVals.observacoes || null, sent_at: newVals.sent_at || null, edited_at: new Date().toISOString()
     });
     demoDb.logs.unshift({ id: demoNextId(), type: 'edicao', action: 'Editou reserva ' + res.formatted_number, details: res.doc_name + '\n' + changeText, user_id: user.id, user_name: user.name, timestamp: res.edited_at });
     return { data: res, error: null };
@@ -614,7 +641,7 @@ function rpcSetSecretariaCounter(demoDb, p) {
     }
     const year = doc.yearly_reset ? (p.p_year || new Date().getFullYear()) : 0;
     const maxUsed = demoDb.reservations
-        .filter(r => r.doc_id === doc.id && r.bucket_secretaria === sec && (!doc.yearly_reset || String(r.formatted_number).endsWith('/' + year)))
+        .filter(r => r.doc_id === doc.id && r.bucket_secretaria === sec && r.bucket_year === year)
         .reduce((m, r) => Math.max(m, r.number), 0);
     if (maxUsed && p.p_next_number <= maxUsed) {
         return { data: null, error: { message: `Já existe o número ${maxUsed} reservado nesta secretaria; escolha um valor maior que ${maxUsed}` } };
@@ -1081,9 +1108,19 @@ function render() {
     // Tutorial guiado: se a tela mudou embaixo do tour, encerra (o passo
     // aponta pra um elemento que não existe mais); senão, ou continua o
     // passo atual (reaproveita a mesma posição/DOM) ou, sem tour ativo,
-    // confere se esta tela/seção tem passos ainda não vistos.
+    // confere se esta tela/seção tem passos ainda não vistos. Nunca aparece
+    // (nem continua aparecendo) por cima de um modal ou diálogo aberto —
+    // nenhum passo hoje precisa disso, e uma confirmação que o usuário tem
+    // que responder (ex.: aviso de número alterado na reserva) não pode
+    // ficar bloqueada por um balão de dica.
     if (state.tutorialTour && state.tutorialTour.context !== tutorialContextKey()) tutorialEnd();
-    if (state.tutorialTour) renderTutorialStep(); else maybeAutoShowTutorial();
+    if (modalOrDialogOpen()) { if (state.tutorialTour) clearTutorialDom(); }
+    else if (state.tutorialTour) renderTutorialStep();
+    else maybeAutoShowTutorial();
+}
+
+function modalOrDialogOpen() {
+    return !!(document.getElementById('modalBackdrop') || document.querySelector('.dialog-backdrop'));
 }
 
 function tabButton(id, label, active) {
@@ -1141,12 +1178,15 @@ const TUTORIAL_STEPS = {
     gerar: [
         { id: 'gerar-grid', selector: '#docGrid', title: 'Tipos de documento', text: 'Cada cartão é um tipo habilitado para você. O número mostrado é o próximo disponível.' },
         { id: 'gerar-drag', selector: '.drag-handle', title: 'Reorganize do seu jeito', text: 'Arraste pelo ícone de pontinhos para reordenar os cartões — a ordem fica salva na sua conta em qualquer aparelho.' },
-        { id: 'gerar-reservar', selector: '.reserve-btn', title: 'Reservar um número', text: 'Toque em Reservar, preencha a ementa e o destinatário e confirme. O número é atribuído na hora e nunca se repete.' }
+        { id: 'gerar-reservar', selector: '.reserve-btn', title: 'Reservar um número', text: 'Toque em Reservar, preencha a ementa e o destinatário e confirme. O número é atribuído na hora e nunca se repete.' },
+        { id: 'gerar-envio', title: 'Envie o quanto antes', text: 'Ao reservar, você pode informar a data de envio do documento (opcional, dá para preencher depois). Reserve o número só quando o documento estiver pronto para sair, e envie-o o quanto antes.' },
+        { id: 'gerar-conflito', title: 'Duas pessoas reservando junto', text: 'Se outra pessoa confirmar uma reserva no mesmo instante que você, o número nunca se repete — cada um recebe um número diferente automaticamente. Se o seu número final for diferente do que estava sendo mostrado, um aviso explica o que aconteceu.' }
     ],
     historico: [
         { id: 'hist-filtros', selector: '#filterBar', title: 'Buscar e filtrar', text: 'Busque por número, assunto ou usuário, e refine por tipo, secretaria ou período.' },
-        { id: 'hist-linha', selector: '.table-row', title: 'Detalhes da reserva', text: 'Toque em qualquer linha para ver todos os dados: ementa, destinatário, setor e observações.' },
-        { id: 'hist-acoes', selector: '.row-actions', title: 'Editar ou anular', text: 'Quando você tem permissão, editar e anular aparecem aqui. Anular não libera o número — ele fica marcado como anulado no histórico e nunca é reutilizado.' }
+        { id: 'hist-linha', selector: '.table-row', title: 'Detalhes da reserva', text: 'Toque em qualquer linha para ver todos os dados: ementa, destinatário, setor, observações e data de envio.' },
+        { id: 'hist-acoes', selector: '.row-actions', title: 'Editar ou anular', text: 'Quando você tem permissão, editar e anular aparecem aqui. Anular não libera o número — ele fica marcado como anulado no histórico e nunca é reutilizado.' },
+        { id: 'hist-pendente', selector: '.mini-pendente', title: 'Envio pendente', text: 'Esse selo aparece nas suas reservas ativas sem data de envio ainda — edite a reserva para preencher a data assim que enviar o documento.' }
     ],
     relatorios: [
         { id: 'rel-filtros', selector: '.report-filter', title: 'Parâmetros do relatório', text: 'Escolha tipo, secretaria, status e período antes de exportar.' },
@@ -1578,10 +1618,15 @@ function renderGerar() {
 // ============================================================
 // Reserva (modal com destinatário obrigatório)
 // ============================================================
+// Número previsto no instante em que o modal foi aberto — comparado com o
+// número que a RPC realmente devolve, para avisar se alguém reservou junto.
+let _reservePreview = null;
+
 function openReserve(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc || !canReserve(docId)) return;
     const next = formatNumber(doc);
+    _reservePreview = { docId: doc.id, number: nextNumberFor(doc) };
     const secOptions = [...state.secretariats, DEST_EXTERNO].map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
     openModal(`
       <div class="reserve-modal">
@@ -1589,7 +1634,8 @@ function openReserve(docId) {
           <div class="chip chip--xl" style="${chipStyle(doc.name)}">${esc(docAbbr(doc))}</div>
           <div><div class="reserve-eyebrow">Reservar número</div><div class="reserve-name">${esc(doc.name)}</div></div>
         </div>
-        <div class="reserve-next"><div class="reserve-next-label">Próximo número</div><div class="reserve-next-val">${esc(next)}</div></div>
+        <div class="reserve-next"><div class="reserve-next-label">Próximo número</div><div class="reserve-next-val" id="rvNextVal">${esc(next)}</div></div>
+        <div class="detail-banner detail-banner--warn">Envie o documento o quanto antes após reservar o número.</div>
         <div class="field"><label class="field-label">Ementa *</label>
           <textarea id="rvSubject" class="field-input" rows="2" placeholder="Descreva o assunto do documento"></textarea></div>
         <div class="field"><label class="field-label">Secretaria de destino *</label>
@@ -1600,11 +1646,34 @@ function openReserve(docId) {
           <input id="rvDestNome" class="field-input" placeholder="Ex: João da Silva"></div>
         <div class="field"><label class="field-label">Observações (opcional)</label>
           <textarea id="rvObs" class="field-input" rows="2" placeholder="Alguma observação sobre este documento"></textarea></div>
+        <div class="field"><label class="field-label">Data de envio (opcional)</label>
+          <input type="date" id="rvSentAt" class="field-input"></div>
+        <div class="hint">Deixe em branco se ainda não enviou — dá para preencher depois, pelo Histórico.</div>
         <div class="reserve-actions">
           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
           <button class="btn btn-primary" style="flex:1.4" onclick="confirmReserve('${doc.id}')">Confirmar reserva</button>
         </div>
       </div>`, { width: 430 });
+    refreshReservePreview(doc);
+}
+
+// Relê o contador do bucket no servidor ao abrir o modal — o preview local
+// (state.counters) pode estar um passo atrás caso outra reserva tenha
+// acontecido bem antes desta tela ter recebido o update via Realtime.
+// Não bloqueia a abertura do modal; só corrige o número mostrado se preciso.
+async function refreshReservePreview(doc) {
+    try {
+        const sec = docBucketSecretaria(doc, state.currentUser);
+        const year = doc.yearlyReset ? new Date().getFullYear() : 0;
+        const { data } = await supabase.from('document_counters').select('current_number')
+            .eq('doc_id', doc.id).eq('secretaria', sec).eq('year', year);
+        const row = data && data[0];
+        if (!row || !_reservePreview || _reservePreview.docId !== doc.id) return;
+        if (row.current_number === _reservePreview.number) return;
+        _reservePreview.number = row.current_number;
+        const el = document.getElementById('rvNextVal');
+        if (el) el.textContent = formatNumber(doc, row.current_number);
+    } catch (e) { /* preview é só cosmético — sem internet, mantém o valor local */ }
 }
 
 async function confirmReserve(docId) {
@@ -1615,6 +1684,7 @@ async function confirmReserve(docId) {
     const destSetor = document.getElementById('rvDestSetor').value.trim();
     const destNome = document.getElementById('rvDestNome').value.trim();
     const observacoes = document.getElementById('rvObs').value.trim();
+    const sentAt = document.getElementById('rvSentAt').value || null;
     const invalid = (el) => el.classList.add('field-input--invalid');
     let bad = false;
     if (!subject) { invalid(document.getElementById('rvSubject')); bad = true; }
@@ -1622,11 +1692,12 @@ async function confirmReserve(docId) {
     if (!destNome) { invalid(document.getElementById('rvDestNome')); bad = true; }
     if (bad) { showToast('Preencha ementa, secretaria de destino e destinatário.', 'warning'); return; }
 
+    const previewedNumber = _reservePreview && _reservePreview.docId === doc.id ? _reservePreview.number : null;
     try {
         const { data, error } = await supabase.rpc('reserve_number', {
             p_doc_id: doc.id, p_user_id: state.currentUser.id,
             p_subject: subject, p_dest_secretaria: destSec, p_dest_nome: destNome,
-            p_dest_setor: destSetor, p_observacoes: observacoes
+            p_dest_setor: destSetor, p_observacoes: observacoes, p_sent_at: sentAt
         });
         if (error) {
             const missing = error.code === 'PGRST202' || (/reserve_number/.test(error.message || '') && /not find|schema cache/i.test(error.message || ''));
@@ -1636,13 +1707,26 @@ async function confirmReserve(docId) {
         const bucketYear = doc.yearlyReset ? new Date().getFullYear() : 0;
         state.counters[`${doc.id}|${row.bucketSecretaria}|${bucketYear}`] = row.number + 1;
         state.reservations.unshift(row);
+        _reservePreview = null;
         closeModal();
         state.view = 'historico';
         render();
         refreshLogs();
-        showToast(`Número reservado — ${row.formattedNumber}`, 'success', 6000, {
-            label: 'Copiar', onClick: async (b) => { const ok = await copyToClipboard(row.formattedNumber); b.textContent = ok ? 'Copiado ✓' : 'Falhou'; }
-        });
+        if (previewedNumber !== null && previewedNumber !== row.number) {
+            // Alguém reservou o número previsto entre a abertura do modal e a
+            // confirmação — a reserva desta pessoa saiu íntegra (o banco garante
+            // números distintos), só avisamos que o número final é outro.
+            const previstoFmt = formatNumber(doc, previewedNumber);
+            showConfirmDialog({
+                title: 'Número alterado',
+                cancelText: null, confirmText: 'Entendi',
+                message: `O número ${previstoFmt} foi reservado por outra pessoa segundos antes. A sua reserva foi registrada com o número ${row.formattedNumber}.`
+            });
+        } else {
+            showToast(`Número reservado — ${row.formattedNumber}`, 'success', 6000, {
+                label: 'Copiar', onClick: async (b) => { const ok = await copyToClipboard(row.formattedNumber); b.textContent = ok ? 'Copiado ✓' : 'Falhou'; }
+            });
+        }
     } catch (err) {
         console.error('Reserva:', err);
         showToast('Erro ao reservar: ' + err.message, 'error', 0);
@@ -1699,12 +1783,15 @@ function renderHistRows() {
         const anulada = r.status === 'anulada';
         const canEdit = !anulada && canEditReservation(r);
         const canCancel = !anulada && canCancelReservation(r);
+        // Lembrete de envio: só na própria reserva ativa e sem data — quem
+        // pode resolver é sempre quem reservou (só o autor edita, migração 0005).
+        const pendente = !anulada && !r.sentAt && r.userId === state.currentUser.id;
         const actions = (canEdit || canCancel) ? `<span class="row-actions">
             ${canEdit ? `<button class="icon-btn-sm" title="Editar" onclick="event.stopPropagation();editReservation('${r.id}')">${icon('edit', 14, 2)}</button>` : ''}
             ${canCancel ? `<button class="icon-btn-sm danger" title="Anular" onclick="event.stopPropagation();cancelReservation('${r.id}')">${icon('ban', 14, 2)}</button>` : ''}
           </span>` : '';
         return `<div class="table-row table-row--clickable ${anulada ? 'table-row--anulada' : ''}" onclick="showReservationDetail('${r.id}')" title="Ver detalhes">
-          <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}</span>
+          <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}${pendente ? ' <span class="mini-pendente" title="Envio pendente">ENVIO PENDENTE</span>' : ''}</span>
           <span class="cell-ell" title="${esc(r.subject || '')}${r.destNome ? ' — Para: ' + esc(r.destNome) : ''}">${esc(r.subject || '—')}</span>
           <span class="cell-soft" data-label="Secretaria">${esc(r.userSecretaria || '—')}</span>
           <span class="cell-soft" data-label="Usuário">${esc(r.userName)}</span>
@@ -1723,12 +1810,14 @@ function showReservationDetail(id) {
           <div class="chip chip--xl" style="${chipStyle(r.docName)}">${esc(docAbbr({ name: r.docName, prefix: '' }))}</div>
           <div><div class="reserve-eyebrow">${esc(r.docName)}</div><div class="reserve-name">${esc(r.formattedNumber)}</div></div>
         </div>
-        ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>` : ''}
+        ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>`
+            : !r.sentAt ? `<div class="detail-banner detail-banner--warn">Envio pendente — envie o documento o quanto antes</div>` : ''}
         ${row('Ementa', r.subject)}
         ${row('Secretaria de destino', r.destSecretaria)}
         ${row('Setor', r.destSetor)}
         ${row('Destinatário', r.destNome)}
         ${row('Observações', r.observacoes)}
+        ${row('Data de envio', r.sentAt ? brDateFull(r.sentAt) : '')}
         ${row('Reservado por', r.userName + (r.userSecretaria ? ' — ' + r.userSecretaria : ''))}
         ${row('Data', `${brDate(r.timestamp)} ${formatTime(r.timestamp)}`)}
         ${r.editedAt ? row('Editado em', `${brDate(r.editedAt)} ${formatTime(r.editedAt)}`) : ''}
@@ -1783,7 +1872,8 @@ async function editReservation(id) {
             { name: 'destSecretaria', label: 'Secretaria de destino', type: 'select', required: true, options: [...state.secretariats, DEST_EXTERNO], value: r.destSecretaria || '' },
             { name: 'destSetor', label: 'Setor (opcional)', type: 'text', required: false, value: r.destSetor || '' },
             { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, value: r.destNome || '' },
-            { name: 'observacoes', label: 'Observações (opcional)', type: 'textarea', required: false, value: r.observacoes || '' }
+            { name: 'observacoes', label: 'Observações (opcional)', type: 'textarea', required: false, value: r.observacoes || '' },
+            { name: 'sentAt', label: 'Data de envio (opcional)', type: 'date', required: false, value: r.sentAt || '' }
         ]
     });
     if (!res.confirmed) return;
@@ -1791,7 +1881,7 @@ async function editReservation(id) {
         const { data, error } = await supabase.rpc('update_reservation', {
             p_reservation_id: id, p_user_id: state.currentUser.id,
             p_subject: res.values.subject, p_dest_secretaria: res.values.destSecretaria, p_dest_nome: res.values.destNome,
-            p_dest_setor: res.values.destSetor, p_observacoes: res.values.observacoes
+            p_dest_setor: res.values.destSetor, p_observacoes: res.values.observacoes, p_sent_at: res.values.sentAt || null
         });
         if (error) throw error;
         const i = state.reservations.findIndex(x => x.id === id);
@@ -1946,6 +2036,7 @@ function exportRows() {
         'Número': r.formattedNumber, 'Documento': r.docName, 'Ementa': r.subject || '',
         'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '', 'Setor destino': r.destSetor || '',
         'Observações': r.observacoes || '',
+        'Data de envio': r.sentAt ? brDateFull(r.sentAt) : (r.status === 'anulada' ? '' : 'Pendente'),
         'Reservado por': r.userName, 'Secretaria origem': r.userSecretaria || '',
         'Data/hora': `${formatDate(r.timestamp)} ${formatTime(r.timestamp)}`,
         'Status': r.status === 'anulada' ? `Anulada — ${r.cancelReason || ''}` : 'Ativa'
@@ -1960,7 +2051,7 @@ async function exportExcel() {
         showToast('Preparando Excel...', 'info', 2000);
         await loadScriptOnce('https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js');
         const ws = XLSX.utils.json_to_sheet(rows);
-        ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 35 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 26 }];
+        ws['!cols'] = [{ wch: 14 }, { wch: 18 }, { wch: 45 }, { wch: 22 }, { wch: 20 }, { wch: 20 }, { wch: 35 }, { wch: 16 }, { wch: 22 }, { wch: 20 }, { wch: 18 }, { wch: 26 }];
         const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Histórico');
         XLSX.writeFile(wb, exportFileName('xlsx'));
         addLog('sistema', 'Exportou histórico (Excel)', `${rows.length} linhas`);

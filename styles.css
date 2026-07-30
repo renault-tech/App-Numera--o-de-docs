@@ -257,6 +257,7 @@ body.demo-mode .app-shell { height: calc(100dvh - 40px); margin-top: 40px; }
 .detail-value { font-size: 14px; color: var(--text); line-height: 1.45; white-space: pre-line; }
 .detail-banner { font-size: 12.5px; font-weight: 600; padding: 8px 12px; border-radius: 10px; }
 .detail-banner--danger { background: rgba(229, 72, 77, 0.1); color: var(--red); }
+.detail-banner--warn { background: rgba(245, 158, 11, 0.14); color: #92400e; }
 
 /* ---------- Fields ---------- */
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -283,6 +284,7 @@ select.field-input { cursor: pointer; }
 .cell-soft { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell-date { font-size: 12.5px; color: var(--text-3); text-align: right; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .mini-anulada { font-size: 9.5px; font-weight: 700; color: var(--red); background: rgba(229, 72, 77, 0.12); padding: 1px 6px; border-radius: 999px; letter-spacing: 0.4px; }
+.mini-pendente { font-size: 9.5px; font-weight: 700; color: #92400e; background: rgba(245, 158, 11, 0.16); padding: 1px 6px; border-radius: 999px; letter-spacing: 0.4px; }
 .mini-editada { font-size: 10.5px; color: var(--text-3); font-style: italic; }
 .row-actions { display: inline-flex; gap: 4px; }
 .icon-btn-sm { width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(120, 130, 150, 0.2); background: rgba(255, 255, 255, 0.6); color: var(--text-2); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }

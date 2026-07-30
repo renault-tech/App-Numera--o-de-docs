@@ -123,7 +123,10 @@ Em 1º de janeiro, tipos com modo anual voltam ao número inicial
 ## 6. O que o sistema NÃO é (escopo negativo)
 
 - Não é um editor/gerador de documentos (não redige o ofício em si);
-- Não é um protocolo/tramitação de processos (não acompanha o documento após numerado);
+- Não é um protocolo/tramitação de processos (não acompanha o documento após
+  numerado) — a **data de envio** (doc 03 §1.3) é só um metadado de
+  conformidade preenchido pelo próprio usuário, não um rastreamento de
+  tramitação; o sistema não sabe (nem verifica) se o documento realmente saiu;
 - Não é um GED/arquivo digital (não armazena o PDF do documento — embora anexar
   seja um item de backlog futuro, doc 07).
 
