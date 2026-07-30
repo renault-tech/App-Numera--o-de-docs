@@ -1179,14 +1179,13 @@ const TUTORIAL_STEPS = {
         { id: 'gerar-grid', selector: '#docGrid', title: 'Tipos de documento', text: 'Cada cartão é um tipo habilitado para você. O número mostrado é o próximo disponível.' },
         { id: 'gerar-drag', selector: '.drag-handle', title: 'Reorganize do seu jeito', text: 'Arraste pelo ícone de pontinhos para reordenar os cartões — a ordem fica salva na sua conta em qualquer aparelho.' },
         { id: 'gerar-reservar', selector: '.reserve-btn', title: 'Reservar um número', text: 'Toque em Reservar, preencha a ementa e o destinatário e confirme. O número é atribuído na hora e nunca se repete.' },
-        { id: 'gerar-envio', title: 'Envie o quanto antes', text: 'Ao reservar, você pode informar a data de envio do documento (opcional, dá para preencher depois). Reserve o número só quando o documento estiver pronto para sair, e envie-o o quanto antes.' },
+        { id: 'gerar-envio', title: 'Data de envio (opcional)', text: 'Ao reservar, você pode informar a data em que o documento foi enviado — é só um registro à sua disposição, não é obrigatório e não afeta a reserva.' },
         { id: 'gerar-conflito', title: 'Duas pessoas reservando junto', text: 'Se outra pessoa confirmar uma reserva no mesmo instante que você, o número nunca se repete — cada um recebe um número diferente automaticamente. Se o seu número final for diferente do que estava sendo mostrado, um aviso explica o que aconteceu.' }
     ],
     historico: [
         { id: 'hist-filtros', selector: '#filterBar', title: 'Buscar e filtrar', text: 'Busque por número, assunto ou usuário, e refine por tipo, secretaria ou período.' },
         { id: 'hist-linha', selector: '.table-row', title: 'Detalhes da reserva', text: 'Toque em qualquer linha para ver todos os dados: ementa, destinatário, setor, observações e data de envio.' },
-        { id: 'hist-acoes', selector: '.row-actions', title: 'Editar ou anular', text: 'Quando você tem permissão, editar e anular aparecem aqui. Anular não libera o número — ele fica marcado como anulado no histórico e nunca é reutilizado.' },
-        { id: 'hist-pendente', selector: '.mini-pendente', title: 'Envio pendente', text: 'Esse selo aparece nas suas reservas ativas sem data de envio ainda — edite a reserva para preencher a data assim que enviar o documento.' }
+        { id: 'hist-acoes', selector: '.row-actions', title: 'Editar ou anular', text: 'Quando você tem permissão, editar e anular aparecem aqui. Anular não libera o número — ele fica marcado como anulado no histórico e nunca é reutilizado.' }
     ],
     relatorios: [
         { id: 'rel-filtros', selector: '.report-filter', title: 'Parâmetros do relatório', text: 'Escolha tipo, secretaria, status e período antes de exportar.' },
@@ -1635,7 +1634,6 @@ function openReserve(docId) {
           <div><div class="reserve-eyebrow">Reservar número</div><div class="reserve-name">${esc(doc.name)}</div></div>
         </div>
         <div class="reserve-next"><div class="reserve-next-label">Próximo número</div><div class="reserve-next-val" id="rvNextVal">${esc(next)}</div></div>
-        <div class="detail-banner detail-banner--warn">Envie o documento o quanto antes após reservar o número.</div>
         <div class="field"><label class="field-label">Ementa *</label>
           <textarea id="rvSubject" class="field-input" rows="2" placeholder="Descreva o assunto do documento"></textarea></div>
         <div class="field"><label class="field-label">Secretaria de destino *</label>
@@ -1648,7 +1646,7 @@ function openReserve(docId) {
           <textarea id="rvObs" class="field-input" rows="2" placeholder="Alguma observação sobre este documento"></textarea></div>
         <div class="field"><label class="field-label">Data de envio (opcional)</label>
           <input type="date" id="rvSentAt" class="field-input"></div>
-        <div class="hint">Deixe em branco se ainda não enviou — dá para preencher depois, pelo Histórico.</div>
+        <div class="hint">Campo opcional, só para registro — dá para preencher agora ou depois, pelo Histórico.</div>
         <div class="reserve-actions">
           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
           <button class="btn btn-primary" style="flex:1.4" onclick="confirmReserve('${doc.id}')">Confirmar reserva</button>
@@ -1783,15 +1781,12 @@ function renderHistRows() {
         const anulada = r.status === 'anulada';
         const canEdit = !anulada && canEditReservation(r);
         const canCancel = !anulada && canCancelReservation(r);
-        // Lembrete de envio: só na própria reserva ativa e sem data — quem
-        // pode resolver é sempre quem reservou (só o autor edita, migração 0005).
-        const pendente = !anulada && !r.sentAt && r.userId === state.currentUser.id;
         const actions = (canEdit || canCancel) ? `<span class="row-actions">
             ${canEdit ? `<button class="icon-btn-sm" title="Editar" onclick="event.stopPropagation();editReservation('${r.id}')">${icon('edit', 14, 2)}</button>` : ''}
             ${canCancel ? `<button class="icon-btn-sm danger" title="Anular" onclick="event.stopPropagation();cancelReservation('${r.id}')">${icon('ban', 14, 2)}</button>` : ''}
           </span>` : '';
         return `<div class="table-row table-row--clickable ${anulada ? 'table-row--anulada' : ''}" onclick="showReservationDetail('${r.id}')" title="Ver detalhes">
-          <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}${pendente ? ' <span class="mini-pendente" title="Envio pendente">ENVIO PENDENTE</span>' : ''}</span>
+          <span class="cell-num ${anulada ? 'struck' : ''}">${esc(r.formattedNumber)}${anulada ? ' <span class="mini-anulada">ANULADA</span>' : ''}</span>
           <span class="cell-ell" title="${esc(r.subject || '')}${r.destNome ? ' — Para: ' + esc(r.destNome) : ''}">${esc(r.subject || '—')}</span>
           <span class="cell-soft" data-label="Secretaria">${esc(r.userSecretaria || '—')}</span>
           <span class="cell-soft" data-label="Usuário">${esc(r.userName)}</span>
@@ -1810,8 +1805,7 @@ function showReservationDetail(id) {
           <div class="chip chip--xl" style="${chipStyle(r.docName)}">${esc(docAbbr({ name: r.docName, prefix: '' }))}</div>
           <div><div class="reserve-eyebrow">${esc(r.docName)}</div><div class="reserve-name">${esc(r.formattedNumber)}</div></div>
         </div>
-        ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>`
-            : !r.sentAt ? `<div class="detail-banner detail-banner--warn">Envio pendente — envie o documento o quanto antes</div>` : ''}
+        ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>` : ''}
         ${row('Ementa', r.subject)}
         ${row('Secretaria de destino', r.destSecretaria)}
         ${row('Setor', r.destSetor)}
@@ -2036,7 +2030,7 @@ function exportRows() {
         'Número': r.formattedNumber, 'Documento': r.docName, 'Ementa': r.subject || '',
         'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '', 'Setor destino': r.destSetor || '',
         'Observações': r.observacoes || '',
-        'Data de envio': r.sentAt ? brDateFull(r.sentAt) : (r.status === 'anulada' ? '' : 'Pendente'),
+        'Data de envio': r.sentAt ? brDateFull(r.sentAt) : '',
         'Reservado por': r.userName, 'Secretaria origem': r.userSecretaria || '',
         'Data/hora': `${formatDate(r.timestamp)} ${formatTime(r.timestamp)}`,
         'Status': r.status === 'anulada' ? `Anulada — ${r.cancelReason || ''}` : 'Ativa'

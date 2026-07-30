@@ -98,12 +98,11 @@ usuários herdam o padrão da sua secretaria ao serem criados/aprovados
 `supabase/migrations/0010_data_envio_e_unicidade_numerica.sql` fez duas coisas
 independentes:
 
-- **`reservations.sent_at date`** (opcional): quando o documento foi
-  efetivamente enviado. Preenchível no momento da reserva ou depois, editando
-  a reserva (mesma regra de autoria da 0005). O formulário de reserva mostra
-  um aviso para enviar o documento o quanto antes após pegar o número. Uma
-  reserva ativa sem `sent_at` mostra o selo "envio pendente" no Histórico —
-  só para quem reservou, já que só o autor pode editar.
+- **`reservations.sent_at date`** (opcional, 30/07/2026, ajustado 30/07/2026):
+  quando o documento foi efetivamente enviado. Puramente informativo — sem
+  aviso de urgência no formulário e sem sinalização de pendência em nenhuma
+  tela; é só um dado que o usuário pode registrar se quiser, no momento da
+  reserva ou depois, editando-a (mesma regra de autoria da 0005).
 - **`reservations.bucket_year integer`** (backfill a partir do sufixo
   `/AAAA` de `formatted_number`, ou `0` para numeração contínua) +
   **`uq_reservations_doc_bucket_year_number (doc_id, bucket_secretaria,
