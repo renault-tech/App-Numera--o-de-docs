@@ -376,6 +376,12 @@ select.field-input { cursor: pointer; }
 .checks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 2px 12px; max-height: 220px; min-height: 90px; overflow-y: auto; overflow-x: hidden; margin: 6px 0; flex-shrink: 0; }
 .check-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); padding: 5px 0; cursor: pointer; }
 .check-row input { width: 16px; height: 16px; accent-color: var(--blue); }
+/* Opção anulada por uma escolha excludente (ex.: "Todas as secretarias") */
+.check-row--off { opacity: 0.4; cursor: not-allowed; }
+/* Variante compacta para uso dentro de um formulário/diálogo, onde a lista
+   é um campo entre outros e não o conteúdo principal da tela. */
+.checks-grid--inline { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 168px; min-height: 0; margin: 0; border: 1px solid rgba(120, 130, 150, 0.25); border-radius: 12px; padding: 6px 12px; background: rgba(255, 255, 255, 0.6); }
+.checks-grid--inline.field-input--invalid { border-color: var(--red) !important; box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.12) !important; }
 .counter-row { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 8px; }
 
 .logs-filter { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }

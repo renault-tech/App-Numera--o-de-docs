@@ -10,6 +10,42 @@ const SUPABASE_KEY = 'sb_publishable_VAfgn59xk4fN4e3gPSMmLg_OXx6xAjf';
 var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 const DEST_EXTERNO = 'Externo / Outro órgão';
+// Valor sentinela (mesmo padrão do DEST_EXTERNO): gravado literalmente na
+// lista de destinos em vez de expandir para os nomes das secretarias do
+// momento — assim o histórico preserva a intenção ("foi para todas"), e não
+// uma fotografia da lista de secretarias daquele dia.
+const DEST_TODAS = 'Todas as secretarias';
+
+function destSecOptions() { return [DEST_TODAS, ...state.secretariats, DEST_EXTERNO]; }
+// Destinos de uma reserva, normalizados: usa a lista nova (migração 0011) e
+// cai no campo único antigo para reservas anteriores a ela.
+function destSecsOf(r) {
+    if (Array.isArray(r.destSecretarias) && r.destSecretarias.length) return r.destSecretarias;
+    return r.destSecretaria ? [r.destSecretaria] : [];
+}
+function destSecsLabel(r) { return destSecsOf(r).join(', '); }
+
+// Marcar "Todas as secretarias" desmarca e desabilita as demais — escolher
+// todas e uma em particular ao mesmo tempo não quer dizer nada.
+function syncDestChecks(containerId) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    box.classList.remove('field-input--invalid');
+    const inputs = [...box.querySelectorAll('input[type=checkbox]')];
+    const todas = inputs.find(i => i.value === DEST_TODAS);
+    const on = !!(todas && todas.checked);
+    inputs.forEach(i => {
+        if (i === todas) return;
+        i.disabled = on;
+        if (on) i.checked = false;
+        const row = i.closest('.check-row');
+        if (row) row.classList.toggle('check-row--off', on);
+    });
+}
+function checkedValuesOf(containerId) {
+    const box = document.getElementById(containerId);
+    return box ? [...box.querySelectorAll('input[type=checkbox]:checked')].map(i => i.value) : [];
+}
 
 const PERMISSION_LEVELS = {
     admin: { label: 'Administrador', desc: 'Acesso total' },
@@ -169,6 +205,9 @@ function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'C
         dlg.innerHTML = `<div class="confirm-dialog__title">${esc(title)}</div>` +
             (message ? `<div class="confirm-dialog__message">${esc(message)}</div>` : '');
         const fieldEls = {};
+        const fieldKinds = {};
+        // Valor de um campo do tipo "checks" (seleção múltipla por caixinhas).
+        const checksValue = (el) => [...el.querySelectorAll('input[type=checkbox]:checked')].map(i => i.value);
         if (fields && fields.length) {
             const wrap = document.createElement('div'); wrap.className = 'confirm-dialog__fields';
             fields.forEach(f => {
@@ -176,6 +215,36 @@ function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'C
                 const lb = document.createElement('label'); lb.className = 'confirm-dialog__label'; lb.textContent = f.label + (f.required ? ' *' : '');
                 g.appendChild(lb);
                 let el;
+                // Seleção múltipla: lista de caixinhas (mesmo visual do
+                // .checks-grid já usado nas telas de admin). f.exclusive marca
+                // um valor que, quando escolhido, anula e desabilita os demais.
+                if (f.type === 'checks') {
+                    el = document.createElement('div'); el.className = 'checks-grid checks-grid--inline';
+                    const chosen = new Set(Array.isArray(f.value) ? f.value : (f.value ? [f.value] : []));
+                    (f.options || []).forEach(o => {
+                        const row = document.createElement('label'); row.className = 'check-row';
+                        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = o; cb.checked = chosen.has(o);
+                        const sp = document.createElement('span'); sp.textContent = o;
+                        row.appendChild(cb); row.appendChild(sp); el.appendChild(row);
+                    });
+                    const syncExclusive = () => {
+                        if (!f.exclusive) return;
+                        const inputs = [...el.querySelectorAll('input[type=checkbox]')];
+                        const ex = inputs.find(i => i.value === f.exclusive);
+                        const on = !!(ex && ex.checked);
+                        inputs.forEach(i => {
+                            if (i === ex) return;
+                            i.disabled = on;
+                            if (on) i.checked = false;
+                            i.closest('.check-row').classList.toggle('check-row--off', on);
+                        });
+                    };
+                    el.addEventListener('change', () => { syncExclusive(); el.classList.remove('field-input--invalid'); });
+                    syncExclusive();
+                    fieldKinds[f.name] = 'checks';
+                    fieldEls[f.name] = el; g.appendChild(el); wrap.appendChild(g);
+                    return;
+                }
                 if (f.type === 'select') {
                     el = document.createElement('select');
                     const o0 = document.createElement('option'); o0.value = ''; o0.textContent = f.placeholder || 'Selecione...'; el.appendChild(o0);
@@ -208,15 +277,19 @@ function showConfirmDialog({ title = 'Confirmar', message = '', confirmText = 'C
         const valid = () => {
             if (!fields) return true;
             let first = null;
-            fields.forEach(f => { if (f.required && !fieldEls[f.name].value.trim()) { fieldEls[f.name].classList.add('field-input--invalid'); if (!first) first = fieldEls[f.name]; } });
-            if (first) { first.focus(); return false; } return true;
+            fields.forEach(f => {
+                const el = fieldEls[f.name];
+                const empty = fieldKinds[f.name] === 'checks' ? checksValue(el).length === 0 : !el.value.trim();
+                if (f.required && empty) { el.classList.add('field-input--invalid'); if (!first) first = el; }
+            });
+            if (first) { if (first.focus) first.focus(); return false; } return true;
         };
         const finish = (confirmed) => {
             if (confirmed && fields && !valid()) return;
             back.classList.remove('dialog-backdrop--visible');
             setTimeout(() => back.remove(), 180);
             document.removeEventListener('keydown', onKey);
-            const values = {}; Object.keys(fieldEls).forEach(k => values[k] = fieldEls[k].value.trim());
+            const values = {}; Object.keys(fieldEls).forEach(k => values[k] = fieldKinds[k] === 'checks' ? checksValue(fieldEls[k]) : fieldEls[k].value.trim());
             resolve({ confirmed, values });
         };
         const onKey = (e) => { if (e.key === 'Escape') finish(singleButton); };
@@ -267,7 +340,9 @@ function mapReservationRow(r) {
     return {
         id: r.id, docId: r.doc_id, docName: r.doc_name, number: r.number,
         formattedNumber: r.formatted_number, subject: r.subject, ementa: r.ementa,
-        destSecretaria: r.dest_secretaria || '', destNome: r.dest_nome || '',
+        destSecretaria: r.dest_secretaria || '',
+        destSecretarias: Array.isArray(r.dest_secretarias) ? r.dest_secretarias : [],
+        destNome: r.dest_nome || '',
         destSetor: r.dest_setor || '', observacoes: r.observacoes || '',
         status: r.status || 'ativa', cancelReason: r.cancel_reason || '',
         canceledByName: r.canceled_by_name || '', editedAt: r.edited_at || null,
@@ -515,10 +590,11 @@ function DEMO_SEED() {
     const daysAgoDate = (n) => daysAgo(n).slice(0, 10);
     const R = (id, docId, docName, number, formatted, sec, status, opts = {}) => {
         const doc = documents.find(d => d.id === docId);
+        const destSecs = opts.destSecs || [opts.destSec !== undefined ? opts.destSec : 'Fazenda'];
         return {
             id, doc_id: docId, doc_name: docName, number, formatted_number: formatted,
             subject: opts.subject || 'Assunto de exemplo',
-            dest_secretaria: opts.destSec !== undefined ? opts.destSec : 'Fazenda',
+            dest_secretaria: destSecs.join(', '), dest_secretarias: destSecs,
             dest_nome: opts.destNome !== undefined ? opts.destNome : 'Fulano de Tal',
             dest_setor: opts.destSetor || null, observacoes: opts.observacoes || null,
             sent_at: opts.sentAt || null,
@@ -534,8 +610,8 @@ function DEMO_SEED() {
         R('demo-res-1', dOficio, 'Ofício', 10, `Of. 010/${yr}`, 'Administração', 'ativa', { subject: 'Solicitação de manutenção predial', destNome: 'Carlos Souza', sentAt: daysAgoDate(2) }),
         R('demo-res-2', dOficio, 'Ofício', 11, `Of. 011/${yr}`, 'Administração', 'ativa', { subject: 'Convite para reunião de planejamento', destSetor: 'Gabinete', observacoes: 'Enviar com 5 dias de antecedência' }),
         R('demo-res-3', dOficio, 'Ofício', 12, `Of. 012/${yr}`, 'Administração', 'anulada', { subject: 'Ofício emitido em duplicidade' }),
-        R('demo-res-4', dMemo, 'Memorando', 3, `Mem. 003/${yr}`, 'Administração', 'ativa', { subject: 'Comunicado interno sobre férias', sentAt: daysAgoDate(1) }),
-        R('demo-res-5', dDecreto, 'Decreto', 7, 'Dec. 007', 'Fazenda', 'ativa', { subject: 'Institui comissão de licitação' }),
+        R('demo-res-4', dMemo, 'Memorando', 3, `Mem. 003/${yr}`, 'Administração', 'ativa', { subject: 'Comunicado interno sobre férias', destSecs: [DEST_TODAS], destNome: 'Todos os servidores', sentAt: daysAgoDate(1) }),
+        R('demo-res-5', dDecreto, 'Decreto', 7, 'Dec. 007', 'Fazenda', 'ativa', { subject: 'Institui comissão de licitação', destSecs: ['Fazenda', 'Administração'] }),
         R('demo-res-6', dContrato, 'Contrato', 1, `Contr. 001/${yr}`, 'Educação', 'ativa', { subject: 'Contratação de serviço de limpeza', editedAt: new Date().toISOString() })
     ];
 
@@ -573,10 +649,15 @@ function rpcReserveNumber(demoDb, p) {
     const padded = String(number).padStart(Math.max(3, String(number).length), '0');
     const formatted = `${doc.prefix ? doc.prefix + ' ' : ''}${padded}${doc.yearly_reset ? '/' + year : ''}`.trim();
 
+    // Mesma regra de compatibilidade da migração 0011: prefere a lista, cai
+    // no campo único, e mantém dest_secretaria como rótulo já montado.
+    const destSecs = (Array.isArray(p.p_dest_secretarias) && p.p_dest_secretarias.length)
+        ? p.p_dest_secretarias
+        : ((p.p_dest_secretaria || '').trim() ? [(p.p_dest_secretaria || '').trim()] : []);
     const row = {
         id: demoNextId(), doc_id: doc.id, doc_name: doc.name, number, formatted_number: formatted,
         subject: (p.p_subject || '').trim() || null,
-        dest_secretaria: (p.p_dest_secretaria || '').trim() || null,
+        dest_secretaria: destSecs.join(', ') || null, dest_secretarias: destSecs,
         dest_nome: (p.p_dest_nome || '').trim() || null,
         dest_setor: (p.p_dest_setor || '').trim() || null,
         observacoes: (p.p_observacoes || '').trim() || null,
@@ -615,14 +696,18 @@ function rpcUpdateReservation(demoDb, p) {
     if (res.user_id !== user.id) return { data: null, error: { message: 'Apenas quem reservou pode editar esta reserva' } };
 
     const norm = v => (v || '').trim();
+    const destSecs = (Array.isArray(p.p_dest_secretarias) && p.p_dest_secretarias.length)
+        ? p.p_dest_secretarias
+        : (norm(p.p_dest_secretaria) ? [norm(p.p_dest_secretaria)] : []);
     const oldVals = { subject: res.subject || '', dest_secretaria: res.dest_secretaria || '', dest_nome: res.dest_nome || '', dest_setor: res.dest_setor || '', observacoes: res.observacoes || '', sent_at: res.sent_at || '' };
-    const newVals = { subject: norm(p.p_subject), dest_secretaria: norm(p.p_dest_secretaria), dest_nome: norm(p.p_dest_nome), dest_setor: norm(p.p_dest_setor), observacoes: norm(p.p_observacoes), sent_at: p.p_sent_at || '' };
-    const labels = { subject: 'Ementa', dest_secretaria: 'Secretaria de destino', dest_nome: 'Destinatário', dest_setor: 'Setor de destino', observacoes: 'Observações', sent_at: 'Data de envio' };
+    const newVals = { subject: norm(p.p_subject), dest_secretaria: destSecs.join(', '), dest_nome: norm(p.p_dest_nome), dest_setor: norm(p.p_dest_setor), observacoes: norm(p.p_observacoes), sent_at: p.p_sent_at || '' };
+    const labels = { subject: 'Ementa', dest_secretaria: 'Secretarias de destino', dest_nome: 'Destinatário', dest_setor: 'Setor de destino', observacoes: 'Observações', sent_at: 'Data de envio' };
     const changes = Object.keys(labels).filter(k => oldVals[k] !== newVals[k]).map(k => `${labels[k]}: "${oldVals[k]}" → "${newVals[k]}"`);
     const changeText = changes.length ? changes.join('\n') : 'Sem alterações de conteúdo';
 
     Object.assign(res, {
         subject: newVals.subject || null, dest_secretaria: newVals.dest_secretaria || null,
+        dest_secretarias: destSecs,
         dest_nome: newVals.dest_nome || null, dest_setor: newVals.dest_setor || null,
         observacoes: newVals.observacoes || null, sent_at: newVals.sent_at || null, edited_at: new Date().toISOString()
     });
@@ -836,7 +921,7 @@ function getFilteredReservations() {
     if (f.to) list = list.filter(r => isoDate(r.timestamp) <= f.to);
     if (f.search) {
         const q = f.search.toLowerCase();
-        list = list.filter(r => `${r.formattedNumber} ${r.subject || ''} ${r.userName} ${r.docName} ${r.userSecretaria || ''} ${r.destNome || ''} ${r.destSecretaria || ''} ${r.destSetor || ''} ${r.observacoes || ''}`.toLowerCase().includes(q));
+        list = list.filter(r => `${r.formattedNumber} ${r.subject || ''} ${r.userName} ${r.docName} ${r.userSecretaria || ''} ${r.destNome || ''} ${destSecsLabel(r)} ${r.destSetor || ''} ${r.observacoes || ''}`.toLowerCase().includes(q));
     }
     return list;
 }
@@ -1179,6 +1264,7 @@ const TUTORIAL_STEPS = {
         { id: 'gerar-grid', selector: '#docGrid', title: 'Tipos de documento', text: 'Cada cartão é um tipo habilitado para você. O número mostrado é o próximo disponível.' },
         { id: 'gerar-drag', selector: '.drag-handle', title: 'Reorganize do seu jeito', text: 'Arraste pelo ícone de pontinhos para reordenar os cartões — a ordem fica salva na sua conta em qualquer aparelho.' },
         { id: 'gerar-reservar', selector: '.reserve-btn', title: 'Reservar um número', text: 'Toque em Reservar, preencha a ementa e o destinatário e confirme. O número é atribuído na hora e nunca se repete.' },
+        { id: 'gerar-destinos', title: 'Vários destinos na mesma reserva', text: 'As secretarias de destino são caixinhas: marque quantas precisar no mesmo documento. Se for para todas, marque "Todas as secretarias" — ela cobre todas de uma vez e desmarca as demais.' },
         { id: 'gerar-envio', title: 'Data de envio (opcional)', text: 'Ao reservar, você pode informar a data em que o documento foi enviado — é só um registro à sua disposição, não é obrigatório e não afeta a reserva.' },
         { id: 'gerar-conflito', title: 'Duas pessoas reservando junto', text: 'Se outra pessoa confirmar uma reserva no mesmo instante que você, o número nunca se repete — cada um recebe um número diferente automaticamente. Se o seu número final for diferente do que estava sendo mostrado, um aviso explica o que aconteceu.' }
     ],
@@ -1626,7 +1712,8 @@ function openReserve(docId) {
     if (!doc || !canReserve(docId)) return;
     const next = formatNumber(doc);
     _reservePreview = { docId: doc.id, number: nextNumberFor(doc) };
-    const secOptions = [...state.secretariats, DEST_EXTERNO].map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    const secChecks = destSecOptions().map(s =>
+        `<label class="check-row"><input type="checkbox" value="${esc(s)}"> <span>${esc(s)}</span></label>`).join('');
     openModal(`
       <div class="reserve-modal">
         <div class="reserve-head">
@@ -1636,8 +1723,9 @@ function openReserve(docId) {
         <div class="reserve-next"><div class="reserve-next-label">Próximo número</div><div class="reserve-next-val" id="rvNextVal">${esc(next)}</div></div>
         <div class="field"><label class="field-label">Ementa *</label>
           <textarea id="rvSubject" class="field-input" rows="2" placeholder="Descreva o assunto do documento"></textarea></div>
-        <div class="field"><label class="field-label">Secretaria de destino *</label>
-          <select id="rvDestSec" class="field-input"><option value="">Selecione...</option>${secOptions}</select></div>
+        <div class="field"><label class="field-label">Secretarias de destino *</label>
+          <div class="checks-grid checks-grid--inline" id="rvDestSecs" onchange="syncDestChecks('rvDestSecs')">${secChecks}</div>
+          <div class="hint">Marque quantas precisar — ou "${esc(DEST_TODAS)}" para endereçar a todas de uma vez.</div></div>
         <div class="field"><label class="field-label">Setor (opcional)</label>
           <input id="rvDestSetor" class="field-input" placeholder="Ex: Departamento Financeiro"></div>
         <div class="field"><label class="field-label">Nome do destinatário *</label>
@@ -1678,7 +1766,7 @@ async function confirmReserve(docId) {
     const doc = state.documents.find(d => d.id === docId);
     if (!doc) return;
     const subject = document.getElementById('rvSubject').value.trim();
-    const destSec = document.getElementById('rvDestSec').value;
+    const destSecs = checkedValuesOf('rvDestSecs');
     const destSetor = document.getElementById('rvDestSetor').value.trim();
     const destNome = document.getElementById('rvDestNome').value.trim();
     const observacoes = document.getElementById('rvObs').value.trim();
@@ -1686,15 +1774,16 @@ async function confirmReserve(docId) {
     const invalid = (el) => el.classList.add('field-input--invalid');
     let bad = false;
     if (!subject) { invalid(document.getElementById('rvSubject')); bad = true; }
-    if (!destSec) { invalid(document.getElementById('rvDestSec')); bad = true; }
+    if (!destSecs.length) { invalid(document.getElementById('rvDestSecs')); bad = true; }
     if (!destNome) { invalid(document.getElementById('rvDestNome')); bad = true; }
-    if (bad) { showToast('Preencha ementa, secretaria de destino e destinatário.', 'warning'); return; }
+    if (bad) { showToast('Preencha ementa, secretaria(s) de destino e destinatário.', 'warning'); return; }
 
     const previewedNumber = _reservePreview && _reservePreview.docId === doc.id ? _reservePreview.number : null;
     try {
         const { data, error } = await supabase.rpc('reserve_number', {
             p_doc_id: doc.id, p_user_id: state.currentUser.id,
-            p_subject: subject, p_dest_secretaria: destSec, p_dest_nome: destNome,
+            p_subject: subject, p_dest_secretarias: destSecs, p_dest_secretaria: destSecs.join(', '),
+            p_dest_nome: destNome,
             p_dest_setor: destSetor, p_observacoes: observacoes, p_sent_at: sentAt
         });
         if (error) {
@@ -1807,7 +1896,7 @@ function showReservationDetail(id) {
         </div>
         ${r.status === 'anulada' ? `<div class="detail-banner detail-banner--danger">Anulada${r.cancelReason ? ': ' + esc(r.cancelReason) : ''}</div>` : ''}
         ${row('Ementa', r.subject)}
-        ${row('Secretaria de destino', r.destSecretaria)}
+        ${row(destSecsOf(r).length > 1 ? 'Secretarias de destino' : 'Secretaria de destino', destSecsLabel(r))}
         ${row('Setor', r.destSetor)}
         ${row('Destinatário', r.destNome)}
         ${row('Observações', r.observacoes)}
@@ -1863,7 +1952,7 @@ async function editReservation(id) {
         title: 'Editar reserva', confirmText: 'Salvar', message: `${r.formattedNumber} — o número não muda, apenas os dados abaixo.`,
         fields: [
             { name: 'subject', label: 'Ementa', type: 'textarea', required: true, value: r.subject || '' },
-            { name: 'destSecretaria', label: 'Secretaria de destino', type: 'select', required: true, options: [...state.secretariats, DEST_EXTERNO], value: r.destSecretaria || '' },
+            { name: 'destSecretarias', label: 'Secretarias de destino', type: 'checks', required: true, options: destSecOptions(), exclusive: DEST_TODAS, value: destSecsOf(r) },
             { name: 'destSetor', label: 'Setor (opcional)', type: 'text', required: false, value: r.destSetor || '' },
             { name: 'destNome', label: 'Nome do destinatário', type: 'text', required: true, value: r.destNome || '' },
             { name: 'observacoes', label: 'Observações (opcional)', type: 'textarea', required: false, value: r.observacoes || '' },
@@ -1874,7 +1963,9 @@ async function editReservation(id) {
     try {
         const { data, error } = await supabase.rpc('update_reservation', {
             p_reservation_id: id, p_user_id: state.currentUser.id,
-            p_subject: res.values.subject, p_dest_secretaria: res.values.destSecretaria, p_dest_nome: res.values.destNome,
+            p_subject: res.values.subject,
+            p_dest_secretarias: res.values.destSecretarias, p_dest_secretaria: (res.values.destSecretarias || []).join(', '),
+            p_dest_nome: res.values.destNome,
             p_dest_setor: res.values.destSetor, p_observacoes: res.values.observacoes, p_sent_at: res.values.sentAt || null
         });
         if (error) throw error;
@@ -2028,7 +2119,7 @@ function reportFilterDescription() {
 function exportRows() {
     return getReportReservations().map(r => ({
         'Número': r.formattedNumber, 'Documento': r.docName, 'Ementa': r.subject || '',
-        'Destinatário': r.destNome || '', 'Secretaria destino': r.destSecretaria || '', 'Setor destino': r.destSetor || '',
+        'Destinatário': r.destNome || '', 'Secretaria destino': destSecsLabel(r), 'Setor destino': r.destSetor || '',
         'Observações': r.observacoes || '',
         'Data de envio': r.sentAt ? brDateFull(r.sentAt) : '',
         'Reservado por': r.userName, 'Secretaria origem': r.userSecretaria || '',

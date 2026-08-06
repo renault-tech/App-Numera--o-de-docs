@@ -116,6 +116,30 @@ independentes:
 Importante: a atomicidade da reserva **já existia antes desta migração** —
 ver a nota no início da seção 3.
 
+### 1.4 Múltiplas secretarias de destino (migração 0011, 30/07/2026)
+
+`supabase/migrations/0011_multiplas_secretarias_destino.sql` troca a
+secretaria de destino única por uma **lista**:
+
+- **`reservations.dest_secretarias jsonb not null default '[]'`** é a fonte
+  da verdade (backfill a partir do campo antigo);
+- **`reservations.dest_secretaria text`** continua existindo, agora com o
+  rótulo já montado (`"Educação, Saúde"`). Quem escreve as duas colunas é
+  sempre a função — nunca o cliente. Isso mantém relatórios, busca e
+  qualquer frontend ainda em cache funcionando sem enxergar a coluna nova;
+- `reserve_number` e `update_reservation` ganharam `p_dest_secretarias jsonb`
+  (com default null): quando vem uma lista, ela vale; senão cai no
+  `p_dest_secretaria` único — retrocompatível durante a janela de deploy;
+- **`Todas as secretarias`** é um **valor sentinela** dentro da lista, no
+  mesmo padrão do já existente `Externo / Outro órgão`. Não é expandido para
+  os nomes das secretarias do momento: assim o histórico registra a intenção
+  ("foi para todas") em vez de uma fotografia da lista daquele dia — se
+  amanhã nascer uma secretaria nova, a reserva antiga continua dizendo a
+  verdade sobre o que foi decidido na época.
+
+Na UI a escolha virou uma lista de caixinhas (`.checks-grid`); marcar
+"Todas as secretarias" desmarca e desabilita as demais.
+
 ## 2. Schema alvo (to-be)
 
 ```sql
