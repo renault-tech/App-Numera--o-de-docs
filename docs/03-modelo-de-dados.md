@@ -288,6 +288,18 @@ create index idx_logs_type        on public.audit_logs (type, created_at desc);
 > rascunho previa como "rede de segurança" (constraint numérica) chegou na
 > migração 0010, ver §1.3. O texto abaixo continua valendo como referência de
 > desenho para uma eventual migração para Supabase Auth (roadmap 1.4/1.5).
+>
+> **Atomicidade não é idempotência (bug real, corrigido 07/08/2026):** o
+> travamento de linha garante que **usuários diferentes** nunca recebem o
+> mesmo número, mas `reserve_number()` não tem chave de idempotência — duas
+> chamadas do **mesmo usuário** (ex.: duplo toque no botão "Confirmar
+> reserva", sem nenhum bloqueio de clique duplo no cliente) geram duas
+> reservas legítimas e distintas, cada uma com um número sequencial válido.
+> Caso real em produção: Mem. 632/2026 e 633/2026, mesmo assunto/destinatário,
+> criadas 275ms uma da outra. Corrigido no cliente (`confirmReserve()` em
+> `app.js` desabilita o botão e ignora toques repetidos enquanto a reserva
+> está em andamento — mesmo padrão já usado em `handleLogin()`/cadastro); o
+> servidor continua sem alteração, pois o problema nunca esteve lá.
 
 Tudo acontece numa transação com lock de linha:
 
