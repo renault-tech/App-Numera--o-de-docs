@@ -58,6 +58,18 @@ com o rótulo do campo virando "Próximo número" nesse caso; documentos por
 secretaria continuam sem esse atalho de propósito, já que cada secretaria tem
 contador próprio e o ajuste correto é o painel existente.
 
+**Retrabalho no mesmo dia:** a primeira versão dessa correção comparava o
+valor novo com `doc.startNumber` (o próprio `documents.start_number`) para
+decidir se o contador precisava mudar. Como esse campo é exatamente o legado
+que o bug original já deixava desatualizado em relação ao contador real,
+reenviar o mesmo número (ex.: usuário tentando de novo depois que a primeira
+tentativa, ainda com o bug, só gravou o campo legado) fazia o código concluir
+"nada mudou" e pular a correção — reproduzindo o bug original por outro
+caminho. Corrigido comparando com `nextNumberFor(doc)` (o valor real do
+contador) em vez do campo legado; o modal também passou a **mostrar** esse
+valor real no campo ao abrir para editar, em vez do valor legado, que podia
+estar divergente.
+
 ### 1.2 Destinatário + anulação/edição (migração 0004, 17/07/2026)
 
 `supabase/migrations/0004_destinatario_anulacao.sql` acrescentou a
