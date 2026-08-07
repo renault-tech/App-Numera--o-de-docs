@@ -1763,6 +1763,16 @@ async function refreshReservePreview(doc) {
 }
 
 async function confirmReserve(docId) {
+    // reserve_number() é atômico entre usuários diferentes (migração 0010),
+    // mas não é idempotente — não existe chave para o servidor reconhecer
+    // "esses dois cliques são a mesma intenção". Um duplo toque no botão
+    // (comum no celular, sem feedback visual de que já está processando)
+    // disparava confirmReserve() duas vezes antes da primeira chamada
+    // terminar, gerando duas reservas válidas e distintas com os mesmos
+    // dados. Mesmo guard usado em handleLogin()/cadastro: desabilita o botão
+    // e ignora toques repetidos enquanto a chamada está em andamento.
+    const btn = document.querySelector('.reserve-modal .reserve-actions .btn-primary');
+    if (btn && btn.disabled) return;
     const doc = state.documents.find(d => d.id === docId);
     if (!doc) return;
     const subject = document.getElementById('rvSubject').value.trim();
@@ -1778,6 +1788,7 @@ async function confirmReserve(docId) {
     if (!destNome) { invalid(document.getElementById('rvDestNome')); bad = true; }
     if (bad) { showToast('Preencha ementa, secretaria(s) de destino e destinatário.', 'warning'); return; }
 
+    if (btn) { btn.disabled = true; btn.textContent = 'Reservando...'; }
     const previewedNumber = _reservePreview && _reservePreview.docId === doc.id ? _reservePreview.number : null;
     try {
         const { data, error } = await supabase.rpc('reserve_number', {
@@ -1817,6 +1828,7 @@ async function confirmReserve(docId) {
     } catch (err) {
         console.error('Reserva:', err);
         showToast('Erro ao reservar: ' + err.message, 'error', 0);
+        if (btn) { btn.disabled = false; btn.textContent = 'Confirmar reserva'; }
     }
 }
 
