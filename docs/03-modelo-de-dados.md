@@ -46,6 +46,18 @@ O schema alvo da seção 2 (`document_types`/`profiles`) ainda deve incorporar
 esse mesmo modelo de bucket quando for implementado — não faz sentido migrar
 para lá e perder a numeração por secretaria.
 
+**Correção de UI (07/08/2026, sem migração nova):** editar "Número inicial" em
+Configurações → Tipos, para um documento existente, só gravava
+`documents.start_number` — que, como dito acima, é legado após a criação do
+bucket. Documentos com `per_secretaria = false` (ex.: Decreto) não tinham
+**nenhuma** tela para ajustar o contador depois do primeiro uso (o painel
+"Numeração própria" da tela Secretarias é filtrado só para tipos
+`per_secretaria = true`). `saveDoc()` agora chama `set_secretaria_counter`
+(bucket `''`) quando o campo muda num documento sem numeração por secretaria,
+com o rótulo do campo virando "Próximo número" nesse caso; documentos por
+secretaria continuam sem esse atalho de propósito, já que cada secretaria tem
+contador próprio e o ajuste correto é o painel existente.
+
 ### 1.2 Destinatário + anulação/edição (migração 0004, 17/07/2026)
 
 `supabase/migrations/0004_destinatario_anulacao.sql` acrescentou a
