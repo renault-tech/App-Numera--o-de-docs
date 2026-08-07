@@ -2013,12 +2013,15 @@ function renderTiposPanel(isAdmin) {
 function openDocModal(docId) {
     const editing = !!docId;
     const d = editing ? state.documents.find(x => x.id === docId) : { name: '', prefix: '', startNumber: 1, yearlyReset: true, enabled: true, perSecretaria: false };
+    // Mostra o número LIVE do contador (não documents.start_number, que é só
+    // semente/legado — ver saveDoc) para o admin ver o valor real antes de mudar.
+    const shownStart = editing ? nextNumberFor(d) : (d.startNumber || 1);
     state.editingDocId = docId || null;
     openModal(`
       <div class="modal-title">${editing ? 'Editar' : 'Novo'} tipo de documento</div>
       <div class="field"><label class="field-label">Nome *</label><input id="dfName" class="field-input" value="${esc(d.name)}" placeholder="Ex: Ofício"></div>
       <div class="field"><label class="field-label">Prefixo</label><input id="dfPrefix" class="field-input" value="${esc(d.prefix || '')}" placeholder="Ex: Of."></div>
-      <div class="field"><label class="field-label">${editing ? 'Próximo número' : 'Número inicial'} *</label><input id="dfStart" type="number" min="1" class="field-input" value="${d.startNumber || 1}">
+      <div class="field"><label class="field-label">${editing ? 'Próximo número' : 'Número inicial'} *</label><input id="dfStart" type="number" min="1" class="field-input" value="${shownStart}">
         <div class="hint">${editing
             ? (d.perSecretaria
                 ? 'Documento numerado por secretaria: este valor só vale para uma secretaria nova, sem contador ainda. Para mudar o próximo número de uma secretaria que já reserva, use Configurações → Secretarias → Configurar → "Numeração própria".'
@@ -2045,7 +2048,13 @@ async function saveDoc() {
     try {
         if (state.editingDocId) {
             const doc = state.documents.find(d => d.id === state.editingDocId);
-            const startChanged = doc.startNumber !== payload.start_number;
+            // Comparar com o número REAL do contador, não com doc.startNumber
+            // (documents.start_number): esse campo é só semente/legado e pode já
+            // estar com o valor novo de uma edição anterior que falhou em
+            // propagar para document_counters — comparar com ele faria a gente
+            // achar erroneamente que "nada mudou" e pular a correção de novo.
+            const prevCounterVal = !payload.per_secretaria ? nextNumberFor(doc) : null;
+            const startChanged = !payload.per_secretaria && prevCounterVal !== payload.start_number;
             const { error } = await supabase.from('documents').update(payload).eq('id', state.editingDocId);
             if (error) throw error;
             Object.assign(doc, {
@@ -2061,7 +2070,7 @@ async function saveDoc() {
             // na primeira vez que o bucket é criado. Documentos por secretaria não
             // entram aqui de propósito — cada secretaria tem seu próprio contador,
             // ajustável em Configurações → Secretarias → Configurar → "Numeração própria".
-            if (startChanged && !payload.per_secretaria) {
+            if (startChanged) {
                 try {
                     const { data: cRow, error: cErr } = await supabase.rpc('set_secretaria_counter', {
                         p_doc_id: state.editingDocId, p_secretaria: '', p_next_number: payload.start_number
