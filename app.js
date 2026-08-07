@@ -2018,7 +2018,12 @@ function openDocModal(docId) {
       <div class="modal-title">${editing ? 'Editar' : 'Novo'} tipo de documento</div>
       <div class="field"><label class="field-label">Nome *</label><input id="dfName" class="field-input" value="${esc(d.name)}" placeholder="Ex: Ofício"></div>
       <div class="field"><label class="field-label">Prefixo</label><input id="dfPrefix" class="field-input" value="${esc(d.prefix || '')}" placeholder="Ex: Of."></div>
-      <div class="field"><label class="field-label">Número inicial *</label><input id="dfStart" type="number" min="1" class="field-input" value="${d.startNumber || 1}"></div>
+      <div class="field"><label class="field-label">${editing ? 'Próximo número' : 'Número inicial'} *</label><input id="dfStart" type="number" min="1" class="field-input" value="${d.startNumber || 1}">
+        <div class="hint">${editing
+            ? (d.perSecretaria
+                ? 'Documento numerado por secretaria: este valor só vale para uma secretaria nova, sem contador ainda. Para mudar o próximo número de uma secretaria que já reserva, use Configurações → Secretarias → Configurar → "Numeração própria".'
+                : 'Alterar aqui muda o próximo número a ser reservado. Não é possível definir um valor igual ou menor que um número já reservado.')
+            : 'Número da primeira reserva deste tipo de documento.'}</div></div>
       <label class="check-row"><input type="checkbox" id="dfYearly" ${d.yearlyReset ? 'checked' : ''}> <span>Reiniciar numeração a cada ano</span></label>
       <label class="check-row"><input type="checkbox" id="dfPerSec" ${d.perSecretaria ? 'checked' : ''}> <span>Numerar por secretaria (sequência própria por secretaria)</span></label>
       <label class="check-row"><input type="checkbox" id="dfEnabled" ${d.enabled ? 'checked' : ''}> <span>Documento habilitado</span></label>
@@ -2036,15 +2041,38 @@ async function saveDoc() {
         enabled: document.getElementById('dfEnabled').checked
     };
     if (!payload.name) { showToast('Informe o nome do documento.', 'warning'); return; }
+    let counterWarning = null;
     try {
         if (state.editingDocId) {
+            const doc = state.documents.find(d => d.id === state.editingDocId);
+            const startChanged = doc.startNumber !== payload.start_number;
             const { error } = await supabase.from('documents').update(payload).eq('id', state.editingDocId);
             if (error) throw error;
-            Object.assign(state.documents.find(d => d.id === state.editingDocId), {
+            Object.assign(doc, {
                 name: payload.name, prefix: payload.prefix, startNumber: payload.start_number,
                 yearlyReset: payload.yearly_reset, perSecretaria: payload.per_secretaria, enabled: payload.enabled
             });
             addLog('cadastro', 'Editou documento', payload.name);
+
+            // Documento sem numeração por secretaria só tem UM contador — "Número
+            // inicial" É o próximo número dele. Sem isto, mudar o campo aqui não
+            // tinha efeito nenhum na próxima reserva: quem manda é document_counters
+            // (migração 0003), não documents.start_number, que só serve de semente
+            // na primeira vez que o bucket é criado. Documentos por secretaria não
+            // entram aqui de propósito — cada secretaria tem seu próprio contador,
+            // ajustável em Configurações → Secretarias → Configurar → "Numeração própria".
+            if (startChanged && !payload.per_secretaria) {
+                try {
+                    const { data: cRow, error: cErr } = await supabase.rpc('set_secretaria_counter', {
+                        p_doc_id: state.editingDocId, p_secretaria: '', p_next_number: payload.start_number
+                    });
+                    if (cErr) throw cErr;
+                    const year = payload.yearly_reset ? new Date().getFullYear() : 0;
+                    state.counters[`${state.editingDocId}||${year}`] = cRow.current_number;
+                } catch (cErr) {
+                    counterWarning = cErr.message;
+                }
+            }
         } else {
             payload.current_number = payload.start_number;
             payload.last_reset_year = new Date().getFullYear();
@@ -2054,7 +2082,8 @@ async function saveDoc() {
             addLog('cadastro', 'Criou documento', payload.name);
         }
         closeModal(); render();
-        showToast('Documento salvo.', 'success');
+        if (counterWarning) showToast(`Documento salvo, mas o próximo número não pôde ser alterado: ${counterWarning}`, 'warning', 0);
+        else showToast('Documento salvo.', 'success');
     } catch (err) { showToast('Erro ao salvar: ' + err.message, 'error', 0); }
 }
 
