@@ -96,6 +96,8 @@ body.demo-mode .app-shell { height: calc(100dvh - 40px); margin-top: 40px; }
 .sidebar--collapsed { padding: 22px 14px; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand--center { justify-content: center; }
+.brand--clicavel { cursor: pointer; border-radius: 12px; padding: 4px; margin: -4px; transition: background .15s ease; }
+.brand--clicavel:hover { background: rgba(255, 255, 255, 0.5); }
 .brand-logo { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; object-position: 50% 38%; box-shadow: 0 4px 12px rgba(20, 40, 80, 0.18); flex-shrink: 0; }
 .brand-text { line-height: 1.15; overflow: hidden; }
 .brand-name { font-size: 15.5px; font-weight: 800; letter-spacing: -0.3px; white-space: nowrap; }
@@ -111,6 +113,14 @@ body.demo-mode .app-shell { height: calc(100dvh - 40px); margin-top: 40px; }
     background: rgba(255, 255, 255, 0.4); color: var(--text-2); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600;
 }
 .collapse-btn--center { justify-content: center; padding: 9px 0; }
+
+.hub-link-btn {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-decoration: none;
+    padding: 8px 14px; border-radius: 11px; color: var(--blue); cursor: pointer;
+    font-family: inherit; font-size: 12.5px; font-weight: 600; transition: background .15s ease;
+}
+.hub-link-btn:hover { background: rgba(0, 113, 227, 0.08); }
+.hub-link-btn--center { justify-content: center; padding: 8px 0; }
 .collapse-chevron { display: inline-flex; transition: transform .28s ease; }
 .collapse-chevron--flip { transform: rotate(180deg); }
 

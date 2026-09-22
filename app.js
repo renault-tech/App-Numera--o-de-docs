@@ -153,7 +153,8 @@ function icon(name, size = 18, stroke = 1.9) {
         users: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
         list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
-        grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01']
+        grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01'],
+        grid: ['M3 3h8v8H3z', 'M13 3h8v8h-8z', 'M3 13h8v8H3z', 'M13 13h8v8h-8z']
     };
     const paths = (P[name] || []).map(d => `<path d="${d}"></path>`).join('');
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">${paths}</svg>`;
@@ -1181,10 +1182,13 @@ function render() {
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
 
         <aside class="sidebar ${collapsed ? 'sidebar--collapsed' : ''}" style="width:${asideW}px">
-          <div class="brand ${collapsed ? 'brand--center' : ''}">
+          <div class="brand ${collapsed ? 'brand--center' : ''} brand--clicavel" onclick="setView('inicio')" role="button" tabindex="0" title="Início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
             <img src="logo.png" alt="Prefeitura" class="brand-logo">
             ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">${esc(institutionName())}</div></div>`}
           </div>
+          <a class="hub-link-btn ${collapsed ? 'hub-link-btn--center' : ''}" href="${URL_CENTRAL_CATAGUASES}" title="Central Cataguases">
+            ${icon('grid', 16, 2)}${collapsed ? '' : '<span>Central Cataguases</span>'}
+          </a>
           <button class="collapse-btn ${collapsed ? 'collapse-btn--center' : ''}" onclick="toggleCollapse()" title="Recolher menu">
             <span class="collapse-chevron ${collapsed ? 'collapse-chevron--flip' : ''}">${icon('chevron', 18, 2)}</span>${collapsed ? '' : '<span>Recolher</span>'}
           </button>
