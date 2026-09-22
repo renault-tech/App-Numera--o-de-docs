@@ -822,6 +822,30 @@ async function enterDemoMode() {
 
 function exitDemoMode() { location.reload(); }
 
+const URL_CENTRAL_CATAGUASES = 'https://centraltech-liard.vercel.app';
+
+// Aviso da plataforma consolidada (Central Cataguases): mesmo padrão de
+// "não mostrar de novo" já usado pelo tutorial (tutorialSeen em
+// localStorage), reaproveitado com um id próprio em vez de um mecanismo
+// novo. Não aparece junto do banner de demonstração (evita sobrepor dois
+// avisos fixos no topo) nem se a pessoa já dispensou antes.
+function plataformaConsolidadaBanner() {
+    if (state.demoMode) return '';
+    if (getTutorialSeenIds().has('plataforma-consolidada-dispensado')) return '';
+    return `<div class="plataforma-banner">
+      <span class="plataforma-banner-text">✨ <b>Nova plataforma disponível:</b><span class="plataforma-banner-desc"> a Central Cataguases reúne Numera, Compras e Requerimentos com um só login. No primeiro acesso, use "Esqueci minha senha" lá.</span></span>
+      <div class="plataforma-banner-actions">
+        <a class="btn btn-primary btn-sm" href="${URL_CENTRAL_CATAGUASES}" target="_blank" rel="noreferrer">Ir para a Central Cataguases</a>
+        <button class="btn btn-ghost btn-sm" onclick="dispensarBannerPlataforma()" title="Não mostrar novamente">Dispensar</button>
+      </div>
+    </div>`;
+}
+
+function dispensarBannerPlataforma() {
+    markTutorialSeen(['plataforma-consolidada-dispensado']);
+    render();
+}
+
 function demoBanner() {
     if (!state.demoMode) return '';
     return `<div class="demo-banner">
@@ -1134,6 +1158,7 @@ function render() {
     const collapsed = state.collapsed;
     const asideW = collapsed ? 78 : 236;
     document.body.classList.toggle('demo-mode', state.demoMode);
+    document.body.classList.toggle('plataforma-banner-ativo', !!plataformaConsolidadaBanner());
 
     const pending = pendingUsersCount();
     const nav = navItemsFor(u).map(it => {
@@ -1151,6 +1176,7 @@ function render() {
 
     document.getElementById('app-root').innerHTML = `
       ${demoBanner()}
+      ${plataformaConsolidadaBanner()}
       <button class="tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela">?</button>
       <div class="app-shell">
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
