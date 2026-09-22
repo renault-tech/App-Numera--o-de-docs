@@ -54,23 +54,30 @@ input::placeholder, textarea::placeholder { color: var(--placeholder); }
 body.demo-mode .app-shell { height: calc(100dvh - 40px); margin-top: 40px; }
 
 /* ---------- Aviso da plataforma consolidada ---------- */
-/* Mesma técnica do .demo-banner (fixo + compensação de altura no
-   .app-shell) — os dois nunca aparecem juntos (plataformaConsolidadaBanner
-   já não renderiza em modo demonstração), então reaproveitam a mesma
-   altura de 40px sem precisar somar as duas. */
+/* Card flutuante (não mais tarja full-width) — por isso não precisa de
+   nenhuma compensação de altura no .app-shell, ao contrário do
+   .demo-banner. Canto inferior esquerdo: a direita fica livre para
+   qualquer elemento flutuante futuro do lado oposto. */
 .plataforma-banner {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 6000; height: 40px;
-    display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 0 16px; background: linear-gradient(90deg, #0C1D33, #132C4C 55%, #0E2440); color: #fff;
-    font-size: 12.5px; font-weight: 600; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    position: fixed; left: 16px; bottom: 16px; z-index: 6000;
+    width: calc(100vw - 32px); max-width: 320px;
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 14px 16px; border-radius: 16px;
+    background: linear-gradient(120deg, #0C1D33, #132C4C 55%, #0E2440); color: #fff;
+    box-shadow: 0 12px 32px rgba(9, 17, 31, 0.35);
 }
-.plataforma-banner-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plataforma-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.plataforma-banner-actions .btn { height: 26px; padding: 0 12px; font-size: 12px; text-decoration: none; }
-.plataforma-banner-actions .btn-ghost { background: rgba(255, 255, 255, 0.22); color: #fff; border-color: rgba(255, 255, 255, 0.4); }
-.plataforma-banner-actions .btn-primary { background: #E9A63B; color: #0C1D33; }
-body.plataforma-banner-ativo .app-shell { height: calc(100dvh - 40px); margin-top: 40px; }
-body.plataforma-banner-ativo .tutorial-help-btn { top: 56px; }
+.plataforma-banner-text { font-size: 12.5px; line-height: 1.45; padding-right: 20px; }
+.plataforma-banner-fechar {
+    position: absolute; top: 10px; right: 10px; width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; border-radius: 8px; background: transparent; color: rgba(255, 255, 255, 0.7);
+    font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.plataforma-banner-fechar:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.plataforma-banner-cta {
+    width: 100%; height: 32px; padding: 0 12px; font-size: 12.5px;
+    background: #E9A63B; color: #0C1D33; text-decoration: none;
+}
 
 /* ---------- Shell ---------- */
 .app-shell { position: relative; width: 100vw; height: 100vh; height: 100dvh; overflow: hidden; }
@@ -522,8 +529,6 @@ body.demo-mode .tutorial-help-btn { top: 56px; }
     /* Faixa de demonstração: só o essencial cabe na largura do celular */
     .demo-banner-desc { display: none; }
     .demo-banner { padding: 0 10px; font-size: 11.5px; }
-    .plataforma-banner-desc { display: none; }
-    .plataforma-banner { padding: 0 10px; font-size: 11.5px; }
 
     /* app-shell vira coluna flex: a tab bar fica encaixada no fim do próprio
        100dvh (não mais "position: fixed"), grudada na barra do navegador sem
