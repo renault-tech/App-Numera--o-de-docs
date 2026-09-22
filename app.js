@@ -830,10 +830,16 @@ const URL_CENTRAL_CATAGUASES = 'https://centraltech-liard.vercel.app';
 // .app-shell nem compensar altura). Mesmo padrão de "não mostrar de novo"
 // já usado pelo tutorial (tutorialSeen em localStorage), reaproveitado com
 // um id próprio em vez de um mecanismo novo. Não aparece junto do banner
-// de demonstração (evita dois avisos flutuantes ao mesmo tempo) nem se a
-// pessoa já dispensou antes.
+// de demonstração (evita dois avisos flutuantes ao mesmo tempo), se a
+// pessoa já dispensou antes, ou se a navegação já veio do próprio Hub
+// (?origem=hub, anexado pelos cards de módulo da Central Cataguases —
+// quem clicou lá dentro já sabe que ela existe).
 function plataformaConsolidadaBanner() {
     if (state.demoMode) return '';
+    if (new URLSearchParams(location.search).get('origem') === 'hub') {
+        markTutorialSeen(['plataforma-consolidada-dispensado']);
+        return '';
+    }
     if (getTutorialSeenIds().has('plataforma-consolidada-dispensado')) return '';
     return `<div class="plataforma-banner">
       <button class="plataforma-banner-fechar" onclick="dispensarBannerPlataforma()" title="Não mostrar novamente" aria-label="Dispensar aviso">✕</button>
