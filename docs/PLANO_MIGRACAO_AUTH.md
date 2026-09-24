@@ -2,14 +2,14 @@
 
 **Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
 pelo dono da plataforma, PR0 e PR1 concluídos e aplicados em produção. PR2
-(migração de contas) ainda não iniciado.** Este documento é o plano de
-referência para a migração de segurança descrita no achado crítico de
-`CLAUDE.md` (RLS aberta em `using(true) with check(true)` nas 6 tabelas +
-senha em texto puro em `public.users.password`). Escrito por uma sessão do
-Claude Code (planejamento via agente Opus dedicado, com leitura do código
-real e consultas somente-leitura ao banco de produção `uxdjhdnsnditivvjktzf`).
-**PR1 aplicado de verdade em 24/09/2026** — só falta o e-mail de 1 pessoa
-(seção 7) antes de seguir para o PR2.
+(migração de contas) com o script pronto e o dry-run já conferido contra o
+banco real — só falta o e-mail de 1 pessoa para rodar de verdade.** Este
+documento é o plano de referência para a migração de segurança descrita no
+achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
+nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por
+uma sessão do Claude Code (planejamento via agente Opus dedicado, com
+leitura do código real e consultas somente-leitura ao banco de produção
+`uxdjhdnsnditivvjktzf`). **PR1 aplicado de verdade em 24/09/2026.**
 
 **PR0 concluído** (24/09/2026): a parte de documentação/estrutura de pastas
 foi publicada primeiro; as duas mudanças que tocam `app.js`/
@@ -431,9 +431,28 @@ tomada: 2 semanas de estabilidade antes).
     revogar TUDO de `public` não quebra o disparo do trigger (Postgres não
     checa EXECUTE para isso).
 - **PR2 — migração de contas** (script operacional, não é migration).
-  Grupos A–E na ordem da seção 1. *Pronto quando:* dry-run revisado pelo
-  dono, decisão P3 tomada; depois de rodar, 41/41 e os 3 admins entram pelo
-  Auth.
+  **Script pronto** em `scripts/migrar-contas-auth.mjs` (idempotente,
+  `--dry-run`, roda na máquina do dono via `NUMERA_SERVICE_ROLE_KEY`, nunca
+  em produção/CI/Vercel — fora do build do site, ver `.vercelignore`).
+  Desenho simplificado em relação à tabela de grupos A/B/C da seção 1: como
+  o script só tem acesso via Admin API (não lê
+  `auth.users.encrypted_password`, que não é exposto via REST/SDK), ele não
+  tenta redescobrir "a senha confere" — toda conta que já tem Auth recebe o
+  mesmo tratamento idempotente (`updateUserById` com a senha atual de
+  `public.users` + `email_confirm: true`), o que dá o mesmo resultado final
+  para A/B/C sem precisar da introspecção. Grupo D (o admin, sem Auth ainda)
+  entra primeiro via `createUser` com o mesmo `id`; se a Admin API recusar
+  `id` explícito, o script para e avisa — nunca insere direto via SQL.
+  **Dry-run já conferido nesta sessão via SQL direto no banco** (mesma
+  classificação que o script produzirá): 37 já têm Auth, 3 "sem Auth"
+  resolvem e-mail sozinhos (admin, Leandra via decisão já tomada, Ludmila
+  Fontoura porque o próprio `username` dela É o e-mail), e só **Majella
+  Mazini** continua bloqueada — bate exatamente com a tabela A=31/B=5/C=1/
+  D=1/E=3 da seção 1 (nada mudou desde o planejamento). *Pronto para rodar
+  de verdade quando:* e-mail de Majella chegar (ou decisão de deixá-la de
+  fora), e os dois passos manuais do dono (P5: desligar "Confirm email"; a
+  senha SMTP recolada no projeto do Numera) estiverem feitos — nenhum dos
+  dois bloqueia o dry-run, só a execução real ficando 100% completa.
 - **PR3 — virada do front.** Login só pelo Auth (username resolvido
   conforme decisão já tomada); sai o fallback legado e
   `localStorage.currentUserId`; sessão sem linha aprovada/ativa em `users`

@@ -5,3 +5,10 @@
 # por padrão — CLAUDE.md e docs/ nunca devem ficar acessíveis publicamente.
 CLAUDE.md
 docs/
+
+# Scripts operacionais (ex.: migração de contas do PR2) — rodados manualmente
+# pelo dono na própria máquina, nunca fazem parte do app publicado. Mesmo
+# sem segredo hardcoded (a service_role vem de variável de ambiente na hora
+# de rodar), publicar o texto do script só ajudaria quem for tentar entender
+# o fluxo de migração por fora.
+scripts/

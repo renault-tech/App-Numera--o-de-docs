@@ -1,0 +1,7 @@
+# Dependências instaladas localmente pelo dono para rodar scripts/ (ver
+# scripts/package.json) — nunca precisam ir pro git nem pro deploy.
+node_modules/
+
+# Segredos que alguém possa colar num .env local ao rodar scripts/.
+.env
+.env.local

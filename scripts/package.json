@@ -1,0 +1,9 @@
+{
+  "name": "numera-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Scripts operacionais do Numera, rodados manualmente pelo dono na própria máquina (nunca em produção/Vercel — este diretório fica fora do build do site, ver ../.vercelignore). Não faz parte do app publicado.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

@@ -157,11 +157,50 @@ o deploy do front (PR3) é que vai precisar da janela.
 Testado transacionalmente (30 cenários) antes de aplicar, e de novo como
 regressão permanente contra o schema já aplicado —
 `supabase/tests/001_pr1_auth_uid_compat.sql`. Rollback testado e pronto em
-`supabase/rollbacks/20260924060000_pr1_auth_uid_compat_e_rpcs_admin_rollback.sql`.
+`supabase/rollbacks/20260924173517_pr1_auth_uid_compat_e_rpcs_admin_rollback.sql`
+(nome do arquivo alinhado com a versão real gravada em
+`supabase_migrations.schema_migrations`, não com um timestamp inventado —
+lição aplicada de carona: `apply_migration` grava sua própria versão pelo
+relógio de quando roda, que não precisa bater com o prefixo do arquivo até
+alguém checar).
 `get_advisors` confirmado: as 4 RPCs de negócio continuam `anon`-executáveis
 por design (fallback legado, intencional na fase A); `admin_*`/`eh_admin`/
 `usuario_aprovado`/`salvar_ordem_cards`/`marcar_login_origem` só
 `authenticated`; nenhuma categoria nova de exposição.
+
+## PR2 do plano de migração de auth: script pronto, aguardando 1 e-mail
+
+`scripts/migrar-contas-auth.mjs` (com `scripts/package.json` só para ele —
+`@supabase/supabase-js`) implementa a migração de contas da seção 1 do
+plano. Roda manualmente na máquina do dono via `NUMERA_SERVICE_ROLE_KEY`;
+nunca em produção/CI — `scripts/` está fora do build da Vercel (ver
+`.vercelignore`) e `node_modules/`/`.env*` saíram do git (`.gitignore`
+novo, este repositório nunca teve um antes).
+
+**Desenho simplificado em relação à tabela de grupos A/B/C do plano**: o
+script só enxerga o banco via Admin API (service role), que não expõe
+`auth.users.encrypted_password` — não dá pra redescobrir por ali se "a
+senha confere". Em vez de tentar, toda conta que já tem Auth recebe o
+mesmo tratamento idempotente (`updateUserById` regravando a senha atual de
+`public.users` + `email_confirm: true`) — o resultado final é o mesmo que
+a tabela A/B/C descreve (quem já estava certo não muda nada visível, quem
+divergia é corrigido), só que sem precisar ler um dado que o script não
+tem como ler. Grupo D (a conta do admin, ainda sem Auth) é criado primeiro,
+com o **mesmo `id`** que já tem em `public.users` — se a Admin API deste
+projeto recusar `id` explícito no `createUser`, o script para e avisa, sem
+NUNCA cair para SQL direto (regra explícita do plano).
+
+**Dry-run validado nesta sessão via SQL direto** (não pela execução do
+próprio script — este ambiente sandbox não alcança a Auth API do Supabase
+via HTTPS, limitação já documentada; só o MCP de banco funciona daqui):
+confirma a mesma contagem do plano (A=31/B=5/C=1/D=1/E=3, 41 no total) e
+que, das 3 pessoas do Grupo E, 2 já resolvem e-mail sozinhas pelas decisões
+já tomadas (o admin tem e-mail próprio; Leandra Delgado via
+`leandra.cataguases@gmail.com`, confirmado pelo dono; Ludmila Fontoura
+porque o próprio `username` dela É o e-mail) — só **Majella Mazini**
+continua de fato bloqueada. O script já embute essas 2 resoluções
+(`EMAILS_CONHECIDOS` + fallback de username-parece-e-mail), então rodar de
+verdade hoje já cobriria 40 dos 41.
 
 ## Corrigido nesta auditoria (risco zero, sem mudar nenhum comportamento)
 
