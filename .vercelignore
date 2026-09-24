@@ -1,0 +1,7 @@
+# Documentação interna do repositório — não faz parte do app publicado e,
+# neste momento, descreve em detalhe uma vulnerabilidade de segurança ainda
+# não corrigida (RLS aberta, contagem de admins, etc.). Sem outputDirectory
+# configurado em vercel.json, a Vercel publica todo arquivo do repositório
+# por padrão — CLAUDE.md e docs/ nunca devem ficar acessíveis publicamente.
+CLAUDE.md
+docs/

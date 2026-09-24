@@ -73,6 +73,17 @@ de `p_user_id`, adicionar uma RPC `security definer` própria para ações
 de admin sobre outros usuários (aprovar, editar permissão, remover), e
 só então restringir a RLS de `users` de verdade.
 
+**Plano detalhado em `docs/PLANO_MIGRACAO_AUTH.md`** (não commitado no site
+publicado — ver `.vercelignore`): planejamento completo em 7 PRs pequenos
+(cada um com critério de "pronto"), com achados ao vivo do banco de
+produção (37 dos 41 usuários já têm conta real no Auth, só falta confirmar
+e-mail na maioria), 3 decisões já tomadas com o dono (login por username via
+função no servidor; SMTP próprio reaproveitando a conta Brevo do Compras,
+configurado em cada projeto Supabase separadamente; 2 semanas de
+estabilidade antes do passo irreversível de apagar as senhas em texto
+puro) e 7 perguntas ainda em aberto antes de começar a implementar. Leia
+esse arquivo antes de iniciar qualquer PR desta migração.
+
 ## Corrigido nesta auditoria (risco zero, sem mudar nenhum comportamento)
 
 Confirmado por grep em `app.js`/`auth-service.js` que nenhum fluxo
