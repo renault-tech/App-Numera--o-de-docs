@@ -1,19 +1,28 @@
 # Plano: migrar a autenticação do Numera para o Supabase Auth e fechar a RLS
 
 **Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
-pelo dono da plataforma, implementação ainda não iniciada.** Este documento é
-o plano de referência para a migração de segurança descrita no achado crítico
-de `CLAUDE.md` (RLS aberta em `using(true) with check(true)` nas 6 tabelas +
-senha em texto puro em `public.users.password`). Escrito por uma sessão do
-Claude Code (planejamento via agente Opus dedicado, com leitura do código
-real e consultas somente-leitura ao banco de produção
-`uxdjhdnsnditivvjktzf`). **Nenhuma mudança de código/banco foi aplicada
-ainda** — só falta um dado concreto (e-mails de 2 pessoas, seção 7) antes de
-seguir para o PR1. O PR0 já começou (ver `docs/PLANO_MIGRACAO_AUTH.md` no
-histórico do git e `CLAUDE.md`): a parte só de documentação/estrutura de
-pastas já foi publicada; as duas mudanças que tocam `app.js`/
-`auth-service.js` aguardam uma janela tranquila combinada com o dono antes de
-publicar (nenhum deploy automático sem aviso).
+pelo dono da plataforma, PR0 concluído, PR1 (migration de banco) ainda não
+iniciado.** Este documento é o plano de referência para a migração de
+segurança descrita no achado crítico de `CLAUDE.md` (RLS aberta em
+`using(true) with check(true)` nas 6 tabelas + senha em texto puro em
+`public.users.password`). Escrito por uma sessão do Claude Code (planejamento
+via agente Opus dedicado, com leitura do código real e consultas
+somente-leitura ao banco de produção `uxdjhdnsnditivvjktzf`). **Nenhuma
+mudança de banco foi aplicada ainda** — só falta o e-mail de 1 pessoa (seção
+7) antes de seguir para o PR1.
+
+**PR0 concluído** (24/09/2026): a parte de documentação/estrutura de pastas
+foi publicada primeiro; as duas mudanças que tocam `app.js`/
+`auth-service.js` (upsert em vez de insert no cadastro; remoção do bloco
+morto que reinseria a lista inicial de documentos) foram avaliadas quanto a
+risco antes de publicar — regra do dono (ver `CLAUDE.md`): deploy que **pode
+afetar o trabalho dos servidores** só depois das 17h; mudança rápida e
+comprovadamente sem efeito no comportamento atual pode seguir a qualquer
+hora. As duas do PR0 se enquadraram no segundo caso (confirmado lendo o
+código antes de mexer: o bloco de reinserção nunca dispara hoje, porque
+`documents` nunca está vazio em produção; o `upsert` se comporta
+identicamente a `insert` sem o trigger do PR1 ainda existir) e foram
+publicadas fora da janela das 17h.
 
 Regra da casa deste repositório (mesma dos outros 3 da plataforma): migration
 nova sempre testada transacionalmente (`begin` + cenários + `rollback`/`raise
@@ -364,15 +373,18 @@ tomada: 2 semanas de estabilidade antes).
 
 ## 6. Ordem dos PRs e critério de "pronto para aplicar"
 
-- **PR0 — preparação, sem mudança de comportamento.** Corrige `CLAUDE.md` e
-  o cabeçalho da migration `20260924050000` (a frase sobre "sem migrations
-  versionadas" está errada); cria `supabase/tests/` e
-  `supabase/rollbacks/`; config de ambiente por hostname (se P8 = sim);
-  `authService.signUp` troca `insert` por `upsert(...,
+- **PR0 — CONCLUÍDO (24/09/2026).** Corrigiu `CLAUDE.md` e o cabeçalho da
+  migration `20260924050000` (a frase sobre "sem migrations versionadas"
+  estava errada); criou `supabase/tests/` e `supabase/rollbacks/`;
+  `authService.signUp` trocou `insert` por `upsert(...,
   {onConflict:'id'})` (para o trigger do PR1 não quebrar o front antigo);
-  remove o bloco que reinsere a lista inicial de documentos
-  (`app.js:395-405`). *Pronto quando:* publicado, cadastro de teste
-  funciona, sem regressão no roteiro manual.
+  removeu o bloco que reinseria a lista inicial de documentos (era
+  `app.js:395-405`, confirmado como código morto em produção antes de
+  remover — `documents` nunca está vazio hoje); cache-busting de
+  `index.html` avançado. Único item que ficou de fora: **config de
+  ambiente por hostname**, ainda não feita — entra junto do PR8 (projeto de
+  homologação, P8 confirmado como projeto Supabase gratuito), quando a
+  homologação for montada de verdade.
 - **PR1 — banco, aditivo e compatível.** Coluna `ativo`, helpers, trigger de
   cadastro, RPCs de negócio na fase A com telemetria, `admin_*`,
   `salvar_ordem_cards`, `marcar_login_origem`, trigger de identidade em

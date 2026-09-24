@@ -57,9 +57,16 @@ const authService = {
             approved: false // Pendente de aprovação
         };
 
+        // upsert (não insert): a futura migration do plano de auth
+        // (docs/PLANO_MIGRACAO_AUTH.md, PR1) cria um trigger que já insere
+        // essa linha assim que a conta nasce no Auth — sem upsert, este
+        // insert colidiria com a linha do trigger e o cadastro quebraria.
+        // Hoje, sem o trigger ainda existir, upsert se comporta como
+        // insert normal (nenhuma linha em conflito) — nenhuma mudança de
+        // comportamento agora, só compatibilidade futura.
         const { error: dbError } = await supabase
             .from('users')
-            .insert([publicUser]);
+            .upsert([publicUser], { onConflict: 'id' });
 
         if (dbError) {
             console.error('Erro ao salvar detalhes do usuário:', dbError);

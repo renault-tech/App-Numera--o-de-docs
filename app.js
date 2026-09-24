@@ -392,18 +392,6 @@ async function loadData() {
         if (e1) throw e1;
         state.documents = (docs || []).map(mapDoc);
 
-        if (state.documents.length === 0) {
-            const yr = new Date().getFullYear();
-            const seed = [
-                ['Ofício', 'Of.', true], ['Memorando', 'Mem.', true], ['Portaria', 'Port.', true],
-                ['Decreto', 'Dec.', true], ['Contrato', 'Contr.', true], ['Resolução', 'Res.', true],
-                ['Circular', 'Circ.', true], ['Edital', 'Ed.', true], ['Parecer', 'Par.', true],
-                ['Ata', '', true], ['Lei', 'L.', true], ['Processo', 'Proc.', false], ['Protocolo', 'Prot.', false]
-            ].map(([name, prefix, yearly]) => ({ name, prefix, start_number: 1, current_number: 1, yearly_reset: yearly, last_reset_year: yr, enabled: true }));
-            const { data: nd } = await supabase.from('documents').insert(seed).select();
-            if (nd) state.documents = nd.map(mapDoc);
-        }
-
         // Contadores por bucket (migração 0003)
         state.counters = {};
         const { data: counters } = await supabase.from('document_counters').select('doc_id,secretaria,year,current_number');
