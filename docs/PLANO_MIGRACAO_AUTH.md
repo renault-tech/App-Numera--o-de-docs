@@ -1,15 +1,15 @@
 # Plano: migrar a autenticação do Numera para o Supabase Auth e fechar a RLS
 
 **Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
-pelo dono da plataforma, PR0 concluído, PR1 (migration de banco) ainda não
-iniciado.** Este documento é o plano de referência para a migração de
-segurança descrita no achado crítico de `CLAUDE.md` (RLS aberta em
-`using(true) with check(true)` nas 6 tabelas + senha em texto puro em
-`public.users.password`). Escrito por uma sessão do Claude Code (planejamento
-via agente Opus dedicado, com leitura do código real e consultas
-somente-leitura ao banco de produção `uxdjhdnsnditivvjktzf`). **Nenhuma
-mudança de banco foi aplicada ainda** — só falta o e-mail de 1 pessoa (seção
-7) antes de seguir para o PR1.
+pelo dono da plataforma, PR0 e PR1 concluídos e aplicados em produção. PR2
+(migração de contas) ainda não iniciado.** Este documento é o plano de
+referência para a migração de segurança descrita no achado crítico de
+`CLAUDE.md` (RLS aberta em `using(true) with check(true)` nas 6 tabelas +
+senha em texto puro em `public.users.password`). Escrito por uma sessão do
+Claude Code (planejamento via agente Opus dedicado, com leitura do código
+real e consultas somente-leitura ao banco de produção `uxdjhdnsnditivvjktzf`).
+**PR1 aplicado de verdade em 24/09/2026** — só falta o e-mail de 1 pessoa
+(seção 7) antes de seguir para o PR2.
 
 **PR0 concluído** (24/09/2026): a parte de documentação/estrutura de pastas
 foi publicada primeiro; as duas mudanças que tocam `app.js`/
@@ -385,12 +385,51 @@ tomada: 2 semanas de estabilidade antes).
   ambiente por hostname**, ainda não feita — entra junto do PR8 (projeto de
   homologação, P8 confirmado como projeto Supabase gratuito), quando a
   homologação for montada de verdade.
-- **PR1 — banco, aditivo e compatível.** Coluna `ativo`, helpers, trigger de
-  cadastro, RPCs de negócio na fase A com telemetria, `admin_*`,
-  `salvar_ordem_cards`, `marcar_login_origem`, trigger de identidade em
-  `logs` (só age com `auth.uid()` presente). *Pronto quando:* matriz de
-  testes passa em transação, `get_advisors` limpo, `anon` sem EXECUTE nas
-  funções novas, app atual continua funcionando depois de aplicado.
+- **PR1 — CONCLUÍDO (24/09/2026).** Banco, aditivo e compatível. Coluna
+  `ativo`, helpers (`eh_admin`/`usuario_aprovado`), trigger de cadastro
+  (`criar_perfil_usuario`), RPCs de negócio na fase A com telemetria
+  (`reserve_number`/`cancel_reservation`/`update_reservation`/
+  `set_secretaria_counter`), `admin_aprovar_usuario`/
+  `admin_atualizar_usuario`/`admin_aplicar_padrao_secretaria`/
+  `admin_desativar_usuario`, `salvar_ordem_cards`, `marcar_login_origem`,
+  trigger de identidade em `logs` (`forcar_identidade_log`, só age com
+  `auth.uid()` presente). Migrations:
+  `20260924060000_pr1_auth_uid_compat_e_rpcs_admin.sql` +
+  `20260924060001_pr1_fix_trigger_functions_grant_publico.sql`. Testado
+  transacionalmente (30 cenários, `supabase/tests/001_pr1_auth_uid_compat.sql`)
+  antes de aplicar, e de novo como regressão contra o schema já aplicado —
+  os dois rodam limpos. `get_advisors` confirmado: as 4 RPCs de negócio
+  continuam `anon`-executáveis por design (fallback legado sem sessão,
+  intencional na fase A); `admin_*`/`eh_admin`/`usuario_aprovado`/
+  `salvar_ordem_cards`/`marcar_login_origem` só `authenticated`; nenhuma
+  categoria nova de exposição. Rollback pronto e testado em
+  `supabase/rollbacks/20260924060000_pr1_auth_uid_compat_e_rpcs_admin_rollback.sql`.
+  Nada disso é chamado pelo `app.js`/`auth-service.js` publicados ainda
+  (fica para PR3/PR4) — zero efeito visível hoje, por isso aplicado fora
+  da janela das 17h (regra do dono: só muda o que pode afetar o trabalho
+  dos servidores, e este PR não afeta nada em uso agora).
+  - **Achado real durante o teste**: a base de produção tem **3 contas
+    admin** (não só uma), o que só apareceu ao testar a proteção do
+    "último admin ativo" em `admin_atualizar_usuario`/
+    `admin_desativar_usuario` — a 1ª tentativa de teste isolou só o admin
+    real + 1 admin de teste e a demoção passou de verdade (havia ainda 2
+    admins reais ativos sobrando). Corrigido isolando **todos** os admins
+    reais dentro da própria transação de teste (revertido no fim, nunca
+    commitado). Lição: nunca assumir a cardinalidade de uma condição de
+    produção (aqui, "quantos admins existem") — conferir com uma query
+    antes de desenhar o cenário de teste.
+  - **Achado de segurança real, corrigido no mesmo dia**: as duas funções
+    de trigger novas (`criar_perfil_usuario`, `forcar_identidade_log`)
+    nasceram com EXECUTE concedido a `anon`/`authenticated` via o grant
+    padrão do Postgres para função recém-criada (mesma pegadinha já
+    documentada à exaustão nos outros 3 repos desta plataforma) — a
+    migration original só tinha `revoke`/`grant` explícito nas RPCs de
+    negócio/admin, não nessas duas. Sem risco real de exploração (Postgres
+    recusa chamar uma função `RETURNS TRIGGER` fora de contexto de
+    trigger), mas fechado por defesa em profundidade assim que o
+    `get_advisors` pós-aplicação acusou — confirmado transacionalmente que
+    revogar TUDO de `public` não quebra o disparo do trigger (Postgres não
+    checa EXECUTE para isso).
 - **PR2 — migração de contas** (script operacional, não é migration).
   Grupos A–E na ordem da seção 1. *Pronto quando:* dry-run revisado pelo
   dono, decisão P3 tomada; depois de rodar, 41/41 e os 3 admins entram pelo

@@ -97,6 +97,72 @@ restrição. Antes de publicar qualquer commit que toque o app em produção,
 conferir o horário local (`TZ=America/Sao_Paulo date`) e não prosseguir
 antes das 17h sem confirmação explícita do dono.
 
+## PR1 do plano de migração de auth: CONCLUÍDO (24/09/2026)
+
+Migrations `20260924060000_pr1_auth_uid_compat_e_rpcs_admin.sql` +
+`20260924060001_pr1_fix_trigger_functions_grant_publico.sql`, aplicadas em
+produção. Banco aditivo e compatível — **zero efeito visível hoje**, porque
+nenhum destes objetos é chamado pelo `app.js`/`auth-service.js` publicados
+ainda (isso é PR3/PR4). Por isso aplicado fora da janela das 17h: a regra do
+dono é sobre mudanças que **afetam o uso dos servidores**, e uma migration de
+banco sem nenhum call site no front atual não afeta nada em uso agora — só
+o deploy do front (PR3) é que vai precisar da janela.
+
+- **Coluna `ativo`** em `public.users` (soft delete, default `true`).
+- **Helpers** `eh_admin()`/`usuario_aprovado()` (`security definer`,
+  `auth.uid()`).
+- **Trigger de cadastro** `criar_perfil_usuario()` (dispara em
+  `after insert on auth.users`): cria a linha em `public.users` já no
+  nascimento da conta no Auth, sempre `user_restricted`/`approved=false`
+  (nível de acesso é decisão de admin, nunca da metadata do cadastro),
+  resolve colisão de `username` com sufixo numérico, aplica defaults de
+  `allowed_documents` pela secretaria se houver `secretariaPermissions`
+  configurado, e não faz nada (`on conflict do nothing`) quando o `id` já
+  existe em `public.users` (contas migradas no PR2, ou `aprovarNumera` do
+  Hub que já faz `upsert` por conta própria).
+- **Trigger de identidade em logs** `forcar_identidade_log()`: só
+  sobrescreve `user_id`/`user_name` quando existe sessão real
+  (`auth.uid()` não nulo) — quem ainda usa o login legado continua exatamente
+  como hoje.
+- **RPCs de negócio (fase A, compatíveis)**: `reserve_number`/
+  `cancel_reservation`/`update_reservation`/`set_secretaria_counter`
+  ganharam resolução de identidade em duas vias — se há sessão real
+  (`auth.uid()`), usa ela (e bloqueia se `p_user_id` divergir); sem sessão,
+  cai para `p_user_id` do cliente como sempre, gravando um log de
+  telemetria (`type='sistema'`, `action='Chamada sem sessão (compat.)'`) —
+  sinal objetivo, e não uma suposição, de quando o fallback legado deixar
+  de ser necessário (dado para decidir a hora do PR5).
+- **RPCs de admin** `admin_aprovar_usuario`/`admin_atualizar_usuario`/
+  `admin_aplicar_padrao_secretaria`/`admin_desativar_usuario` —
+  `security definer`, `eh_admin()`-gated, com proteção de auto-rebaixamento/
+  auto-desativação e do último admin ATIVO restante (duas guardas
+  distintas e sequenciais, self-check primeiro).
+- **Ações do próprio usuário** `salvar_ordem_cards`/`marcar_login_origem`
+  (exigem `auth.uid()`; a segunda tolera sessão ausente, sem quebrar).
+
+**Dois achados reais durante o teste, ambos documentados em detalhe em
+`docs/PLANO_MIGRACAO_AUTH.md` (seção 6, bullet do PR1)**:
+1. A base de produção tem **3 contas admin**, não só uma — só apareceu ao
+   testar a proteção do último-admin-ativo; a 1ª tentativa de teste deixou
+   2 admins reais ativos sobrando e a demoção passou de verdade. Corrigido
+   isolando todos os admins reais dentro da transação de teste (revertido,
+   nunca commitado).
+2. As duas funções de trigger novas nasceram com EXECUTE concedido a
+   `anon`/`authenticated` por padrão do Postgres (mesma pegadinha já
+   documentada nos outros 3 repos desta plataforma) — sem risco real
+   (Postgres recusa chamar uma função `RETURNS TRIGGER` fora de contexto
+   de trigger), mas fechado por defesa em profundidade assim que o
+   `get_advisors` pós-aplicação acusou.
+
+Testado transacionalmente (30 cenários) antes de aplicar, e de novo como
+regressão permanente contra o schema já aplicado —
+`supabase/tests/001_pr1_auth_uid_compat.sql`. Rollback testado e pronto em
+`supabase/rollbacks/20260924060000_pr1_auth_uid_compat_e_rpcs_admin_rollback.sql`.
+`get_advisors` confirmado: as 4 RPCs de negócio continuam `anon`-executáveis
+por design (fallback legado, intencional na fase A); `admin_*`/`eh_admin`/
+`usuario_aprovado`/`salvar_ordem_cards`/`marcar_login_origem` só
+`authenticated`; nenhuma categoria nova de exposição.
+
 ## Corrigido nesta auditoria (risco zero, sem mudar nenhum comportamento)
 
 Confirmado por grep em `app.js`/`auth-service.js` que nenhum fluxo
