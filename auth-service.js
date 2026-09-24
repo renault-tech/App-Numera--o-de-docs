@@ -117,6 +117,32 @@ const authService = {
         return { error: "Usuário ou senha incorretos." };
     },
 
+    // Recuperação de senha (não existia até aqui — só o e-mail/senha do
+    // Supabase Auth suporta este fluxo; contas legadas sem conta no Auth
+    // (só linha em `users`, sem par em `auth.users`) não têm como
+    // recuperar por aqui e continuam precisando falar com o admin).
+    async requestPasswordReset(email) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + window.location.pathname
+        });
+        if (error) {
+            console.error('Erro ao solicitar recuperação de senha:', error);
+            return { error: error.message };
+        }
+        return { ok: true };
+    },
+
+    // Chamado depois do evento PASSWORD_RECOVERY, com a sessão temporária
+    // que o link de recuperação já deixou ativa.
+    async updatePassword(newPassword) {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+            console.error('Erro ao definir nova senha:', error);
+            return { error: error.message };
+        }
+        return { ok: true };
+    },
+
     // Logout
     async signOut() {
         await supabase.auth.signOut();

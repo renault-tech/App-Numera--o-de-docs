@@ -9,6 +9,19 @@ const SUPABASE_URL = 'https://uxdjhdnsnditivvjktzf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_VAfgn59xk4fN4e3gPSMmLg_OXx6xAjf';
 var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
+// Verdadeiro enquanto a tela de "definir nova senha" (link de recuperação)
+// está no ar — impede que checkAutoLogin()/render() troquem essa tela por
+// engano assim que a sessão temporária do link é detectada.
+let inPasswordRecovery = false;
+if (supabase) {
+    supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') {
+            inPasswordRecovery = true;
+            showResetPasswordView();
+        }
+    });
+}
+
 const DEST_EXTERNO = 'Externo / Outro órgão';
 // Valor sentinela (mesmo padrão do DEST_EXTERNO): gravado literalmente na
 // lista de destinos em vez de expandir para os nomes das secretarias do
@@ -78,6 +91,7 @@ let state = {
     logs: [],
     secretariats: [...DEFAULT_SECRETARIATS],
     secretariaPermissions: {}, // { secretaria: [docIds] }
+    loginDiretoBloqueado: false, // app_config.loginDiretoBloqueado — ver plataforma-banner e showLoginView
     filters: { search: '', tipo: '', sec: '', from: '', to: '' },
     reportFilters: { tipo: '', sec: '', from: '', to: '', status: '' },
     logFilter: 'todos',
@@ -402,6 +416,8 @@ async function loadData() {
             if (secList && Array.isArray(secList.value)) state.secretariats = [...secList.value].sort();
             const perms = configs.find(c => c.key === 'secretariaPermissions');
             if (perms && perms.value) state.secretariaPermissions = perms.value;
+            const bloqueio = configs.find(c => c.key === 'loginDiretoBloqueado');
+            state.loginDiretoBloqueado = !!(bloqueio && bloqueio.value === true);
         }
 
         // Usuários
@@ -843,7 +859,7 @@ function plataformaConsolidadaBanner() {
     if (getTutorialSeenIds().has('plataforma-consolidada-dispensado')) return '';
     return `<div class="plataforma-banner">
       <button class="plataforma-banner-fechar" onclick="dispensarBannerPlataforma()" title="Não mostrar novamente" aria-label="Dispensar aviso">✕</button>
-      <p class="plataforma-banner-text">✨ <b>Nova plataforma disponível:</b> a Central Cataguases reúne Numera, Compras e Requerimentos com um só login. No primeiro acesso, use "Esqueci minha senha" lá.</p>
+      <p class="plataforma-banner-text">✨ <b>Nova plataforma disponível:</b> a Central Cataguases reúne Numera, Compras e Requerimentos com um só login — acesso e permissões dos 3 agora também podem ser pedidos e liberados por lá. Sua conta do Numera continua sendo esta; se precisar trocar a senha, use "Esqueci minha senha" aqui mesmo, na tela de entrada.</p>
       <a class="btn plataforma-banner-cta" href="${URL_CENTRAL_CATAGUASES}" target="_blank" rel="noreferrer">Ir para a Central Cataguases</a>
     </div>`;
 }
@@ -975,10 +991,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function checkAutoLogin() {
+    if (inPasswordRecovery) return;
     try {
         const user = await authService.getCurrentUser();
         if (user) {
             state.currentUser = user; await ensureCardOrderSynced(); render();
+            marcarOrigemHubSeAplicavel(user.id);
             subscribeRealtime();
             if (user.role === 'admin') requestNotificationPermission();
         }
@@ -995,6 +1013,7 @@ async function handleLogin(e) {
     const result = await authService.signIn(id, pw);
     if (result.user) {
         state.currentUser = result.user;
+        marcarOrigemHubSeAplicavel(result.user.id);
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         await loadData();
         await ensureCardOrderSynced();
@@ -1018,6 +1037,22 @@ async function handleLogout() {
 }
 
 function showLoginView() {
+    if (state.loginDiretoBloqueado) {
+        document.getElementById('app-root').innerHTML = `
+          <div class="login-wrap">
+            <div class="login-blob login-blob--1"></div>
+            <div class="login-blob login-blob--2"></div>
+            <div class="login-card">
+              <img src="logo.png" alt="Prefeitura de Cataguases" class="login-logo">
+              <div class="login-title brand-wordmark">Numera</div>
+              <div class="login-sub" style="margin-top:8px;">
+                O login direto foi desativado. Acesse pela Central Cataguases.
+              </div>
+              <a class="btn btn-primary btn-block" style="margin-top:16px;" href="${URL_CENTRAL_CATAGUASES}">Ir para a Central Cataguases</a>
+            </div>
+          </div>`;
+        return;
+    }
     document.getElementById('app-root').innerHTML = `
       <div class="login-wrap">
         <div class="login-blob login-blob--1"></div>
@@ -1034,10 +1069,119 @@ function showLoginView() {
             <input id="loginPassword" type="password" class="field-input" required autocomplete="current-password" placeholder="••••••••">
             <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Entrar</button>
           </form>
+          <button type="button" class="login-link" onclick="openForgotPasswordModal()">Esqueci minha senha</button>
           <button type="button" class="login-link" onclick="openRegisterModal()">Não tem conta? <b>Criar conta</b></button>
           <button type="button" class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="enterDemoMode()">${icon('eye', 15, 2)} Ver demonstração</button>
         </div>
       </div>`;
+}
+
+// Grava de onde veio este login, só quando a navegação carregou com
+// ?origem=hub (anexado pelos cards da Central Cataguases) — alimenta o
+// sinal de adoção no painel "Login direto por aplicativo" do Hub. RLS de
+// `users` já é permissiva (achado registrado à parte, fora de escopo
+// desta mudança), então o update funciona com a própria sessão do usuário.
+async function marcarOrigemHubSeAplicavel(userId) {
+    if (new URLSearchParams(location.search).get('origem') !== 'hub') return;
+    try {
+        await supabase
+            .from('users')
+            .update({ ultimo_acesso_origem: 'hub', veio_do_hub_em: new Date().toISOString() })
+            .eq('id', userId);
+    } catch (e) {
+        console.error('marcarOrigemHubSeAplicavel:', e);
+    }
+}
+
+// ============================================================
+// Recuperação de senha (não existia até esta versão — a única conta que
+// não tem como usar este fluxo é uma conta legada, sem par em auth.users,
+// criada antes da integração com o Supabase Auth).
+// ============================================================
+function openForgotPasswordModal() {
+    openModal(`
+      <div class="reserve-modal">
+        <div class="reserve-eyebrow brand-wordmark" style="font-weight:800;">Numera</div>
+        <div class="reserve-name">Esqueci minha senha</div>
+        <p style="font-size:13px;color:var(--muted,#64748b);margin:0 0 12px;">
+          Informe o e-mail da sua conta. Se ele estiver cadastrado, enviaremos um link para você definir uma nova senha.
+        </p>
+        <div class="field"><label class="field-label">E-mail</label>
+          <input id="forgotEmail" type="email" class="field-input" placeholder="seu@email.com"></div>
+        <div class="reserve-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+          <button class="btn btn-primary" style="flex:1.4" onclick="confirmForgotPassword()">Enviar link</button>
+        </div>
+      </div>`, { width: 420 });
+}
+
+async function confirmForgotPassword() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    if (!email || !email.includes('@')) {
+        document.getElementById('forgotEmail').classList.add('field-input--invalid');
+        showToast('Informe um e-mail válido.', 'warning');
+        return;
+    }
+    const btn = document.querySelector('#overlay-root .reserve-actions .btn-primary');
+    const original = btn.textContent; btn.textContent = 'Enviando...'; btn.disabled = true;
+    await authService.requestPasswordReset(email);
+    // Mensagem sempre igual, exista ou não a conta — não dá pra confirmar
+    // por e-mail se alguém tem cadastro ou não (mesmo cuidado já usado no
+    // "esqueci minha senha" da Central Cataguases e do Compras).
+    closeModal();
+    showToast('Se este e-mail estiver cadastrado, você vai receber um link para definir uma nova senha.', 'success', 8000);
+}
+
+// Tela dedicada de nova senha, mostrada quando o link do e-mail de
+// recuperação chega de volta ao app (evento PASSWORD_RECOVERY do Supabase
+// Auth) — independe de haver ou não uma sessão "normal" ativa.
+function showResetPasswordView() {
+    document.getElementById('app-root').innerHTML = `
+      <div class="login-wrap">
+        <div class="login-blob login-blob--1"></div>
+        <div class="login-blob login-blob--2"></div>
+        <div class="login-card">
+          <img src="logo.png" alt="Prefeitura de Cataguases" class="login-logo">
+          <div class="login-title brand-wordmark">Numera</div>
+          <div class="login-sub">Defina sua nova senha</div>
+          <form onsubmit="confirmResetPassword(event)" class="login-form">
+            <label class="field-label">Nova senha</label>
+            <input id="resetPassword1" type="password" class="field-input" required autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+            <label class="field-label">Confirmar nova senha</label>
+            <input id="resetPassword2" type="password" class="field-input" required autocomplete="new-password" placeholder="Repita a senha">
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Salvar nova senha</button>
+          </form>
+        </div>
+      </div>`;
+}
+
+async function confirmResetPassword(e) {
+    e.preventDefault();
+    const p1 = document.getElementById('resetPassword1').value;
+    const p2 = document.getElementById('resetPassword2').value;
+    if (!p1 || p1.length < 6) {
+        showToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
+        return;
+    }
+    if (p1 !== p2) {
+        showToast('As senhas não coincidem.', 'warning');
+        return;
+    }
+    const btn = e.target.querySelector('button[type="submit"]');
+    const original = btn.textContent; btn.textContent = 'Salvando...'; btn.disabled = true;
+    const result = await authService.updatePassword(p1);
+    if (result.error) {
+        showToast('Não foi possível definir a nova senha: ' + result.error, 'error', 0);
+        btn.textContent = original; btn.disabled = false;
+        return;
+    }
+    showToast('Senha definida com sucesso!', 'success');
+    // A troca de senha já deixa uma sessão válida ativa (o link de
+    // recuperação autentica antes de disparar PASSWORD_RECOVERY) — reusa o
+    // fluxo normal de login para carregar o cadastro em `users` (e barrar
+    // se ainda não aprovado), em vez de duplicar essa checagem aqui.
+    inPasswordRecovery = false;
+    await checkAutoLogin();
 }
 
 // ============================================================
@@ -1160,6 +1304,7 @@ function navItemsFor(user) {
 }
 
 function render() {
+    if (inPasswordRecovery) return;
     if (!state.currentUser) { showLoginView(); return; }
     const u = state.currentUser;
     const collapsed = state.collapsed;
