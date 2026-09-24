@@ -46,10 +46,9 @@ const DRY_RUN = process.argv.includes('--dry-run');
 
 // E-mails já confirmados pelo dono para o Grupo E (plano, seção 7,
 // decisão P3) — usados só quando public.users.email estiver vazio.
-// Majella Mazini fica de fora de propósito: e-mail dela ainda não chegou;
-// ela continua bloqueada até a linha ser acrescentada aqui.
 const EMAILS_CONHECIDOS = {
   leandradelgado: 'leandra.cataguases@gmail.com',
+  majella: 'majella@cataguases.mg.gov.br',
 };
 
 if (!SERVICE_ROLE_KEY) {

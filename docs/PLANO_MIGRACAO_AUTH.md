@@ -2,8 +2,11 @@
 
 **Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
 pelo dono da plataforma, PR0 e PR1 concluídos e aplicados em produção. PR2
-(migração de contas) com o script pronto e o dry-run já conferido contra o
-banco real — só falta o e-mail de 1 pessoa para rodar de verdade.** Este
+(migração de contas) com o script pronto, dry-run conferido e a última
+pendência de dado (e-mail de Majella Mazini,
+`majella@cataguases.mg.gov.br`, informado pelo dono em 24/09/2026)
+resolvida — os 41 usuários resolvem e-mail agora, falta só rodar o script
+de verdade quando os 2 passos manuais do dono estiverem prontos.** Este
 documento é o plano de referência para a migração de segurança descrita no
 achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
 nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por
@@ -54,8 +57,11 @@ exception` forçado) antes de aplicar de verdade.
    Fontoura → `ludmilafontoura25@gmail.com` (já estava no `username`);
    Leandra Delgado → `leandra.cataguases@gmail.com` (informado pelo dono,
    campo `email` dela no banco continua vazio até o script do PR2 gravar).
-   **Falta só o e-mail de Majella Mazini** — o dono vai enviar assim que
-   conseguir; ela é a única pendência real de dado para fechar a seção 1.
+   **Majella Mazini → `majella@cataguases.mg.gov.br`** (informado pelo dono
+   em 24/09/2026, mesmo dia). Com isso, a única pendência real de dado da
+   seção 1 está fechada — os 41 usuários resolvem e-mail; falta só rodar o
+   script de verdade quando os passos manuais (P5 e SMTP, item 2 acima)
+   estiverem prontos.
 5. **P8 confirmado: sem custo.** Homologação via um **segundo projeto
    Supabase no plano gratuito** (mesmo caminho já usado quando o Compras
    migrou de região Oregon → São Paulo: projeto novo do zero, schema
@@ -444,15 +450,17 @@ tomada: 2 semanas de estabilidade antes).
   entra primeiro via `createUser` com o mesmo `id`; se a Admin API recusar
   `id` explícito, o script para e avisa — nunca insere direto via SQL.
   **Dry-run já conferido nesta sessão via SQL direto no banco** (mesma
-  classificação que o script produzirá): 37 já têm Auth, 3 "sem Auth"
-  resolvem e-mail sozinhos (admin, Leandra via decisão já tomada, Ludmila
-  Fontoura porque o próprio `username` dela É o e-mail), e só **Majella
-  Mazini** continua bloqueada — bate exatamente com a tabela A=31/B=5/C=1/
-  D=1/E=3 da seção 1 (nada mudou desde o planejamento). *Pronto para rodar
-  de verdade quando:* e-mail de Majella chegar (ou decisão de deixá-la de
-  fora), e os dois passos manuais do dono (P5: desligar "Confirm email"; a
-  senha SMTP recolada no projeto do Numera) estiverem feitos — nenhum dos
-  dois bloqueia o dry-run, só a execução real ficando 100% completa.
+  classificação que o script produzirá): 37 já têm Auth, os 4 "sem Auth"
+  resolvem e-mail sozinhos (admin; Leandra e **Majella Mazini
+  (`majella@cataguases.mg.gov.br`, informado pelo dono em 24/09/2026) via
+  decisão já tomada**; Ludmila Fontoura porque o próprio `username` dela É
+  o e-mail) — bate exatamente com a tabela A=31/B=5/C=1/D=1/E=3 da seção 1
+  (nada mudou desde o planejamento), e a pendência de dado que faltava
+  está fechada: **41/41 resolvem e-mail agora.** *Pronto para rodar de
+  verdade quando:* os dois passos manuais do dono (P5: desligar "Confirm
+  email"; a senha SMTP recolada no projeto do Numera) estiverem feitos —
+  nenhum dos dois bloqueia o dry-run, só a execução real ficando 100%
+  completa.
 - **PR3 — virada do front.** Login só pelo Auth (username resolvido
   conforme decisão já tomada); sai o fallback legado e
   `localStorage.currentUserId`; sessão sem linha aprovada/ativa em `users`
@@ -486,11 +494,12 @@ tomada: 2 semanas de estabilidade antes).
 ## 7. Perguntas ainda em aberto (antes de implementar)
 
 Todas as perguntas originais (P1–P9) já foram respondidas — ver "Decisões
-já tomadas" no topo. Só falta um dado concreto, não mais uma decisão:
+já tomadas" no topo. **P3 fechada de vez em 24/09/2026**: Leandra Delgado
+(`leandra.cataguases@gmail.com`) e Majella Mazini
+(`majella@cataguases.mg.gov.br`) — as duas informadas pelo dono. Nenhum
+dado pendente resta para a migração de contas em si; só os passos manuais
+já registrados na seção 6 (P5, SMTP) faltam para rodar o PR2 de verdade.
 
-- **P3 — e-mail de Majella Mazini**: única pendência de dado que falta.
-  Leandra Delgado já resolvida (`leandra.cataguases@gmail.com`, informado
-  pelo dono). O dono vai enviar o e-mail de Majella assim que conseguir.
 - **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no `auth.users` sem
   linha correspondente em `public.users` (criada 23/07, nunca usada) —
   apaga? **Lembrete pedido pelo dono: só decidir isso mais perto da

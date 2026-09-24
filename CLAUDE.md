@@ -83,9 +83,10 @@ configurado em cada projeto Supabase separadamente; 2 semanas de
 estabilidade antes do passo irreversível de apagar as senhas em texto
 puro) e 7 perguntas ainda em aberto antes de começar a implementar. Leia
 esse arquivo antes de iniciar qualquer PR desta migração. Todas as 9
-perguntas do plano (P1-P9) já foram respondidas pelo dono (24/09/2026); só
-falta o e-mail de 1 usuária (Majella Mazini) para fechar a migração de
-contas por completo.
+perguntas do plano (P1-P9) já foram respondidas pelo dono (24/09/2026),
+incluindo o e-mail de Majella Mazini (`majella@cataguases.mg.gov.br`,
+informado no mesmo dia) — nenhum dado pendente resta para fechar a
+migração de contas.
 
 **Regra do dono, válida a partir de 24/09/2026: qualquer mudança que possa
 afetar o uso dos usuários (qualquer deploy que toque `app.js`/
@@ -196,11 +197,12 @@ via HTTPS, limitação já documentada; só o MCP de banco funciona daqui):
 confirma a mesma contagem do plano (A=31/B=5/C=1/D=1/E=3, 41 no total) e
 que, das 3 pessoas do Grupo E, 2 já resolvem e-mail sozinhas pelas decisões
 já tomadas (o admin tem e-mail próprio; Leandra Delgado via
-`leandra.cataguases@gmail.com`, confirmado pelo dono; Ludmila Fontoura
-porque o próprio `username` dela É o e-mail) — só **Majella Mazini**
-continua de fato bloqueada. O script já embute essas 2 resoluções
-(`EMAILS_CONHECIDOS` + fallback de username-parece-e-mail), então rodar de
-verdade hoje já cobriria 40 dos 41.
+`leandra.cataguases@gmail.com`; Majella Mazini via
+`majella@cataguases.mg.gov.br`, informada pelo dono ainda em 24/09/2026;
+Ludmila Fontoura porque o próprio `username` dela É o e-mail). O script já
+embute as 2 resoluções manuais (`EMAILS_CONHECIDOS`) e o fallback de
+username-parece-e-mail — **rodar de verdade hoje já cobriria os 41/41**,
+sem nenhuma pendência de dado restante.
 
 ## Corrigido nesta auditoria (risco zero, sem mudar nenhum comportamento)
 
