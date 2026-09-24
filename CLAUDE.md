@@ -82,7 +82,20 @@ função no servidor; SMTP próprio reaproveitando a conta Brevo do Compras,
 configurado em cada projeto Supabase separadamente; 2 semanas de
 estabilidade antes do passo irreversível de apagar as senhas em texto
 puro) e 7 perguntas ainda em aberto antes de começar a implementar. Leia
-esse arquivo antes de iniciar qualquer PR desta migração.
+esse arquivo antes de iniciar qualquer PR desta migração. Todas as 9
+perguntas do plano (P1-P9) já foram respondidas pelo dono (24/09/2026); só
+falta o e-mail de 1 usuária (Majella Mazini) para fechar a migração de
+contas por completo.
+
+**Regra do dono, válida a partir de 24/09/2026: qualquer mudança que possa
+afetar o uso dos usuários (qualquer deploy que toque `app.js`/
+`auth-service.js`/`index.html`, já que este repo publica na Vercel a cada
+push) só pode acontecer depois das 17h, horário de Cataguases/MG
+(`America/Sao_Paulo`, sem horário de verão desde 2019).** Mudança só de
+documentação/planejamento (como este arquivo, `docs/`) não entra nessa
+restrição. Antes de publicar qualquer commit que toque o app em produção,
+conferir o horário local (`TZ=America/Sao_Paulo date`) e não prosseguir
+antes das 17h sem confirmação explícita do dono.
 
 ## Corrigido nesta auditoria (risco zero, sem mudar nenhum comportamento)
 
