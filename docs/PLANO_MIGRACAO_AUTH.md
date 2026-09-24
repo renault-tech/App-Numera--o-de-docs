@@ -41,12 +41,12 @@ exception` forçado) antes de aplicar de verdade.
    conta do dono, 19 reservas/207 logs entre 14/07-06/08; Ludmila Fontoura,
    7 reservas/8 logs entre 22/07-27/08, `email` vazio no banco mas
    `username` = `ludmilafontoura25@gmail.com`) e 2 recém-aprovadas sem
-   nenhum uso ainda. **Confirmado usar `ludmilafontoura25@gmail.com`** como
-   e-mail dela na migração. Majella e Leandra já receberam acesso por
-   e-mail fora do sistema (segundo o dono), mas o campo `email` de ambas
-   **continua vazio no banco** (reconfirmado por consulta direta) — falta
-   só o dono passar os dois endereços exatos para o script da seção 1
-   usar.
+   nenhum uso ainda. **E-mails confirmados para a migração**: Ludmila
+   Fontoura → `ludmilafontoura25@gmail.com` (já estava no `username`);
+   Leandra Delgado → `leandra.cataguases@gmail.com` (informado pelo dono,
+   campo `email` dela no banco continua vazio até o script do PR2 gravar).
+   **Falta só o e-mail de Majella Mazini** — o dono vai enviar assim que
+   conseguir; ela é a única pendência real de dado para fechar a seção 1.
 5. **P8 confirmado: sem custo.** Homologação via um **segundo projeto
    Supabase no plano gratuito** (mesmo caminho já usado quando o Compras
    migrou de região Oregon → São Paulo: projeto novo do zero, schema
@@ -418,9 +418,9 @@ tomada: 2 semanas de estabilidade antes).
 Todas as perguntas originais (P1–P9) já foram respondidas — ver "Decisões
 já tomadas" no topo. Só falta um dado concreto, não mais uma decisão:
 
-- **P3 — e-mails de Majella Mazini e Leandra Delgado**: já aprovadas, sem
-  e-mail em nenhum campo do banco (reconfirmado por consulta direta) —
-  falta o dono passar os dois endereços exatos.
+- **P3 — e-mail de Majella Mazini**: única pendência de dado que falta.
+  Leandra Delgado já resolvida (`leandra.cataguases@gmail.com`, informado
+  pelo dono). O dono vai enviar o e-mail de Majella assim que conseguir.
 - **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no `auth.users` sem
   linha correspondente em `public.users` (criada 23/07, nunca usada) —
   apaga? **Lembrete pedido pelo dono: só decidir isso mais perto da
