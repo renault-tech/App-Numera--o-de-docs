@@ -29,6 +29,44 @@ exception` forçado) antes de aplicar de verdade.
    mesmo do mesmo dono. Passo manual de ~5 minutos, ainda não feito.
 3. **Prazo do PR6** (apagar as senhas em texto puro — passo sem volta):
    **2 semanas** de estabilidade depois do PR5 aplicado, antes de executar.
+4. **P3 resolvido em parte**: os 2 usuários pendentes sem e-mail (Majella
+   Mazini, Leandra Delgado, criados 23/09) já foram aprovados manualmente
+   pelo dono no app. Confirmado por consulta direta ao banco que nenhum dos
+   4 usuários "legado puro" (sem par em `auth.users`) é conta fictícia de
+   teste — são 2 pessoas reais com uso sustentado (o admin é a própria
+   conta do dono, 19 reservas/207 logs entre 14/07-06/08; Ludmila Fontoura,
+   7 reservas/8 logs entre 22/07-27/08, `email` vazio no banco mas
+   `username` = `ludmilafontoura25@gmail.com`) e 2 recém-aprovadas sem
+   nenhum uso ainda. **Falta confirmar**: usar
+   `ludmilafontoura25@gmail.com` como e-mail dela na migração (ou checar
+   com ela antes), e os e-mails de Majella/Leandra — nenhuma das duas tem
+   e-mail cadastrado em campo nenhum hoje.
+5. **P4 confirmado**: ações de admin (criar usuário, redefinir senha, apagar
+   conta) centralizadas no Hub (`centraltech`), que já tem
+   `NUMERA_SUPABASE_SERVICE_ROLE_KEY` — não cria Edge Function própria no
+   Numera.
+6. **P5 confirmado**: desligar "Confirm email" no Supabase Auth do projeto
+   do Numera — a aprovação do admin já é a porta de entrada, confirmação de
+   e-mail separada é redundante. **Passo manual do dono** (Authentication →
+   Providers → Email → "Confirm email", painel do projeto
+   `uxdjhdnsnditivvjktzf`) — nenhuma ferramenta disponível nesta sessão
+   consegue ler/alterar essa configuração remotamente.
+7. **P6 confirmado, com a regra exata já extraída do código** (não uma
+   aproximação): `getVisibleReservations()` (`app.js:948-958`) —
+   - admin vê tudo, sempre;
+   - reserva de um documento **sem** `per_secretaria` é visível a qualquer
+     usuário aprovado;
+   - reserva de um documento **com** `per_secretaria`: visível só a quem
+     tem `secretaria` preenchida **igual à `user_secretaria` gravada na
+     própria reserva** (a secretaria de quem FEZ a reserva, não a de
+     destino);
+   - usuário sem `secretaria` cadastrada só vê as próprias reservas
+     (`user_id = auth.uid()`).
+   Isso substitui o placeholder genérico "usuario_aprovado()" que a seção 4
+   tinha antes para `reservations` — ver seção 4 atualizada.
+8. **P9 confirmado**: o próprio dono avisa os servidores sobre a janela de
+   corte (PR3/PR5) — nenhuma ação da nossa parte além de dar o aviso com
+   antecedência de quando a janela será.
 
 ## 0. O que o banco real mostra (achados ao vivo, 24/09/2026)
 
@@ -196,12 +234,17 @@ log gravado dentro da RPC; EXECUTE só para `authenticated`.
 | `admin_desativar_usuario(p_user_id)` | `deleteUser` (`app.js:2850`) | soft delete (coluna nova `ativo boolean default true`); não desativa a si mesmo nem o último admin |
 
 Criar usuário, definir/redefinir senha, apagar conta do Auth exigem a Admin
-API — **não pode ir para o navegador**. Duas opções em aberto (pergunta P4):
-Edge Function própria `admin-usuarios` no projeto do Numera, ou delegar ao
-Hub (já tem `NUMERA_SUPABASE_SERVICE_ROLE_KEY`). Nas duas, "redefinir senha"
-vira link de recuperação gerado na hora (`generateLink({type:'recovery'})`,
-mesmo padrão do Hub) — o campo de senha em texto aberto em `openUserModal`
-(`app.js:2766`) some.
+API — **não pode ir para o navegador**. **P4 confirmado: centralizado no
+Hub** (`centraltech`, que já tem `NUMERA_SUPABASE_SERVICE_ROLE_KEY`) — sem
+Edge Function própria no Numera. "Redefinir senha" vira link de recuperação
+gerado na hora (`generateLink({type:'recovery'})`, mesmo padrão já usado
+pelo Hub para o primeiro acesso via `aprovarSolicitacao`) — o campo de senha
+em texto aberto em `openUserModal` (`app.js:2766`) some. Isso significa que
+gestão de usuário do Numera deixa de existir dentro do próprio app: a tela
+`openUserModal`/`saveUser`/`approveUser`/`deleteUser` em `app.js` é
+substituída por telas equivalentes no Hub (extensão do que já existe em
+Configurações → Usuários e acessos do `centraltech`), não reimplementada
+aqui.
 
 Ações do próprio usuário (`id = auth.uid()` fixo): `salvar_ordem_cards(...)`
 substitui `app.js:1766`; `marcar_login_origem()` substitui `app.js:1087`
@@ -217,7 +260,7 @@ policies (calculado uma vez por consulta).
 |---|---|---|---|---|
 | `users` | `id = auth.uid() or eh_admin()`; `anon`: nada | nenhum (trigger/RPC) | nenhum (RPCs) | nenhum |
 | `documents` | `usuario_aprovado()` | `eh_admin()` | `eh_admin()` | `eh_admin()` |
-| `reservations` | `usuario_aprovado()` (ver P6) | só RPC | só RPC | só RPC |
+| `reservations` | ver regra exata abaixo (P6, confirmada) | só RPC | só RPC | só RPC |
 | `document_counters` | `usuario_aprovado()` | só RPC | só RPC | só RPC |
 | `logs` | `eh_admin()` | `authenticated` com `user_id = auth.uid()` | nenhum (trigger mantido) | nenhum (trigger mantido) |
 | `app_config` | `anon`/`authenticated`: só chaves públicas | `eh_admin()` | `eh_admin()` | `eh_admin()` |
@@ -228,6 +271,37 @@ auth.uid()`/`user_name` — ninguém forja "quem fez"; convive com as RPCs
 `app_config`: leitura pública cobre login/cadastro, escrita só admin fecha
 a negação de serviço do `loginDiretoBloqueado`. Realtime (`postgres_changes`)
 já respeita RLS com o JWT do usuário — sem mudança de código ali.
+
+**SELECT de `reservations`, regra exata** (P6, confirmada com o dono —
+replica `getVisibleReservations()`, `app.js:948-958`, não um recorte
+aproximado):
+
+```sql
+create policy "le_reservations" on public.reservations
+for select
+using (
+  eh_admin()
+  or exists (
+    select 1 from public.documents d
+    where d.id = reservations.doc_id and coalesce(d.per_secretaria, false) = false
+  )
+  or (
+    (select u.secretaria from public.users u where u.id = auth.uid()) is not null
+    and reservations.user_secretaria = (select u.secretaria from public.users u where u.id = auth.uid())
+  )
+  or (
+    (select u.secretaria from public.users u where u.id = auth.uid()) is null
+    and reservations.user_id = auth.uid()
+  )
+);
+```
+
+Reparo importante para quem for implementar: a regra usa `user_secretaria`
+(secretaria de quem **fez** a reserva), não `dest_secretaria`/
+`dest_secretarias` (a quem foi endereçada) — mesmo critério do código atual,
+mesmo que pareça contraintuitivo à primeira vista. Documento sem
+`per_secretaria` continua público a qualquer autenticado aprovado,
+independente de secretaria.
 
 ## 5. Testes e virada sem trancar ninguém
 
@@ -311,44 +385,40 @@ tomada: 2 semanas de estabilidade antes).
   quando:* "Importar do Numera", "Login direto por aplicativo" e aprovação
   com Numera funcionam em produção.
 - **PR5 — imposição.** RPCs fase B, revoke EXECUTE de `anon`, RLS da seção
-  4, revoke dos grants excedentes. Rollback pronto. *Pronto quando:* zero
-  "chamada sem sessão" por 24–48h após PR3, PR4 em produção, matriz
-  completa passa em transação, rollback testado, dono disponível na janela.
+  4 (inclusive a policy de `reservations` com a regra exata de secretaria,
+  P6 já confirmada — não é mais opcional/PR7), revoke dos grants
+  excedentes. Rollback pronto. *Pronto quando:* zero "chamada sem sessão"
+  por 24–48h após PR3, PR4 em produção, matriz completa passa em
+  transação, rollback testado, dono disponível na janela.
 - **PR6 — limpeza irreversível**, 2 semanas depois do PR5 (decisão já
   tomada). `update users set password = null` → `drop column password`;
   remove `p_user_id` das RPCs e ajusta o demo; atualiza `CLAUDE.md`.
   *Pronto quando:* confirmação explícita do dono, PR4 sem escrita em
   `password`.
-- **PR7 — opcional.** RLS de `reservations` espelhando
-  `getVisibleReservations()` (depende de P6); confirmação de SMTP
-  configurado (decisão já tomada, falta o passo manual); fixar a versão de
-  `@supabase/supabase-js@2` no `index.html`.
+- **PR7 — opcional.** Confirmação de que o SMTP está configurado de
+  verdade em produção (decisão já tomada, falta só o passo manual no
+  painel); fixar a versão de `@supabase/supabase-js@2` no `index.html`.
 
 ## 7. Perguntas ainda em aberto (antes de implementar)
 
-As perguntas 1, 2 e 10 (parcialmente) da lista original já foram
-respondidas — ver "Decisões já tomadas" no topo. Faltam:
+As perguntas 1, 2, 4, 5, 6, 9 e a maior parte da 10 já foram respondidas —
+ver "Decisões já tomadas" no topo. Faltam:
 
-- **P3 — Os 3 usuários sem e-mail**: o ativo (7 reservas) recebe e-mail
-  real ou sintético (`<username>@usuarios.numera.invalid`, sem recuperação
-  de senha possível)? Os 2 pendentes de 23/09: migrar (pedindo e-mail),
-  ou excluir?
-- **P4 — Gestão de usuários pelo admin**: Edge Function própria no Numera,
-  ou centralizar no Hub (que já tem a service role do Numera)?
-- **P5 — Confirmação de e-mail no cadastro**: desligar "Confirm email"
-  (aprovação do admin já é a porta de entrada) ou manter e confirmar via
-  Admin API na aprovação? Agora que o SMTP vai ser configurado (decisão já
-  tomada), isso fica menos crítico, mas ainda precisa de uma escolha.
-- **P6 — Sigilo das reservas**: hoje todo mundo lê todas as reservas; "cada
-  secretaria só vê a própria" existe só na tela, não no banco. Vira regra
-  de RLS de verdade (PR7) ou continua sendo só organização visual?
-- **P7 — Remover usuário**: confirma que vira desativação (reservas/logs
-  impedem apagar de fato)? A conta órfã do Auth (sem linha em
-  `public.users`) é apagada?
-- **P8 — Homologação**: aceita um projeto Supabase de homologação (ou
-  Branch, que tem custo) + config de URL por hostname, para testar de
-  ponta a ponta antes de produção?
-- **P9 — Janela e aviso**: que dia/horário para PR3 e PR5, e quem avisa os
+- **P3 — e-mails para a migração de contas**: confirmar
+  `ludmilafontoura25@gmail.com` como e-mail de Ludmila Fontoura (hoje só no
+  `username`, campo `email` vazio) — ou checar com ela antes? E quais
+  e-mails usar para Majella Mazini e Leandra Delgado (já aprovadas, sem
+  e-mail cadastrado em nenhum campo)?
+- **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no
+  `auth.users` sem linha correspondente em `public.users` (criada 23/07,
+  nunca usada) — apaga? **Lembrete pedido pelo dono: só decidir isso mais
+  perto da execução do PR2, não agora.**
+- **P8 — Homologação**: confirmado que sim (ver custo explicado na
+  conversa) — falta só decidir **Branch pago** (poucos centavos por hora
+  de teste, mas soma à fatura e normalmente exige plano pago) ou **segundo
+  projeto Supabase gratuito** (mesmo caminho já usado quando o Compras
+  migrou de região — sem custo, mais trabalho manual de replicar
+  schema/dados de teste, não sincroniza sozinho com produção).
   servidores de que vão precisar entrar de novo?
 
 ### Arquivos críticos para a implementação
