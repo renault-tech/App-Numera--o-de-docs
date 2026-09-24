@@ -2,11 +2,10 @@
 
 **Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
 pelo dono da plataforma, PR0 e PR1 concluídos e aplicados em produção. PR2
-(migração de contas) com o script pronto, dry-run conferido e a última
-pendência de dado (e-mail de Majella Mazini,
-`majella@cataguases.mg.gov.br`, informado pelo dono em 24/09/2026)
-resolvida — os 41 usuários resolvem e-mail agora, falta só rodar o script
-de verdade quando os 2 passos manuais do dono estiverem prontos.** Este
+(migração de contas) com o script pronto, dry-run conferido, e-mail de
+Majella Mazini resolvido e P5 ("Confirm email") já desligado pelo dono —
+falta só o SMTP recolado no projeto do Numera para rodar o script de
+verdade.** Este
 documento é o plano de referência para a migração de segurança descrita no
 achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
 nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por
@@ -60,8 +59,8 @@ exception` forçado) antes de aplicar de verdade.
    **Majella Mazini → `majella@cataguases.mg.gov.br`** (informado pelo dono
    em 24/09/2026, mesmo dia). Com isso, a única pendência real de dado da
    seção 1 está fechada — os 41 usuários resolvem e-mail; falta só rodar o
-   script de verdade quando os passos manuais (P5 e SMTP, item 2 acima)
-   estiverem prontos.
+   script de verdade quando o SMTP (item 2 acima) estiver pronto — o outro
+   passo manual, P5, já foi feito (item 7 abaixo).
 5. **P8 confirmado: sem custo.** Homologação via um **segundo projeto
    Supabase no plano gratuito** (mesmo caminho já usado quando o Compras
    migrou de região Oregon → São Paulo: projeto novo do zero, schema
@@ -74,12 +73,13 @@ exception` forçado) antes de aplicar de verdade.
    conta) centralizadas no Hub (`centraltech`), que já tem
    `NUMERA_SUPABASE_SERVICE_ROLE_KEY` — não cria Edge Function própria no
    Numera.
-7. **P5 confirmado**: desligar "Confirm email" no Supabase Auth do projeto
-   do Numera — a aprovação do admin já é a porta de entrada, confirmação de
-   e-mail separada é redundante. **Passo manual do dono** (Authentication →
-   Providers → Email → "Confirm email", painel do projeto
-   `uxdjhdnsnditivvjktzf`) — nenhuma ferramenta disponível nesta sessão
-   consegue ler/alterar essa configuração remotamente.
+7. **P5 confirmado e FEITO em 24/09/2026**: "Confirm email" desligado no
+   Supabase Auth do projeto do Numera (Authentication → Providers → Email
+   → "Confirm email", painel do projeto `uxdjhdnsnditivvjktzf`, com "Save
+   changes" clicado — confirmado pelo dono; nenhuma ferramenta desta sessão
+   alcança essa configuração para verificar por fora). A aprovação do admin
+   já é a porta de entrada, confirmação de e-mail separada era redundante.
+   **Dos dois passos manuais do dono para o PR2, só falta o SMTP (item 2).**
 8. **P6 confirmado, com a regra exata já extraída do código** (não uma
    aproximação): `getVisibleReservations()` (`app.js:948-958`) —
    - admin vê tudo, sempre;
@@ -456,11 +456,11 @@ tomada: 2 semanas de estabilidade antes).
   decisão já tomada**; Ludmila Fontoura porque o próprio `username` dela É
   o e-mail) — bate exatamente com a tabela A=31/B=5/C=1/D=1/E=3 da seção 1
   (nada mudou desde o planejamento), e a pendência de dado que faltava
-  está fechada: **41/41 resolvem e-mail agora.** *Pronto para rodar de
-  verdade quando:* os dois passos manuais do dono (P5: desligar "Confirm
-  email"; a senha SMTP recolada no projeto do Numera) estiverem feitos —
-  nenhum dos dois bloqueia o dry-run, só a execução real ficando 100%
-  completa.
+  está fechada: **41/41 resolvem e-mail agora.** P5 (desligar "Confirm
+  email") já foi feito pelo dono em 24/09/2026. *Pronto para rodar de
+  verdade quando:* a senha SMTP estiver recolada no projeto do Numera
+  (único passo manual que falta) — não bloqueia o dry-run, só a execução
+  real ficando 100% completa.
 - **PR3 — virada do front.** Login só pelo Auth (username resolvido
   conforme decisão já tomada); sai o fallback legado e
   `localStorage.currentUserId`; sessão sem linha aprovada/ativa em `users`
@@ -496,9 +496,11 @@ tomada: 2 semanas de estabilidade antes).
 Todas as perguntas originais (P1–P9) já foram respondidas — ver "Decisões
 já tomadas" no topo. **P3 fechada de vez em 24/09/2026**: Leandra Delgado
 (`leandra.cataguases@gmail.com`) e Majella Mazini
-(`majella@cataguases.mg.gov.br`) — as duas informadas pelo dono. Nenhum
-dado pendente resta para a migração de contas em si; só os passos manuais
-já registrados na seção 6 (P5, SMTP) faltam para rodar o PR2 de verdade.
+(`majella@cataguases.mg.gov.br`) — as duas informadas pelo dono. **P5
+também feito em 24/09/2026** ("Confirm email" desligado). Nenhum dado
+pendente resta para a migração de contas em si; só falta o SMTP recolado
+no projeto do Numera (já registrado na seção 6, item 2) para rodar o PR2
+de verdade.
 
 - **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no `auth.users` sem
   linha correspondente em `public.users` (criada 23/07, nunca usada) —
