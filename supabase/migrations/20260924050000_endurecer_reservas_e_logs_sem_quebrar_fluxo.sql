@@ -1,7 +1,8 @@
--- Primeira migration versionada deste repositório — o schema até aqui só
--- existia no banco remoto (uxdjhdnsnditivvjktzf). Este arquivo é o texto
--- exato aplicado via apply_migration durante a auditoria de segurança da
--- plataforma (ver CLAUDE.md deste repo para o contexto completo).
+-- Migrations 0002 a 0012 já existiam versionadas neste repositório antes
+-- desta (correção de um engano anterior no CLAUDE.md, que dizia não haver
+-- nenhuma). Este arquivo é o texto exato aplicado via apply_migration
+-- durante a auditoria de segurança da plataforma (ver CLAUDE.md deste repo
+-- para o contexto completo).
 --
 -- Achado de auditoria de segurança: RLS de todas as tabelas está
 -- "using(true) with check(true)" (equivalente a não ter RLS nenhuma).

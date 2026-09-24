@@ -134,11 +134,13 @@ Mesma raiz do achado crítico (nenhuma identidade real do servidor):
 
 ## Como continuar de outro computador
 
-Este projeto não tem `supabase/migrations/` versionado — o schema só
-existe no banco remoto (`uxdjhdnsnditivvjktzf`). Ao aplicar uma
-migration nova, considerar criar esse diretório (mesma regra já seguida
-nos outros 3 repos da plataforma: toda migration aplicada via
-`apply_migration` deve ficar também no git). Teste toda RPC/policy nova
-transacionalmente (`begin` + cenários + `rollback`, ou `raise exception`
-forçado no fim) antes de aplicar de verdade — os outros 3 repos deste
-ecossistema documentam essa disciplina em detalhe.
+O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em
+`supabase/migrations/` (`0002` a `0012`, mais as migrations desta sessão) —
+correção de um engano anterior neste arquivo, que dizia não haver nenhuma
+migration versionada. Toda migration aplicada via `apply_migration` deve
+continuar entrando no git. Teste toda RPC/policy nova transacionalmente
+(`begin` + cenários + `rollback`, ou `raise exception` forçado no fim) antes
+de aplicar de verdade — os outros 3 repos deste ecossistema documentam essa
+disciplina em detalhe. Testes de RPC/policy ficam em `supabase/tests/`,
+scripts de rollback testados em `supabase/rollbacks/` (convenção iniciada
+junto do plano em `docs/PLANO_MIGRACAO_AUTH.md`).
