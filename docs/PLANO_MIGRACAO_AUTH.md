@@ -1,15 +1,19 @@
 # Plano: migrar a autenticação do Numera para o Supabase Auth e fechar a RLS
 
-**Status: planejamento aprovado, implementação ainda não iniciada.** Este
-documento é o plano de referência para a migração de segurança descrita no
-achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
-nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por
-uma sessão do Claude Code (planejamento via agente Opus dedicado, com leitura
-do código real e consultas somente-leitura ao banco de produção
-`uxdjhdnsnditivvjktzf`), revisado e com 3 decisões já confirmadas pelo dono da
-plataforma. **Nenhuma mudança de código/banco foi aplicada ainda** — este
-documento só vira ação quando alguém (humano ou sessão futura) começar pelo
-PR0 abaixo, com as perguntas em aberto (seção 7) resolvidas primeiro.
+**Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
+pelo dono da plataforma, implementação ainda não iniciada.** Este documento é
+o plano de referência para a migração de segurança descrita no achado crítico
+de `CLAUDE.md` (RLS aberta em `using(true) with check(true)` nas 6 tabelas +
+senha em texto puro em `public.users.password`). Escrito por uma sessão do
+Claude Code (planejamento via agente Opus dedicado, com leitura do código
+real e consultas somente-leitura ao banco de produção
+`uxdjhdnsnditivvjktzf`). **Nenhuma mudança de código/banco foi aplicada
+ainda** — só falta um dado concreto (e-mails de 2 pessoas, seção 7) antes de
+seguir para o PR1. O PR0 já começou (ver `docs/PLANO_MIGRACAO_AUTH.md` no
+histórico do git e `CLAUDE.md`): a parte só de documentação/estrutura de
+pastas já foi publicada; as duas mudanças que tocam `app.js`/
+`auth-service.js` aguardam uma janela tranquila combinada com o dono antes de
+publicar (nenhum deploy automático sem aviso).
 
 Regra da casa deste repositório (mesma dos outros 3 da plataforma): migration
 nova sempre testada transacionalmente (`begin` + cenários + `rollback`/`raise
@@ -29,7 +33,7 @@ exception` forçado) antes de aplicar de verdade.
    mesmo do mesmo dono. Passo manual de ~5 minutos, ainda não feito.
 3. **Prazo do PR6** (apagar as senhas em texto puro — passo sem volta):
    **2 semanas** de estabilidade depois do PR5 aplicado, antes de executar.
-4. **P3 resolvido em parte**: os 2 usuários pendentes sem e-mail (Majella
+4. **P3 quase resolvido**: os 2 usuários pendentes sem e-mail (Majella
    Mazini, Leandra Delgado, criados 23/09) já foram aprovados manualmente
    pelo dono no app. Confirmado por consulta direta ao banco que nenhum dos
    4 usuários "legado puro" (sem par em `auth.users`) é conta fictícia de
@@ -37,21 +41,31 @@ exception` forçado) antes de aplicar de verdade.
    conta do dono, 19 reservas/207 logs entre 14/07-06/08; Ludmila Fontoura,
    7 reservas/8 logs entre 22/07-27/08, `email` vazio no banco mas
    `username` = `ludmilafontoura25@gmail.com`) e 2 recém-aprovadas sem
-   nenhum uso ainda. **Falta confirmar**: usar
-   `ludmilafontoura25@gmail.com` como e-mail dela na migração (ou checar
-   com ela antes), e os e-mails de Majella/Leandra — nenhuma das duas tem
-   e-mail cadastrado em campo nenhum hoje.
-5. **P4 confirmado**: ações de admin (criar usuário, redefinir senha, apagar
+   nenhum uso ainda. **Confirmado usar `ludmilafontoura25@gmail.com`** como
+   e-mail dela na migração. Majella e Leandra já receberam acesso por
+   e-mail fora do sistema (segundo o dono), mas o campo `email` de ambas
+   **continua vazio no banco** (reconfirmado por consulta direta) — falta
+   só o dono passar os dois endereços exatos para o script da seção 1
+   usar.
+5. **P8 confirmado: sem custo.** Homologação via um **segundo projeto
+   Supabase no plano gratuito** (mesmo caminho já usado quando o Compras
+   migrou de região Oregon → São Paulo: projeto novo do zero, schema
+   replicado a partir das migrations, dados de teste próprios — não um
+   Branch pago do projeto de produção). Isso desbloqueia o item "config de
+   ambiente por hostname" do PR0 (seção 6) — ainda não implementado, porque
+   ainda toca `app.js` (a mesma cautela de não publicar nada no app ao vivo
+   sem uma janela combinada).
+6. **P4 confirmado**: ações de admin (criar usuário, redefinir senha, apagar
    conta) centralizadas no Hub (`centraltech`), que já tem
    `NUMERA_SUPABASE_SERVICE_ROLE_KEY` — não cria Edge Function própria no
    Numera.
-6. **P5 confirmado**: desligar "Confirm email" no Supabase Auth do projeto
+7. **P5 confirmado**: desligar "Confirm email" no Supabase Auth do projeto
    do Numera — a aprovação do admin já é a porta de entrada, confirmação de
    e-mail separada é redundante. **Passo manual do dono** (Authentication →
    Providers → Email → "Confirm email", painel do projeto
    `uxdjhdnsnditivvjktzf`) — nenhuma ferramenta disponível nesta sessão
    consegue ler/alterar essa configuração remotamente.
-7. **P6 confirmado, com a regra exata já extraída do código** (não uma
+8. **P6 confirmado, com a regra exata já extraída do código** (não uma
    aproximação): `getVisibleReservations()` (`app.js:948-958`) —
    - admin vê tudo, sempre;
    - reserva de um documento **sem** `per_secretaria` é visível a qualquer
@@ -64,7 +78,7 @@ exception` forçado) antes de aplicar de verdade.
      (`user_id = auth.uid()`).
    Isso substitui o placeholder genérico "usuario_aprovado()" que a seção 4
    tinha antes para `reservations` — ver seção 4 atualizada.
-8. **P9 confirmado**: o próprio dono avisa os servidores sobre a janela de
+9. **P9 confirmado**: o próprio dono avisa os servidores sobre a janela de
    corte (PR3/PR5) — nenhuma ação da nossa parte além de dar o aviso com
    antecedência de quando a janela será.
 
@@ -401,25 +415,16 @@ tomada: 2 semanas de estabilidade antes).
 
 ## 7. Perguntas ainda em aberto (antes de implementar)
 
-As perguntas 1, 2, 4, 5, 6, 9 e a maior parte da 10 já foram respondidas —
-ver "Decisões já tomadas" no topo. Faltam:
+Todas as perguntas originais (P1–P9) já foram respondidas — ver "Decisões
+já tomadas" no topo. Só falta um dado concreto, não mais uma decisão:
 
-- **P3 — e-mails para a migração de contas**: confirmar
-  `ludmilafontoura25@gmail.com` como e-mail de Ludmila Fontoura (hoje só no
-  `username`, campo `email` vazio) — ou checar com ela antes? E quais
-  e-mails usar para Majella Mazini e Leandra Delgado (já aprovadas, sem
-  e-mail cadastrado em nenhum campo)?
-- **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no
-  `auth.users` sem linha correspondente em `public.users` (criada 23/07,
-  nunca usada) — apaga? **Lembrete pedido pelo dono: só decidir isso mais
-  perto da execução do PR2, não agora.**
-- **P8 — Homologação**: confirmado que sim (ver custo explicado na
-  conversa) — falta só decidir **Branch pago** (poucos centavos por hora
-  de teste, mas soma à fatura e normalmente exige plano pago) ou **segundo
-  projeto Supabase gratuito** (mesmo caminho já usado quando o Compras
-  migrou de região — sem custo, mais trabalho manual de replicar
-  schema/dados de teste, não sincroniza sozinho com produção).
-  servidores de que vão precisar entrar de novo?
+- **P3 — e-mails de Majella Mazini e Leandra Delgado**: já aprovadas, sem
+  e-mail em nenhum campo do banco (reconfirmado por consulta direta) —
+  falta o dono passar os dois endereços exatos.
+- **P7 (parte 2) — conta órfã do Auth**: existe 1 conta no `auth.users` sem
+  linha correspondente em `public.users` (criada 23/07, nunca usada) —
+  apaga? **Lembrete pedido pelo dono: só decidir isso mais perto da
+  execução do PR2, não agora.**
 
 ### Arquivos críticos para a implementação
 
