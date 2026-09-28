@@ -1,11 +1,16 @@
 # Plano: migrar a autenticação do Numera para o Supabase Auth e fechar a RLS
 
-**Status: planejamento aprovado, todas as 9 decisões (P1–P9) já confirmadas
-pelo dono da plataforma, PR0 e PR1 concluídos e aplicados em produção. PR2
-(migração de contas) com o script pronto, dry-run conferido, e-mail de
-Majella Mazini resolvido e P5 ("Confirm email") já desligado pelo dono —
-falta só o SMTP recolado no projeto do Numera para rodar o script de
-verdade.** Este
+**Status: PR0, PR1 e PR2 concluídos e aplicados em produção (28/09/2026).**
+PR2 (migração de contas) rodado de verdade pelo dono na própria máquina —
+achado e corrigido de carona um bug real que bloqueava o script
+(`service_role` sem GRANT em nenhuma tabela de `public`, migration
+`20260928215347_fix_grant_service_role_tabelas_public.sql`). Verificado
+direto no banco depois da execução: **41/41** usuários com par em
+`auth.users`, e-mail confirmado e senha batendo com a que já usavam
+(`crypt(u.password, a.encrypted_password) = a.encrypted_password`),
+critério de pronto desta seção. Login real testado (via Hub e direto)
+sem problema. Próximos passos (PR3 front, PR4 Hub, PR5 imposição de RLS,
+PR6 cleanup) ficam para quando o usuário autorizar cada um. Este
 documento é o plano de referência para a migração de segurança descrita no
 achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
 nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por

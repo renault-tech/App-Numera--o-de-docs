@@ -169,6 +169,16 @@ por design (fallback legado, intencional na fase A); `admin_*`/`eh_admin`/
 `usuario_aprovado`/`salvar_ordem_cards`/`marcar_login_origem` só
 `authenticated`; nenhuma categoria nova de exposição.
 
+## PR2 do plano de migração de auth: executado e verificado (28/09/2026)
+
+Rodado de verdade pelo dono na própria máquina, depois de resolver o bug
+do GRANT de `service_role` (seção acima). Verificado direto no banco:
+**41/41** usuários com `auth.users` confirmado e senha batendo com
+`public.users.password`. Login real testado via Hub e direto no Numera,
+funcionando. Detalhes de desenho do script na seção original abaixo
+(mantida como registro histórico do que foi planejado/validado antes da
+execução).
+
 ## PR2 do plano de migração de auth: script pronto, aguardando 1 e-mail
 
 `scripts/migrar-contas-auth.mjs` (com `scripts/package.json` só para ele —
@@ -296,6 +306,38 @@ desenvolvimento não alcança `*.vercel.app`/`*.supabase.co`); verificado
 por leitura de código e `tsc`/`eslint`/`next build` limpos do lado do
 `centraltech`. Pendente: o usuário configurar as duas env vars da Brevo
 e confirmar recebimento real de um e-mail de recuperação.
+
+## Bug real: `service_role` sem GRANT em nenhuma tabela de `public`
+
+Encontrado ao rodar o dry-run do script de migração de contas (PR2,
+`scripts/migrar-contas-auth.mjs`): `admin.from('users').select(...)`
+falhava com `permission denied for table users` (`42501`), mesmo
+usando a `service_role` key de verdade. Checado via
+`information_schema.role_table_grants`: **nenhuma tabela do schema
+`public`** (`users`, `reservations`, `documents`, `document_counters`,
+`logs`, `app_config`) tinha SELECT/INSERT/UPDATE/DELETE concedido a
+`service_role` — só `REFERENCES/TRIGGER/TRUNCATE`, que vêm de outro
+lugar (provavelmente FK/particionamento) e não de um GRANT explícito
+esquecido. `service_role` deveria ter acesso total por desenho da
+própria plataforma Supabase (é assim que a Admin API e qualquer script
+com a service key funcionam); a causa mais provável é que as tabelas
+deste projeto foram criadas por SQL direto (`execute_sql`) em sessões
+anteriores, sem passar pelo provisionamento padrão que normalmente
+cuida disso.
+**Corrigido diretamente no banco** (migration
+`fix_grant_service_role_tabelas_public`, testada transacionalmente
+antes de aplicar): `grant all on all tables/sequences in schema public
+to service_role` + `alter default privileges ... grant all ... to
+service_role` (para tabelas futuras não caírem no mesmo buraco).
+Puramente restaurador — `service_role` já bypassa RLS por definição,
+então isto não amplia superfície de ataque nenhuma; `get_advisors`
+depois de aplicar mostrou exatamente os mesmos achados já documentados
+(SECURITY DEFINER executável, senha vazada), nada novo.
+**Lição**: ao criar tabela via SQL direto num projeto Supabase (em vez
+de `supabase db push`/painel), sempre conferir os grants de
+`service_role` também, não só de `anon`/`authenticated` — o hábito já
+documentado neste ecossistema (App-Compras, Migration 6) era só
+checar os dois primeiros.
 
 ## Como continuar de outro computador
 
