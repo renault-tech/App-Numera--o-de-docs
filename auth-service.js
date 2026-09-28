@@ -128,14 +128,27 @@ const authService = {
     // Supabase Auth suporta este fluxo; contas legadas sem conta no Auth
     // (só linha em `users`, sem par em `auth.users`) não têm como
     // recuperar por aqui e continuam precisando falar com o admin).
+    //
+    // NÃO chama mais `supabase.auth.resetPasswordForEmail` diretamente:
+    // o SMTP nativo do Supabase tem um bug confirmado de plataforma neste
+    // projeto (credenciais Brevo válidas e testadas fora do Supabase com
+    // sucesso — só o envio disparado pelo GoTrue nunca chega; suporte já
+    // acionado). Em vez disso, chama o Hub (`centraltech`), que gera o
+    // link pela Admin API (nunca depende de SMTP) e envia o e-mail direto
+    // via HTTPS à Brevo. Resposta sempre genérica, então nenhum erro de
+    // rede aqui deve ser tratado como "e-mail não existe".
     async requestPasswordReset(email) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + window.location.pathname
-        });
-        if (error) {
-            console.error('Erro ao solicitar recuperação de senha:', error);
-            return { error: error.message };
+        try {
+            await fetch('https://centraltech-liard.vercel.app/api/numera/recuperar-senha', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+        } catch (e) {
+            console.error('Erro ao solicitar recuperação de senha (Hub):', e);
         }
+        // Mesma resposta sempre — o endpoint do Hub já não revela se a
+        // conta existe, e uma falha de rede não deve dar pistas diferentes.
         return { ok: true };
     },
 

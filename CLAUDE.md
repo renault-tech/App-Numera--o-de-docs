@@ -252,6 +252,51 @@ Mesma raiz do achado crítico (nenhuma identidade real do servidor):
   automático do React que os outros 3 apps têm), então qualquer `${...}`
   novo interpolado sem `esc()` reabre o risco.
 
+## Bypass do SMTP quebrado do Numera para recuperação de senha
+
+O "esqueci minha senha" (`authService.requestPasswordReset`, `auth-
+service.js`) chamava `supabase.auth.resetPasswordForEmail` direto do
+navegador. Diagnosticado numa sessão anterior, com evidência completa:
+`POST /recover` sempre responde 200 (design anti-enumeração do GoTrue,
+documentado nos próprios docs do Supabase), mas o e-mail nunca chega de
+verdade — bug confirmado do lado da PLATAFORMA Supabase no SMTP nativo
+deste projeto especificamente (as credenciais Brevo foram testadas fora
+do Supabase, direto via PowerShell `Send-MailMessage`, e funcionaram:
+e-mail chegou e apareceu no log "Tempo real" da Brevo). Chamado de
+suporte ao Supabase já aberto sobre isso; a correção abaixo não depende
+de resposta deles.
+
+**Correção**: `requestPasswordReset` deixou de chamar o Supabase
+diretamente e passou a chamar
+`POST https://centraltech-liard.vercel.app/api/numera/recuperar-senha`
+(rota nova no Hub, `centraltech`). Esse endpoint gera o link de
+recuperação pela **Admin API** (`auth.admin.generateLink`, que nunca
+depende de SMTP — devolve o link pronto na resposta) usando a
+`NUMERA_SUPABASE_SERVICE_ROLE_KEY` que o Hub já tinha configurada (mesma
+chave do cadastro unificado), e envia o e-mail ele mesmo via **HTTPS
+direto à API da Brevo** (`https://api.brevo.com/v3/smtp/email`), porta
+443 — a mesma que já provou funcionar no teste com PowerShell — em vez
+de deixar o GoTrue tentar de novo pela porta 587 problemática. `auth-
+service.js` só faz o `fetch`; toda a lógica de gerar+enviar vive no Hub
+(ver CLAUDE.md do `centraltech`, seção do mesmo nome). O evento
+`PASSWORD_RECOVERY` e `showResetPasswordView()`/`updatePassword()` (que
+já processam corretamente o link ao voltar pro app) não mudaram —
+`redirectTo` continua apontando para a origem do próprio Numera.
+**Resposta sempre genérica** (`{ ok: true }`), inclusive se o `fetch`
+falhar de rede — nenhum cenário deve distinguir "e-mail não existe" de
+"o Hub está fora do ar" pela resposta.
+**Só funciona quando o admin configurar `BREVO_API_KEY` e
+`BREVO_REMETENTE_EMAIL` nas env vars do projeto `centraltech` na Vercel**
+(passo manual — ver CLAUDE.md de lá); sem isso, o link é gerado mas o
+e-mail não sai (mesmo padrão de "pronto, só falta a chave" já usado em
+outras integrações deste ecossistema) e a UI continua mostrando a
+mensagem genérica de sempre, sem erro visível.
+**Não testado ponta a ponta** (mesma limitação de sempre — o sandbox de
+desenvolvimento não alcança `*.vercel.app`/`*.supabase.co`); verificado
+por leitura de código e `tsc`/`eslint`/`next build` limpos do lado do
+`centraltech`. Pendente: o usuário configurar as duas env vars da Brevo
+e confirmar recebimento real de um e-mail de recuperação.
+
 ## Como continuar de outro computador
 
 O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em
