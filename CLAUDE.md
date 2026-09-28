@@ -169,6 +169,16 @@ por design (fallback legado, intencional na fase A); `admin_*`/`eh_admin`/
 `usuario_aprovado`/`salvar_ordem_cards`/`marcar_login_origem` só
 `authenticated`; nenhuma categoria nova de exposição.
 
+## PR2 do plano de migração de auth: executado e verificado (28/09/2026)
+
+Rodado de verdade pelo dono na própria máquina, depois de resolver o bug
+do GRANT de `service_role` (seção acima). Verificado direto no banco:
+**41/41** usuários com `auth.users` confirmado e senha batendo com
+`public.users.password`. Login real testado via Hub e direto no Numera,
+funcionando. Detalhes de desenho do script na seção original abaixo
+(mantida como registro histórico do que foi planejado/validado antes da
+execução).
+
 ## PR2 do plano de migração de auth: script pronto, aguardando 1 e-mail
 
 `scripts/migrar-contas-auth.mjs` (com `scripts/package.json` só para ele —
