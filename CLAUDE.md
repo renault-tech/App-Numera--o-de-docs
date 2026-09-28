@@ -252,6 +252,38 @@ Mesma raiz do achado crítico (nenhuma identidade real do servidor):
   automático do React que os outros 3 apps têm), então qualquer `${...}`
   novo interpolado sem `esc()` reabre o risco.
 
+## Bug real: `service_role` sem GRANT em nenhuma tabela de `public`
+
+Encontrado ao rodar o dry-run do script de migração de contas (PR2,
+`scripts/migrar-contas-auth.mjs`): `admin.from('users').select(...)`
+falhava com `permission denied for table users` (`42501`), mesmo
+usando a `service_role` key de verdade. Checado via
+`information_schema.role_table_grants`: **nenhuma tabela do schema
+`public`** (`users`, `reservations`, `documents`, `document_counters`,
+`logs`, `app_config`) tinha SELECT/INSERT/UPDATE/DELETE concedido a
+`service_role` — só `REFERENCES/TRIGGER/TRUNCATE`, que vêm de outro
+lugar (provavelmente FK/particionamento) e não de um GRANT explícito
+esquecido. `service_role` deveria ter acesso total por desenho da
+própria plataforma Supabase (é assim que a Admin API e qualquer script
+com a service key funcionam); a causa mais provável é que as tabelas
+deste projeto foram criadas por SQL direto (`execute_sql`) em sessões
+anteriores, sem passar pelo provisionamento padrão que normalmente
+cuida disso.
+**Corrigido diretamente no banco** (migration
+`fix_grant_service_role_tabelas_public`, testada transacionalmente
+antes de aplicar): `grant all on all tables/sequences in schema public
+to service_role` + `alter default privileges ... grant all ... to
+service_role` (para tabelas futuras não caírem no mesmo buraco).
+Puramente restaurador — `service_role` já bypassa RLS por definição,
+então isto não amplia superfície de ataque nenhuma; `get_advisors`
+depois de aplicar mostrou exatamente os mesmos achados já documentados
+(SECURITY DEFINER executável, senha vazada), nada novo.
+**Lição**: ao criar tabela via SQL direto num projeto Supabase (em vez
+de `supabase db push`/painel), sempre conferir os grants de
+`service_role` também, não só de `anon`/`authenticated` — o hábito já
+documentado neste ecossistema (App-Compras, Migration 6) era só
+checar os dois primeiros.
+
 ## Como continuar de outro computador
 
 O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em
