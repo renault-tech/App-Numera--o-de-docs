@@ -558,18 +558,27 @@ do código, `node --check` nos dois arquivos (sintaxe válida) e conferência
 de cada um dos 8 itens do checklist original desta seção contra o código
 escrito. **Roteiro manual do dono, na janela, é obrigatório** (seção 5
 deste documento) — não pular.
-- **PR4 — Hub** (`centraltech`, obrigatório antes do PR5).
-  `src/lib/dados/numera.ts`, `login-direto.ts`, `solicitacoes.ts` trocam o
-  cliente anon por um cliente admin; `aprovarNumera` para de gravar
-  `password`; textos "RLS de lá já libera geral" atualizados. *Pronto
-  quando:* "Importar do Numera", "Login direto por aplicativo" e aprovação
-  com Numera funcionam em produção.
-- **PR5 — imposição.** RPCs fase B, revoke EXECUTE de `anon`, RLS da seção
-  4 (inclusive a policy de `reservations` com a regra exata de secretaria,
-  P6 já confirmada — não é mais opcional/PR7), revoke dos grants
-  excedentes. Rollback pronto. *Pronto quando:* zero "chamada sem sessão"
-  por 24–48h após PR3, PR4 em produção, matriz completa passa em
-  transação, rollback testado, dono disponível na janela.
+- **PR4 — Hub. CONCLUÍDO E PUBLICADO (29/09/2026).**
+  `src/lib/dados/numera.ts`, `login-direto.ts`, `solicitacoes.ts` trocaram
+  o cliente anon (`numera-cliente.ts`, removido) por `criarClienteNumeraAdmin()`
+  (já existia, usado por `aprovarNumera`/os endpoints `/api/numera/*`);
+  `aprovarNumera` parou de gravar `password` aleatória (usa `""`, mesmo
+  placeholder do trigger `criar_perfil_usuario`). `tsc`/`eslint`/`vitest`/
+  `next build` limpos, deploy em produção confirmado. Detalhe completo em
+  `centraltech/CLAUDE.md`.
+- **PR5 — imposição. CÓDIGO PRONTO E TESTADO (29/09/2026), NÃO aplicado.**
+  RPCs fase B, revoke EXECUTE de `anon`, RLS da seção 4 (inclusive a
+  policy de `reservations` com a regra exata de secretaria, P6 já
+  confirmada), revoke dos grants excedentes — migration
+  `20260929120000_pr5_fase_b_rpcs_e_rls_real.sql`, teste `supabase/tests/
+  002_pr5_fase_b_e_rls.sql` (28 cenários, rodados dentro da própria
+  transação de teste antes de aplicar, nunca commitados), rollback pronto
+  em `supabase/rollbacks/`. **Bloqueado pelo próprio critério de pronto**:
+  telemetria de "chamada sem sessão" ainda não zerou 24–48h depois do PR3
+  (50 chamadas nas últimas 48h, a mais recente minutos antes da última
+  checagem — ver `CLAUDE.md`, seção "PR5"). *Pronto para aplicar quando:*
+  a mesma consulta de telemetria voltar zerada por 24–48h seguidas e o
+  dono estiver disponível na janela.
 - **PR6 — limpeza irreversível**, 2 semanas depois do PR5 (decisão já
   tomada). `update users set password = null` → `drop column password`;
   remove `p_user_id` das RPCs e ajusta o demo; atualiza `CLAUDE.md`.

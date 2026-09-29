@@ -389,23 +389,46 @@ Publicado fora da janela das 17h — mesmo raciocínio do PR0/PR1: mudança
 sem efeito perceptível enquanto a RLS antiga (aberta) continuar valendo,
 só passa a importar quando o PR5 for aplicado.
 
-## PR5 (RLS de verdade): NÃO aplicado ainda — telemetria mostra uso real do fallback recente
+## PR5 (RLS de verdade): CÓDIGO PRONTO E TESTADO, NÃO aplicado ainda
 
-Antes de aplicar a seção 4 do plano (fechar a RLS + fase B das RPCs),
-conferi o critério de pronto que o próprio plano exige: "zero 'chamada sem
-sessão' por 24–48h após PR3 em produção". **Não está zerado**: consulta em
-`public.logs` (`action = 'Chamada sem sessão (compat.)'`) mostra 4
-chamadas de `reserve_number` entre 11:07 e 11:25 UTC de 29/09/2026 — mais
-de 1h **depois** do deploy do PR3 (09:53 UTC), quase certamente uma aba já
-aberta antes do deploy, rodando o `app.js` antigo em memória (que ainda
-manda `p_user_id` sem nunca ter sessão do Auth — o deploy novo não alcança
-quem já estava com a página carregada até ela recarregar). Aplicar a RLS
-agora (RPCs fase B exigindo `auth.uid()`, sem mais o modo de
-compatibilidade) bloquearia essa pessoa no meio do uso, sem aviso.
-**Preparado e testado transacionalmente** (migration + teste +
-rollback, ver arquivos abaixo), mas a aplicação de verdade fica para
-quando a consulta acima voltar zerada por 24–48h seguidas — reconferir
-antes de aplicar, não assumir que o tempo sozinho resolveu.
+Migration `20260929120000_pr5_fase_b_rpcs_e_rls_real.sql` (fase B das 4
+RPCs de negócio + RLS de verdade nas 6 tabelas, seções 2 e 4 do plano),
+teste `supabase/tests/002_pr5_fase_b_e_rls.sql` (28 cenários) e rollback
+`supabase/rollbacks/20260929120000_pr5_fase_b_rpcs_e_rls_real_rollback.sql`
+— todos escritos e a migration **testada transacionalmente por completo**
+(schema + 28 cenários dentro da mesma transação, `rollback` no fim, nunca
+commitada) antes de considerar pronta.
+
+**Não aplicado de propósito**: o critério de pronto do próprio plano
+("zero 'chamada sem sessão' por 24–48h após PR3 em produção") **não está
+satisfeito**. Reconferido pela última vez às 11:49 UTC de 29/09/2026:
+`select count(*) ... from public.logs where action = 'Chamada sem sessão
+(compat.)' and timestamp > now() - interval '48 hours'` devolveu **50**,
+a mais recente às 11:41 UTC — 8 minutos antes da checagem, quase 2h
+**depois** do deploy do PR3 (09:53 UTC). Alguém está usando `reserve_number`
+de verdade, repetidamente, numa aba com o `app.js` antigo ainda em memória
+(carregada antes do deploy — recarregar a página resolveria, mas ninguém
+avisou essa pessoa disso). Aplicar a RLS agora (RPCs fase B exigem
+`auth.uid()`, sem mais o modo de compatibilidade) bloquearia essa pessoa
+no meio do uso, sem aviso nenhum.
+
+**Pré-requisito já corrigido e publicado** (ver seção acima, "Achados
+reais ao preparar o PR5"): `applyDefaultsToUsers`/`signUp` não tinham mais
+nenhuma escrita direta que a RLS nova quebraria.
+
+**Antes de aplicar de verdade, quando o dono autorizar**:
+1. Reconferir a mesma consulta de telemetria — **zero** nas últimas 24–48h.
+2. Confirmar visualmente (ou pedir para o dono confirmar) que não há
+   ninguém com uma aba muito antiga do Numera aberta.
+3. Aplicar a migration via `apply_migration` (texto idêntico ao do
+   arquivo).
+4. Rodar `get_advisors` depois — esperar só a categoria já conhecida
+   (`authenticated` executável nas RPCs, nenhuma nova).
+5. Roteiro manual do dono em produção (seção 5 do plano): login por
+   e-mail/username, aprovar cadastro de teste, reservar/editar/anular
+   número, ajustar contador por secretaria, aba anônima confirma que
+   `GET /rest/v1/users?select=*` com a anon key devolve vazio/erro de
+   permissão.
 
 ## Como continuar de outro computador
 
