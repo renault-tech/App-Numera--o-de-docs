@@ -1690,8 +1690,15 @@ function renderInicio() {
     const byMonth = Array(month + 1).fill(0);
     noAno.forEach(r => { const m = new Date(r.timestamp).getMonth(); if (m <= month) byMonth[m]++; });
     const maxM = Math.max(1, ...byMonth);
+    // Achado real (diretora, via feedback): "tem barra com o mesmo tamanho
+    // e números diferentes". Causa: o piso de 28% + faixa de só 72 pontos
+    // (28% a 100%) comprimia a diferença visual entre valores baixos num
+    // mês de pico alto — ex.: 3 e 5 num ano com um mês de 40 viravam
+    // 28+5.4=33.4% e 28+9=37%, quase indistinguíveis a olho nu mesmo sendo
+    // 66% maior um que o outro. Trocado para piso mínimo (só pra um mês
+    // zerado não sumir de vez) + quase toda a faixa 0-100% de verdade.
     const bars = byMonth.map((v, i) => {
-        const h = (28 + (v / maxM) * 72);
+        const h = v === 0 ? 2 : 4 + (v / maxM) * 96;
         const fill = i === month ? 'linear-gradient(180deg,#1a86ff,#0071e3)' : 'linear-gradient(180deg,#8fc3ff,#4a9dff)';
         return `<div class="bar-col"><div class="bar-val">${v}</div><div class="bar" style="height:${h}%;background:${fill}"></div><div class="bar-label">${monthsPt[i]}</div></div>`;
     }).join('');

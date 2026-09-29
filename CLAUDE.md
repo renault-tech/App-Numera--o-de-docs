@@ -430,6 +430,27 @@ nenhuma escrita direta que a RLS nova quebraria.
    `GET /rest/v1/users?select=*` com a anon key devolve vazio/erro de
    permissão.
 
+## Bug real: barras do gráfico "Documentos por mês" não refletiam a diferença real entre números
+
+Relato da diretora do Compras via feedback: "as barras dos gráficos não
+refletem os números. Tem barra com o mesmo tamanho e números diferentes."
+
+**Causa**: a altura de cada barra vinha de `28 + (v / maxM) * 72` — um
+piso de 28% (pra um mês zerado não sumir de vez) somado a só 72 pontos de
+faixa útil (28% a 100%), em vez dos 100% inteiros. Num ano com um mês de
+pico bem mais alto que os outros, dois meses com poucos documentos (ex.:
+3 e 5, contra um pico de 40) ficavam com alturas de 33,4% e 37% — só 3,6
+pontos de diferença visual pra uma diferença real de 66% entre os
+números. Parecia bug ("mesmo tamanho"), mas era compressão de escala.
+**Corrigido**: piso mínimo de 2% só para o valor zero (mantém a coluna
+visível como um traço, não some) e o resto usando quase toda a faixa
+0–100% (`4 + (v/maxM) * 96`) — mesma proporção real dos números, sem
+comprimir as diferenças pequenas contra um pico alto. Os outros dois
+gráficos do painel (por tipo, por secretaria — barras horizontais) já
+usavam `v / max * 100` sem piso nenhum, não tinham esse problema.
+Verificado com `node --check`; **não testado visualmente** (mesma
+limitação de sempre — sandbox sem acesso a `*.vercel.app`).
+
 ## Como continuar de outro computador
 
 O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em
