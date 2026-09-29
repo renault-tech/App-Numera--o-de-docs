@@ -1017,9 +1017,29 @@ async function checkAutoLogin() {
             subscribeRealtime();
             if (result.user.role === 'admin') requestNotificationPermission();
         } else {
-            showLoginView();
+            tentarSsoSilenciosoOuMostrarLogin();
         }
     } catch (e) { console.error(e); showLoginView(); }
+}
+
+// Login unificado pelo Hub (pedido do usuário: logar uma vez, em qualquer
+// lugar, e entrar direto em qualquer app liberado sem digitar senha de
+// novo). Sem sessão própria aqui — mesmo entrando DIRETO pela URL do
+// Numera, sem passar pelo Hub — navega (página inteira, nunca fetch: o
+// cookie de sessão do Hub é first-party só numa navegação de verdade) pra
+// `/sso/silencioso` antes de mostrar o formulário de senha deste app. Se a
+// pessoa já está autenticada no Hub e tem acesso ao Numera, volta já
+// logada, sem digitar nada; sem sessão nenhuma (nem no Hub), a própria
+// rota do Hub manda logar por lá; autenticada no Hub mas sem acesso, ou
+// falha ao gerar o link, devolve pra cá com `ssoFalhou=1` — guarda de loop
+// que também mostra o formulário normal.
+function tentarSsoSilenciosoOuMostrarLogin() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('ssoFalhou') === '1') {
+        showLoginView();
+        return;
+    }
+    window.location.href = `${URL_CENTRAL_CATAGUASES}/sso/silencioso?app=numera`;
 }
 
 async function handleLogin(e) {
@@ -1051,7 +1071,12 @@ async function handleLogout() {
     if (state.currentUser) addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu`);
     await authService.signOut();
     state.currentUser = null;
-    showLoginView();
+    // Navega de verdade (não só re-renderiza) pra gravar `ssoFalhou=1` na
+    // URL — sem isso, um F5 logo depois do "Sair" tentaria o SSO
+    // silencioso de novo e, com a sessão do Hub ainda de pé, relogaria na
+    // hora ("Sair" deixaria de sair de verdade). Sair aqui é local (só
+    // deste app); para sair de tudo, a pessoa usa o "Sair" do próprio Hub.
+    window.location.href = `${window.location.pathname}?ssoFalhou=1`;
 }
 
 function showLoginView() {

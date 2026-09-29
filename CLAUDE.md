@@ -451,6 +451,55 @@ usavam `v / max * 100` sem piso nenhum, não tinham esse problema.
 Verificado com `node --check`; **não testado visualmente** (mesma
 limitação de sempre — sandbox sem acesso a `*.vercel.app`).
 
+## Login unificado: SSO silencioso pelo Hub
+
+Pedido do usuário: logar uma vez (Hub ou até direto em qualquer app) e
+entrar em qualquer app liberado sem digitar senha de novo — mesmo entrando
+DIRETO pela URL do Numera, sem nunca ter passado pelo Hub. Decisão
+confirmada: quando ninguém está logado em lugar nenhum, a tela de login
+que aparece é a do **Hub**, não a do Numera.
+
+- `checkAutoLogin()` (`app.js`), quando `authService.getCurrentUser()` não
+  acha sessão, chama `tentarSsoSilenciosoOuMostrarLogin()` em vez de
+  `showLoginView()` direto: sem `ssoFalhou=1` na URL, navega (página
+  inteira, `window.location.href` — nunca `fetch`, o cookie de sessão do
+  Hub é first-party só numa navegação de verdade) pra
+  `${URL_CENTRAL_CATAGUASES}/sso/silencioso?app=numera`. Essa rota, do lado
+  do Hub (`centraltech`), decide: sessão do Hub válida + acesso ao Numera
+  → gera um `generateLink({type:"magiclink"})` com a chave `service_role`
+  do PROJETO DO NUMERA (`criarClienteNumeraAdmin()`, já existente) e manda
+  o navegador de volta pra raiz do Numera, autenticado (o `supabase-js` da
+  raiz já processa o fragmento `#access_token=...` sozinho,
+  `detectSessionInUrl` ligado por padrão — mesmo mecanismo que a
+  recuperação de senha daqui já usa); sem sessão nenhuma (nem no Hub) →
+  manda logar lá primeiro; sessão do Hub sem acesso ao Numera, ou falha ao
+  gerar o link → devolve pra cá com `ssoFalhou=1` (guarda de loop, mostra
+  o formulário normal). Sem `proximo` — SPA sem rotas de URL, não há
+  "caminho" pra preservar (o estado de tela vive em `state.view`, não na
+  URL). Ver detalhe completo (as duas camadas que cada app precisa, o
+  núcleo `gerarLinkSso` compartilhado) no CLAUDE.md do `centraltech`,
+  seção "Login unificado: SSO silencioso".
+- **`handleLogout()` passou a navegar de verdade**
+  (`window.location.href = pathname + '?ssoFalhou=1'`) em vez de só
+  re-renderizar em memória (`state.currentUser = null; showLoginView()`)
+  — sem gravar `ssoFalhou=1` na URL, um F5 logo depois do "Sair" cairia de
+  novo no SSO silencioso e, com a sessão do Hub ainda de pé, relogaria na
+  hora (o botão pareceria não funcionar). "Sair" aqui é só local (este
+  app); pra sair de tudo, a pessoa usa o "Sair" do próprio Hub.
+  `index.html` teve a versão de `app.js` bumped (`?v=202609291900`) pra
+  invalidar o cache do navegador.
+  **Limitação pré-existente, não corrigida agora** (fora do pedido): o
+  banner "login direto desativado" (`state.loginDiretoBloqueado`,
+  `showLoginView()`) só é populado dentro de `loadData()`, que só roda
+  DEPOIS de um login bem-sucedido — numa aba que nunca logou, uma
+  visita "limpa" ao Numera com o bloqueio ligado no Hub ainda mostraria o
+  formulário normal em vez do banner, até a pessoa tentar logar uma vez
+  nessa aba. Pré-existente (não relacionado ao SSO silencioso), registrado
+  aqui pra não ser confundido com um bug novo.
+- Verificado com `node --check app.js` (sem framework de lint/build neste
+  repo); **não testado visualmente nem ponta a ponta** (sandbox sem acesso
+  a `*.vercel.app`/`*.supabase.co`) — mesma limitação de sempre.
+
 ## Como continuar de outro computador
 
 O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em
