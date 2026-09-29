@@ -339,21 +339,73 @@ de `supabase db push`/painel), sempre conferir os grants de
 documentado neste ecossistema (App-Compras, Migration 6) era só
 checar os dois primeiros.
 
-## PR3 (virada do front): código pronto, aguardando janela (29/09/2026)
+## PR3 (virada do front): PUBLICADO (29/09/2026)
 
-Branch `pr3-virada-front-auth`, ainda não publicada. Login passa a ser só
-pelo Supabase Auth (fallback legado e `localStorage.currentUserId`
-removidos), `loadData` só roda com sessão confirmada, `signUp` para de
-inserir em `public.users` (o trigger do PR1 já cuida disso), e o painel de
-admin passa a usar as RPCs `admin_*` (inclusive uma nova,
-`admin_reativar_usuario`, já aplicada no banco — aditiva, sem efeito até
-o front publicar) em vez de escrita direta na tabela. Criar conta nova
-saiu do painel do Numera (precisa da Admin API, só o Hub tem) — o botão
-agora orienta a usar a Central Cataguases. Detalhe completo, arquivo por
-arquivo, em `docs/PLANO_MIGRACAO_AUTH.md` ("PR3 implementado").
-**Não publicar fora da janela combinada com o dono** (depois das 17h,
-servidores avisados) — só a migration do banco é segura a qualquer hora,
-o front não.
+Login passa a ser só pelo Supabase Auth (fallback legado e
+`localStorage.currentUserId` removidos), `loadData` só roda com sessão
+confirmada, `signUp` para de inserir em `public.users` (o trigger do PR1
+já cuida disso), e o painel de admin passa a usar as RPCs `admin_*`
+(inclusive `admin_reativar_usuario`) em vez de escrita direta na tabela.
+Criar conta nova saiu do painel do Numera (precisa da Admin API, só o Hub
+tem) — o botão agora orienta a usar a Central Cataguases. Detalhe
+completo, arquivo por arquivo, em `docs/PLANO_MIGRACAO_AUTH.md` ("PR3
+implementado"). **Publicado fora da janela das 17h**: o dono autorizou
+adiantar porque não havia ninguém usando o app no momento (confirmado com
+ele antes de publicar).
+
+## Achados reais ao preparar o PR5 (RLS de verdade), corrigidos antes de aplicar
+
+Antes de fechar a RLS (seção 4 do plano), fui conferir CADA escrita direta
+em tabela que `app.js`/`auth-service.js` ainda fazem (`grep` por
+`.insert(`/`.update(`/`.delete(`/`.upsert(` nos dois arquivos) — não dava
+pra confiar só na lista de RPCs do plano, porque o PR3 documentado como
+"implementado" não cobria tudo. Achei 2 escritas que sobreviveriam à
+migração do PR3 mas quebrariam (ou ficariam mortas) assim que a RLS travar
+`users` para escrita só por RPC:
+
+- **`applyDefaultsToUsers` (app.js, painel admin → aplicar padrão de
+  documentos a todos os usuários de uma secretaria) fazia um `update`
+  direto em `users` dentro de um loop, um por usuário** — a RPC
+  `admin_aplicar_padrao_secretaria` (já existia desde o PR1, tabela da
+  seção 3 do plano já dizia que ela "substitui `applyDefaultsToUsers`",
+  mas o PR3 nunca chegou a trocar essa chamada) faz exatamente a mesma
+  coisa (salva `secretariaPermissions` + atualiza todos os usuários da
+  secretaria numa transação só) e já grava o próprio log — troquei a
+  função para chamar a RPC e removi o `addLog` manual que ficaria
+  duplicado.
+- **`signUp` (auth-service.js) ainda fazia um `update` direto em
+  `users.password`** logo depois do `auth.signUp()`, resquício do login
+  legado (comparação de senha em texto puro) que o próprio PR3 já tinha
+  removido do lado da leitura — ninguém mais lê esse campo pra autenticar
+  desde então. Deixado, o `update` simplesmente falharia por RLS a partir
+  do PR5 (o `dbError` já era tolerado em silêncio, sem quebrar o cadastro
+  — mas sem propósito nenhum). Removido de vez, em vez de esperar o PR6
+  (que só apaga a coluna) — nada no código lê `password` desde o PR3.
+
+Sem essas duas correções, aplicar a RLS da seção 4 quebraria "aplicar
+padrão de documentos" de verdade (a única das duas com efeito visível
+para o admin) assim que fosse usada pela primeira vez depois do PR5.
+Publicado fora da janela das 17h — mesmo raciocínio do PR0/PR1: mudança
+sem efeito perceptível enquanto a RLS antiga (aberta) continuar valendo,
+só passa a importar quando o PR5 for aplicado.
+
+## PR5 (RLS de verdade): NÃO aplicado ainda — telemetria mostra uso real do fallback recente
+
+Antes de aplicar a seção 4 do plano (fechar a RLS + fase B das RPCs),
+conferi o critério de pronto que o próprio plano exige: "zero 'chamada sem
+sessão' por 24–48h após PR3 em produção". **Não está zerado**: consulta em
+`public.logs` (`action = 'Chamada sem sessão (compat.)'`) mostra 4
+chamadas de `reserve_number` entre 11:07 e 11:25 UTC de 29/09/2026 — mais
+de 1h **depois** do deploy do PR3 (09:53 UTC), quase certamente uma aba já
+aberta antes do deploy, rodando o `app.js` antigo em memória (que ainda
+manda `p_user_id` sem nunca ter sessão do Auth — o deploy novo não alcança
+quem já estava com a página carregada até ela recarregar). Aplicar a RLS
+agora (RPCs fase B exigindo `auth.uid()`, sem mais o modo de
+compatibilidade) bloquearia essa pessoa no meio do uso, sem aviso.
+**Preparado e testado transacionalmente** (migration + teste +
+rollback, ver arquivos abaixo), mas a aplicação de verdade fica para
+quando a consulta acima voltar zerada por 24–48h seguidas — reconferir
+antes de aplicar, não assumir que o tempo sozinho resolveu.
 
 ## Como continuar de outro computador
 

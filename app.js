@@ -2711,15 +2711,18 @@ async function applyDefaultsToUsers(sec) {
     const res = await showConfirmDialog({ title: 'Aplicar padrão', variant: 'danger', confirmText: 'Aplicar', message: `Substituir permissões de ${targets.length} usuário(s) de "${sec}" pelos ${selected.length} documento(s) marcados agora?` });
     if (!res.confirmed) return;
     try {
-        // Salva o que está marcado como padrão da secretaria também — senão o
-        // padrão salvo ficaria diferente do que acabou de valer pros usuários.
-        const perms = { ...state.secretariaPermissions, [sec]: selected };
-        const { error: permErr } = await supabase.from('app_config').upsert({ key: 'secretariaPermissions', value: perms });
-        if (permErr) throw permErr;
-        state.secretariaPermissions = perms;
-        for (const u of targets) { await supabase.from('users').update({ allowed_documents: selected }).eq('id', u.id); u.allowedDocuments = selected; }
-        showToast(`Padrão salvo e aplicado a ${targets.length} usuário(s).`, 'success');
-        addLog('cadastro', `Aplicou padrão de ${sec}`, `${targets.length} usuário(s)`);
+        // RPC admin_aplicar_padrao_secretaria (PR1) salva o padrão da
+        // secretaria e aplica a todos os usuários dela numa transação só, e
+        // já grava o próprio log — antes disso, este trecho escrevia direto
+        // em app_config/users (2 updates diretos, um em loop), o que para de
+        // funcionar assim que a RLS fechar de verdade (PR5, RLS só libera
+        // escrita de "users" por RPC). Mesma razão de marcar_login_origem/
+        // salvar_ordem_cards terem virado RPC no PR3.
+        const { data: count, error } = await supabase.rpc('admin_aplicar_padrao_secretaria', { p_secretaria: sec, p_docs: selected });
+        if (error) throw error;
+        state.secretariaPermissions = { ...state.secretariaPermissions, [sec]: selected };
+        targets.forEach(u => { u.allowedDocuments = selected; });
+        showToast(`Padrão salvo e aplicado a ${count} usuário(s).`, 'success');
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 

@@ -53,11 +53,12 @@ const authService = {
     // Cadastro de novo usuário. A linha em public.users nasce sozinha pelo
     // trigger criar_perfil_usuario (PR1) assim que a conta é criada no
     // Auth — sempre role='user_restricted'/approved=false, mesmo que a
-    // metadata diga outra coisa. Este método só grava a senha depois
-    // (update estreito, não upsert com os demais campos — escrever de
-    // novo role/approved/allowed_documents aqui reabriria exatamente a
-    // brecha que o trigger fecha). password em public.users é
-    // compatibilidade temporária, até o PR6 apagar a coluna.
+    // metadata diga outra coisa. Não grava mais `password` aqui (fazia um
+    // update direto na tabela logo depois do signUp, só por compatibilidade
+    // com o login legado — removido no PR3; a coluna em si só sai de vez no
+    // PR6): ninguém mais lê esse campo para autenticar, e mantê-lo geraria
+    // um erro de RLS silencioso assim que a RLS fechar de verdade (PR5,
+    // `users` só aceita escrita via RPC).
     async signUp(userData) {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: userData.email,
@@ -79,14 +80,6 @@ const authService = {
         }
         if (!authData.user) {
             return { error: "Erro desconhecido ao criar usuário." };
-        }
-
-        const { error: dbError } = await supabase
-            .from('users')
-            .update({ password: userData.password })
-            .eq('id', authData.user.id);
-        if (dbError) {
-            console.error('Erro ao salvar senha (compatibilidade legada):', dbError);
         }
 
         return { message: "Cadastro realizado com sucesso! Aguarde aprovação do administrador." };
