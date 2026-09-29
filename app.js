@@ -19,6 +19,23 @@ if (supabase) {
             inPasswordRecovery = true;
             showResetPasswordView();
         }
+        // PR3: "sessão expirada" traduzida. window.signOutFoiVoluntario é
+        // ligada por auth-service.js sempre que O PRÓPRIO APP pede o
+        // signOut (logout manual, ou resolverPerfilOuFalhar barrando
+        // conta desativada/pendente/sem cadastro — casos que já mostram
+        // sua própria mensagem específica). Sem essa flag, um SIGNED_OUT
+        // disparado sozinho pelo Supabase (token expirado/revogado
+        // enquanto a pessoa estava logada) cairia aqui sem explicação.
+        if (event === 'SIGNED_OUT') {
+            if (window.signOutFoiVoluntario) {
+                window.signOutFoiVoluntario = false;
+            } else if (state.currentUser) {
+                state.currentUser = null;
+                unsubscribeRealtime();
+                showToast('Sua sessão expirou. Faça login novamente.', 'warning', 0);
+                showLoginView();
+            }
+        }
     });
 }
 
@@ -380,7 +397,8 @@ function mapUserRow(u) {
     return {
         id: u.id, name: u.name, username: u.username, email: u.email, password: u.password,
         cargo: u.cargo, setor: u.setor, secretaria: u.secretaria, role: u.role,
-        allowedDocuments: u.allowed_documents || [], approved: u.approved, createdAt: u.created_at
+        allowedDocuments: u.allowed_documents || [], approved: u.approved, ativo: u.ativo,
+        createdAt: u.created_at
     };
 }
 
@@ -970,7 +988,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!supabase) throw new Error('Falha ao inicializar Supabase');
         const savedZoom = parseInt(localStorage.getItem('zoomLevel') || '100', 10);
         if (savedZoom >= 80 && savedZoom <= 150) state.zoom = savedZoom;
-        await loadData();
+        // PR3: loadData só roda depois de confirmar sessão (dentro de
+        // checkAutoLogin) — antes disso, `documents`/`users`/`reservations`
+        // eram buscados com a chave anônima mesmo sem ninguém logado,
+        // expostos no estado do navegador antes de qualquer autenticação.
         await checkAutoLogin();
     } catch (e) {
         console.error('Fatal:', e);
@@ -981,14 +1002,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function checkAutoLogin() {
     if (inPasswordRecovery) return;
     try {
-        const user = await authService.getCurrentUser();
-        if (user) {
-            state.currentUser = user; await ensureCardOrderSynced(); render();
-            marcarOrigemHubSeAplicavel(user.id);
-            subscribeRealtime();
-            if (user.role === 'admin') requestNotificationPermission();
+        const result = await authService.getCurrentUser();
+        if (result.error) {
+            showToast(result.error, 'error', 0);
+            showLoginView();
+            return;
         }
-        else showLoginView();
+        if (result.user) {
+            state.currentUser = result.user;
+            await loadData();
+            await ensureCardOrderSynced();
+            render();
+            marcarOrigemHubSeAplicavel();
+            subscribeRealtime();
+            if (result.user.role === 'admin') requestNotificationPermission();
+        } else {
+            showLoginView();
+        }
     } catch (e) { console.error(e); showLoginView(); }
 }
 
@@ -1001,7 +1031,7 @@ async function handleLogin(e) {
     const result = await authService.signIn(id, pw);
     if (result.user) {
         state.currentUser = result.user;
-        marcarOrigemHubSeAplicavel(result.user.id);
+        marcarOrigemHubSeAplicavel();
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         await loadData();
         await ensureCardOrderSynced();
@@ -1066,16 +1096,15 @@ function showLoginView() {
 
 // Grava de onde veio este login, só quando a navegação carregou com
 // ?origem=hub (anexado pelos cards da Central Cataguases) — alimenta o
-// sinal de adoção no painel "Login direto por aplicativo" do Hub. RLS de
-// `users` já é permissiva (achado registrado à parte, fora de escopo
-// desta mudança), então o update funciona com a própria sessão do usuário.
-async function marcarOrigemHubSeAplicavel(userId) {
-    if (new URLSearchParams(location.search).get('origem') !== 'hub') return;
+// sinal de adoção no painel "Login direto por aplicativo" do Hub. PR3:
+// via RPC (marcar_login_origem, identidade sempre auth.uid()) em vez de
+// update direto na tabela — não depende mais da RLS aberta continuar
+// permissiva depois do PR5.
+async function marcarOrigemHubSeAplicavel() {
+    const origem = new URLSearchParams(location.search).get('origem') === 'hub' ? 'hub' : null;
+    if (!origem) return;
     try {
-        await supabase
-            .from('users')
-            .update({ ultimo_acesso_origem: 'hub', veio_do_hub_em: new Date().toISOString() })
-            .eq('id', userId);
+        await supabase.rpc('marcar_login_origem', { p_origem: origem });
     } catch (e) {
         console.error('marcarOrigemHubSeAplicavel:', e);
     }
@@ -1745,17 +1774,18 @@ function getCardOrder() {
 }
 function hasCustomOrder() { return getCardOrder().length > 0; }
 
-// Salva a ordem no banco (users.card_order). Atualiza o estado local na hora
-// e, se o banco falhar (coluna ausente antes da 0007), cai no localStorage.
+// Salva a ordem no banco via RPC (salvar_ordem_cards, identidade
+// auth.uid() — PR3, não mais update direto na tabela). Atualiza o estado
+// local na hora e, se a chamada falhar, cai no localStorage.
 async function saveCardOrder(ids) {
     if (state.currentUser) state.currentUser.cardOrder = ids;
     try {
         if (!state.currentUser) throw new Error('sem usuário');
-        const { error } = await supabase.from('users').update({ card_order: ids }).eq('id', state.currentUser.id);
+        const { error } = await supabase.rpc('salvar_ordem_cards', { p_ids: ids });
         if (error) throw error;
         localStorage.removeItem(cardOrderKey()); // fonte agora é o banco
     } catch (e) {
-        console.warn('Ordem dos cards salva localmente (aplique a migração 0007):', e.message);
+        console.warn('Ordem dos cards salva localmente:', e.message);
         localStorage.setItem(cardOrderKey(), JSON.stringify(ids));
     }
 }
@@ -2706,11 +2736,25 @@ async function saveCounter(docId, sec, inputId) {
 }
 
 // ---- Admin: Usuários ----
+// PR3: criar conta nova saiu do painel do Numera — precisa da Admin API
+// (auth.admin.createUser), que só o Hub tem acesso via service_role
+// (decisão do plano, P4: "criar usuário, redefinir senha... centralizadas
+// no Hub"). O botão abaixo só orienta pra lá; o restante (aprovar, editar,
+// desativar/reativar) continua aqui, agora via RPC (admin_*, PR1) em vez
+// de escrita direta na tabela.
 function renderUsersPanel() {
     return `<div class="card">
       <div class="adm-add"><div class="search-box" style="flex:1;">${icon('search', 15, 2)}<input id="userSearch" oninput="renderUsersList()" placeholder="Buscar nome, login ou secretaria"></div>
-        <button class="btn btn-primary" onclick="openUserModal()">Novo usuário</button></div>
+        <button class="btn btn-primary" onclick="orientarCriarPeloHub()">Novo usuário</button></div>
       <div id="usersList">${renderUsersListInner()}</div></div>`;
+}
+async function orientarCriarPeloHub() {
+    const res = await showConfirmDialog({
+        title: 'Criar novo usuário',
+        confirmText: 'Ir para a Central Cataguases',
+        message: 'Contas novas do Numera agora são criadas pela Central Cataguases (Hub) — em Configurações → Usuários e acessos, dá pra conceder acesso ao Numera mesmo para quem nunca teve conta em nenhum módulo. Abrir agora?'
+    });
+    if (res.confirmed) window.open(URL_CENTRAL_CATAGUASES, '_blank', 'noreferrer');
 }
 function renderUsersList() { const c = document.getElementById('usersList'); if (c) c.innerHTML = renderUsersListInner(); }
 function renderUsersListInner() {
@@ -2719,29 +2763,37 @@ function renderUsersListInner() {
     users = [...users].sort((a, b) => (!a.approved !== !b.approved) ? (a.approved ? 1 : -1) : (a.name || '').localeCompare(b.name || '', 'pt-BR'));
     if (!users.length) return '<div class="empty-mini">Nenhum usuário.</div>';
     const roleChip = { admin: 'rc--admin', user_full: 'rc--full', user_restricted: 'rc--restricted', user_readonly: 'rc--readonly' };
-    return users.map(u => `<div class="adm-row ${u.approved ? '' : 'adm-row--pending'}">
+    return users.map(u => {
+        const inativo = u.ativo === false;
+        return `<div class="adm-row ${u.approved ? '' : 'adm-row--pending'} ${inativo ? 'adm-row--pending' : ''}">
         <div class="avatar avatar--sm">${esc(initials(u.name))}</div>
-        <div class="adm-info"><div class="adm-name">${esc(u.name)} ${u.id === state.currentUser.id ? '<span class="meta-chip">Você</span>' : ''} ${u.approved ? '' : '<span class="meta-chip meta-chip--warn">Pendente</span>'}</div>
+        <div class="adm-info"><div class="adm-name">${esc(u.name)} ${u.id === state.currentUser.id ? '<span class="meta-chip">Você</span>' : ''} ${u.approved ? '' : '<span class="meta-chip meta-chip--warn">Pendente</span>'} ${inativo ? '<span class="meta-chip meta-chip--warn">Inativo</span>' : ''}</div>
           <div class="adm-chips"><span class="role-chip ${roleChip[u.role] || ''}">${esc(PERMISSION_LEVELS[u.role]?.label || u.role)}</span>
             ${u.secretaria ? `<span class="meta-chip">${esc(u.secretaria)}</span>` : '<span class="meta-chip meta-chip--warn">sem secretaria</span>'}
             <span class="meta-chip">@${esc(u.username)}</span></div></div>
         <div class="row-actions">
           ${u.approved ? '' : `<button class="icon-btn-sm approve" title="Aprovar" onclick="approveUser('${u.id}')">${icon('check', 15, 2)}</button>`}
           ${u.id !== state.currentUser.id ? `<button class="icon-btn-sm" title="Editar" onclick="openUserModal('${u.id}')">${icon('edit', 15, 2)}</button>
-          <button class="icon-btn-sm danger" title="Excluir" onclick="deleteUser('${u.id}')">${icon('trash', 15, 2)}</button>` : ''}
-        </div></div>`).join('');
+          ${inativo
+            ? `<button class="icon-btn-sm approve" title="Reativar" onclick="reativarUsuario('${u.id}')">${icon('check', 15, 2)}</button>`
+            : `<button class="icon-btn-sm danger" title="Desativar" onclick="desativarUsuario('${u.id}')">${icon('trash', 15, 2)}</button>`}` : ''}
+        </div></div>`;
+    }).join('');
 }
 
+// Edição de um usuário já existente — a senha não aparece mais aqui
+// (redefinir senha também é centralizado no Hub; "Esqueci minha senha"
+// cobre o caso da própria pessoa).
 function openUserModal(userId) {
-    const editing = !!userId;
-    const u = editing ? state.users.find(x => x.id === userId) : { name: '', cargo: '', setor: '', secretaria: '', username: '', password: '', role: 'user_restricted', allowedDocuments: [] };
-    state.editingUserId = userId || null;
+    const u = state.users.find(x => x.id === userId);
+    if (!u) return;
+    state.editingUserId = userId;
     const secOpts = ['<option value="">Selecione...</option>', ...state.secretariats.map(s => `<option value="${esc(s)}" ${u.secretaria === s ? 'selected' : ''}>${esc(s)}</option>`)].join('');
     const roleOpts = Object.entries(PERMISSION_LEVELS).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('');
     const docChecks = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(d =>
         `<label class="check-row"><input type="checkbox" class="ucheck" value="${d.id}" ${u.allowedDocuments.includes(d.id) ? 'checked' : ''}> <span>${esc(d.name)}</span></label>`).join('');
     openModal(`
-      <div class="modal-title">${editing ? 'Editar' : 'Novo'} usuário</div>
+      <div class="modal-title">Editar usuário</div>
       <div class="field"><label class="field-label">Nome completo *</label><input id="ufName" class="field-input" value="${esc(u.name)}"></div>
       <div class="grid-2-mini">
         <div class="field"><label class="field-label">Cargo</label><input id="ufCargo" class="field-input" value="${esc(u.cargo || '')}"></div>
@@ -2749,10 +2801,7 @@ function openUserModal(userId) {
       </div>
       <div class="field"><label class="field-label">Secretaria *</label><select id="ufSec" class="field-input" onchange="onUserSecChange()">${secOpts}</select>
         <div class="hint" id="ufSecHint" style="display:none;"></div></div>
-      <div class="grid-2-mini">
-        <div class="field"><label class="field-label">Usuário (login) *</label><input id="ufUser" class="field-input" value="${esc(u.username)}"></div>
-        <div class="field"><label class="field-label">Senha *</label><input id="ufPass" type="text" class="field-input" value="${esc(u.password || '')}"></div>
-      </div>
+      <div class="field"><label class="field-label">Usuário (login) *</label><input id="ufUser" class="field-input" value="${esc(u.username)}"></div>
       <div class="field"><label class="field-label">Nível de permissão *</label><select id="ufRole" class="field-input" onchange="onUserRoleChange()">${roleOpts}</select></div>
       <div id="ufDocsSection" class="field" style="${(u.role === 'user_restricted' || u.role === 'user_readonly') ? '' : 'display:none;'}">
         <label class="field-label">Documentos permitidos <button type="button" class="link-btn" onclick="applyUserDefaults()">restaurar padrão da secretaria</button></label>
@@ -2779,6 +2828,9 @@ function applyUserDefaults(fromButton = true) {
     if (hint) { hint.textContent = `Padrão da secretaria aplicado (${defaults.length} doc).`; hint.style.display = 'block'; }
 }
 
+// Salva a edição via admin_atualizar_usuario (PR1) — a RPC já valida
+// permissão (eh_admin()) e a proteção do último admin, e já grava o log
+// com a identidade real de quem chamou.
 async function saveUser() {
     const role = document.getElementById('ufRole').value;
     let allowed = [];
@@ -2786,28 +2838,22 @@ async function saveUser() {
         allowed = Array.from(document.querySelectorAll('.ucheck:checked')).map(cb => cb.value);
         if (!allowed.length) return showToast('Selecione ao menos um documento.', 'warning');
     }
-    const payload = {
-        name: document.getElementById('ufName').value.trim(),
-        cargo: document.getElementById('ufCargo').value.trim(),
-        setor: document.getElementById('ufSetor').value.trim(),
-        secretaria: document.getElementById('ufSec').value,
-        username: document.getElementById('ufUser').value.trim(),
-        password: document.getElementById('ufPass').value,
-        role, allowed_documents: allowed
-    };
-    if (!payload.name || !payload.username || !payload.password) return showToast('Preencha nome, login e senha.', 'warning');
+    const name = document.getElementById('ufName').value.trim();
+    const username = document.getElementById('ufUser').value.trim();
+    if (!name || !username) return showToast('Preencha nome e login.', 'warning');
     try {
-        if (state.editingUserId) {
-            const { error } = await supabase.from('users').update(payload).eq('id', state.editingUserId);
-            if (error) throw error;
-            Object.assign(state.users.find(u => u.id === state.editingUserId), { ...payload, allowedDocuments: allowed });
-            addLog('cadastro', 'Editou usuário', payload.name);
-        } else {
-            const { data, error } = await supabase.from('users').insert([{ ...payload, approved: false }]).select().single();
-            if (error) throw error;
-            state.users.push({ id: data.id, name: data.name, username: data.username, cargo: data.cargo, setor: data.setor, secretaria: data.secretaria, role: data.role, allowedDocuments: data.allowed_documents || [], approved: data.approved, password: data.password });
-            addLog('cadastro', 'Criou usuário', payload.name);
-        }
+        const { data, error } = await supabase.rpc('admin_atualizar_usuario', {
+            p_user_id: state.editingUserId,
+            p_name: name,
+            p_cargo: document.getElementById('ufCargo').value.trim(),
+            p_setor: document.getElementById('ufSetor').value.trim(),
+            p_secretaria: document.getElementById('ufSec').value,
+            p_username: username,
+            p_role: role,
+            p_allowed_documents: allowed
+        });
+        if (error) throw error;
+        Object.assign(state.users.find(u => u.id === state.editingUserId), mapUserRow(data));
         closeModal(); render();
         showToast('Usuário salvo.', 'success');
     } catch (err) { showToast('Erro ao salvar: ' + err.message, 'error', 0); }
@@ -2818,27 +2864,40 @@ async function approveUser(id) {
     const res = await showConfirmDialog({ title: 'Aprovar usuário', confirmText: 'Aprovar', message: `Aprovar ${u.name}? Terá acesso imediato.` });
     if (!res.confirmed) return;
     try {
-        const updates = { approved: true };
-        const hasCustom = Array.isArray(u.allowedDocuments) && u.allowedDocuments.length > 0;
-        const defaults = state.secretariaPermissions[u.secretaria] || [];
-        if (!hasCustom && defaults.length) { updates.allowed_documents = defaults; u.allowedDocuments = defaults; }
-        const { error } = await supabase.from('users').update(updates).eq('id', id);
+        const { data, error } = await supabase.rpc('admin_aprovar_usuario', { p_user_id: id });
         if (error) throw error;
-        u.approved = true; render();
-        addLog('cadastro', 'Aprovou usuário', u.name);
+        Object.assign(u, mapUserRow(data));
+        render();
         showToast('Usuário aprovado.', 'success');
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 
-async function deleteUser(id) {
+// Desativar/reativar (admin_desativar_usuario/admin_reativar_usuario,
+// PR1) — soft, nunca apaga a linha: as reservas da pessoa continuam
+// atribuídas a ela no histórico, e reativar não exige recriar a conta.
+async function desativarUsuario(id) {
     const u = state.users.find(x => x.id === id); if (!u) return;
-    const res = await showConfirmDialog({ title: 'Excluir usuário', variant: 'danger', confirmText: 'Excluir', message: `Excluir ${u.name}? As reservas dele permanecem no histórico.` });
+    const res = await showConfirmDialog({ title: 'Desativar usuário', variant: 'danger', confirmText: 'Desativar', message: `Desativar ${u.name}? A pessoa não conseguirá mais entrar, mas o histórico de reservas permanece.` });
     if (!res.confirmed) return;
     try {
-        const { error } = await supabase.from('users').delete().eq('id', id);
+        const { data, error } = await supabase.rpc('admin_desativar_usuario', { p_user_id: id });
         if (error) throw error;
-        state.users = state.users.filter(x => x.id !== id); render();
-        addLog('cadastro', 'Excluiu usuário', u.name);
+        Object.assign(u, mapUserRow(data));
+        render();
+        showToast('Usuário desativado.', 'success');
+    } catch (err) { showToast('Erro: ' + err.message, 'error'); }
+}
+
+async function reativarUsuario(id) {
+    const u = state.users.find(x => x.id === id); if (!u) return;
+    const res = await showConfirmDialog({ title: 'Reativar usuário', confirmText: 'Reativar', message: `Reativar ${u.name}? A pessoa volta a conseguir entrar.` });
+    if (!res.confirmed) return;
+    try {
+        const { data, error } = await supabase.rpc('admin_reativar_usuario', { p_user_id: id });
+        if (error) throw error;
+        Object.assign(u, mapUserRow(data));
+        render();
+        showToast('Usuário reativado.', 'success');
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 

@@ -9,8 +9,13 @@ direto no banco depois da execução: **41/41** usuários com par em
 `auth.users`, e-mail confirmado e senha batendo com a que já usavam
 (`crypt(u.password, a.encrypted_password) = a.encrypted_password`),
 critério de pronto desta seção. Login real testado (via Hub e direto)
-sem problema. Próximos passos (PR3 front, PR4 Hub, PR5 imposição de RLS,
-PR6 cleanup) ficam para quando o usuário autorizar cada um. Este
+sem problema.
+
+**PR3 (virada do front) — código pronto na branch `pr3-virada-front-auth`
+(29/09/2026), aguardando a janela combinada (depois das 17h, servidores
+avisados pelo dono).** Ver seção "PR3 implementado" mais abaixo para o
+detalhe completo do que mudou. Próximos passos (PR4 Hub, PR5 imposição de
+RLS, PR6 cleanup) ficam para quando o usuário autorizar cada um. Este
 documento é o plano de referência para a migração de segurança descrita no
 achado crítico de `CLAUDE.md` (RLS aberta em `using(true) with check(true)`
 nas 6 tabelas + senha em texto puro em `public.users.password`). Escrito por
@@ -466,15 +471,93 @@ tomada: 2 semanas de estabilidade antes).
   verdade quando:* a senha SMTP estiver recolada no projeto do Numera
   (único passo manual que falta) — não bloqueia o dry-run, só a execução
   real ficando 100% completa.
-- **PR3 — virada do front.** Login só pelo Auth (username resolvido
-  conforme decisão já tomada); sai o fallback legado e
-  `localStorage.currentUserId`; sessão sem linha aprovada/ativa em `users`
-  → `signOut` + mensagem; `loadData` só com sessão; `signUp` sem `insert`;
-  admin usa `admin_*` + Edge Function/Hub (P4 ainda em aberto); ordem dos
-  cards e origem do Hub via RPC; erro "Sessão expirada" traduzido. *Pronto
-  quando:* testado em homologação (ou com o roteiro manual do dono nos
-  primeiros minutos da janela, se P8 = não), checagem de `crypt` refeita
-  logo antes.
+- **PR3 — virada do front. CÓDIGO PRONTO (29/09/2026), branch
+  `pr3-virada-front-auth`, aguardando a janela.** Ver "PR3 implementado"
+  logo abaixo para o detalhe completo do que mudou em cada arquivo.
+  *Pronto quando:* checagem de `crypt` refeita logo antes de publicar
+  (P8 = não, sem homologação — roteiro manual do dono nos primeiros
+  minutos da janela, listado abaixo).
+
+### PR3 implementado — detalhe por arquivo
+
+**`auth-service.js`** (reescrito):
+- `signIn(identificador, senha)`: só Supabase Auth. Quando o campo
+  digitado não parece e-mail, resolve pelo Hub
+  (`POST centraltech-liard.vercel.app/api/numera/resolver-login`,
+  função no servidor — não RPC pública, não expõe a lista de usernames/
+  e-mails). Fallback legado (busca direta comparando senha em texto
+  puro) removido por completo.
+- `resolverPerfilOuFalhar(userId)` (novo, interno): checa
+  `ativo`/`approved` depois de qualquer login/retomada de sessão — sem
+  linha correspondente, desativado ou pendente, desloga com mensagem
+  específica. Reaproveitado por `signIn` e `getCurrentUser` (regra da
+  casa: não duplicar a checagem).
+- `getCurrentUser()`: só sessão do Supabase Auth — sem fallback via
+  `localStorage.currentUserId` (que também deixou de ser gravado em
+  qualquer lugar).
+- `signUp()`: não insere mais em `public.users` — a linha nasce sozinha
+  pelo trigger `criar_perfil_usuario` (PR1), que já lê
+  `name`/`username`/`cargo`/`setor`/`secretaria` da metadata do
+  `auth.signUp` e força `role`/`approved` server-side. Só grava a senha
+  depois, com `update` estreito (não `upsert` com os demais campos —
+  reescrever `role`/`approved`/`allowed_documents` aqui reabriria a
+  mesma brecha que o trigger fecha). `password` em texto puro continua
+  até o PR6.
+- `window.signOutFoiVoluntario`: flag consumida pelo listener de
+  `onAuthStateChange` em `app.js` para distinguir logout pedido pelo
+  próprio app (que já mostra sua mensagem específica) de um
+  `SIGNED_OUT` espontâneo (token expirado/revogado) — é esse segundo
+  caso que vira a mensagem "Sessão expirada".
+
+**`app.js`**:
+- Bootstrap (`DOMContentLoaded`): `loadData()` saiu de antes do
+  `checkAutoLogin()` — agora só roda depois de confirmar sessão válida,
+  dentro do próprio `checkAutoLogin`. Antes, `documents`/`users`/
+  `reservations`/`logs` eram buscados com a chave anônima mesmo sem
+  ninguém logado (a RLS aberta deixava passar).
+- `checkAutoLogin()`/`handleLogin()`: usam o novo formato de retorno
+  `{user}`/`{error}`/`{user:null}` de `getCurrentUser()`/`signIn()`.
+- `marcarOrigemHubSeAplicavel()`: via RPC `marcar_login_origem`
+  (identidade sempre `auth.uid()`), não mais `update` direto na tabela.
+- `saveCardOrder()`: via RPC `salvar_ordem_cards`, mesma razão.
+- Painel de usuários (admin): **criar conta nova saiu do painel do
+  Numera** — precisa da Admin API (`auth.admin.createUser`), que só o
+  Hub tem via `service_role` (decisão P4: "criar usuário... centralizado
+  no Hub"). O botão "Novo usuário" agora só orienta a usar a Central
+  Cataguases (Configurações → Usuários e acessos, que já cria conta +
+  cadastro no Numera mesmo para quem nunca teve login em nada). Aprovar/
+  editar seguem no Numera, agora via `admin_aprovar_usuario`/
+  `admin_atualizar_usuario` (RPC, PR1) em vez de `update`/`insert`
+  direto na tabela. "Excluir" virou **"Desativar"/"Reativar"** (soft,
+  via `admin_desativar_usuario`/`admin_reativar_usuario` — a 2ª é nova,
+  migration `20260928235858_admin_reativar_usuario.sql`, complementa o
+  PR1 que só tinha o caminho de desativar) — histórico de reservas da
+  pessoa nunca é apagado, e dá pra desfazer sem recriar a conta. Campo
+  de senha removido do formulário de edição (redefinir senha também é
+  centralizado no Hub; "Esqueci minha senha" cobre o caso da própria
+  pessoa).
+- `onAuthStateChange`: novo tratamento do evento `SIGNED_OUT` —
+  espontâneo (sem `signOutFoiVoluntario`) enquanto havia sessão vira
+  toast "Sua sessão expirou. Faça login novamente." + volta pro login.
+
+**`index.html`**: cache-busting de `auth-service.js`/`app.js` avançado
+para `?v=202609300900`.
+
+**Banco**: `admin_reativar_usuario` (migration
+`20260928235858_admin_reativar_usuario.sql`) já **aplicada em produção**
+(29/09/2026, testada transacionalmente antes — 3 cenários: reativação
+funciona, não-admin bloqueado, `anon` bloqueado) — aditiva, sem nenhum
+chamador ainda até o front publicar, mesma lógica de segurança do PR1
+("seguro aplicar a qualquer hora, fora da janela combinada"). `get_advisors`
+depois de aplicar: só a categoria já esperada (`authenticated` executável),
+nada novo.
+
+**Não testado ponta a ponta** (mesma limitação de sempre — sandbox sem
+acesso a `*.supabase.co`/`*.vercel.app`): verificado por leitura cuidadosa
+do código, `node --check` nos dois arquivos (sintaxe válida) e conferência
+de cada um dos 8 itens do checklist original desta seção contra o código
+escrito. **Roteiro manual do dono, na janela, é obrigatório** (seção 5
+deste documento) — não pular.
 - **PR4 — Hub** (`centraltech`, obrigatório antes do PR5).
   `src/lib/dados/numera.ts`, `login-direto.ts`, `solicitacoes.ts` trocam o
   cliente anon por um cliente admin; `aprovarNumera` para de gravar

@@ -339,6 +339,22 @@ de `supabase db push`/painel), sempre conferir os grants de
 documentado neste ecossistema (App-Compras, Migration 6) era só
 checar os dois primeiros.
 
+## PR3 (virada do front): código pronto, aguardando janela (29/09/2026)
+
+Branch `pr3-virada-front-auth`, ainda não publicada. Login passa a ser só
+pelo Supabase Auth (fallback legado e `localStorage.currentUserId`
+removidos), `loadData` só roda com sessão confirmada, `signUp` para de
+inserir em `public.users` (o trigger do PR1 já cuida disso), e o painel de
+admin passa a usar as RPCs `admin_*` (inclusive uma nova,
+`admin_reativar_usuario`, já aplicada no banco — aditiva, sem efeito até
+o front publicar) em vez de escrita direta na tabela. Criar conta nova
+saiu do painel do Numera (precisa da Admin API, só o Hub tem) — o botão
+agora orienta a usar a Central Cataguases. Detalhe completo, arquivo por
+arquivo, em `docs/PLANO_MIGRACAO_AUTH.md` ("PR3 implementado").
+**Não publicar fora da janela combinada com o dono** (depois das 17h,
+servidores avisados) — só a migration do banco é segura a qualquer hora,
+o front não.
+
 ## Como continuar de outro computador
 
 O schema deste projeto (`uxdjhdnsnditivvjktzf`) já é versionado em

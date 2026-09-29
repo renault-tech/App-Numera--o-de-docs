@@ -1,6 +1,12 @@
 /**
  * Serviço de Autenticação
- * Gerencia o cadastro e login via Supabase Auth e fallback para tabela legada.
+ *
+ * PR3 do plano de migração de auth (docs/PLANO_MIGRACAO_AUTH.md): login só
+ * pelo Supabase Auth. O fallback legado (busca direta na tabela `users`
+ * comparando senha em texto puro) e o `localStorage.currentUserId` saíram
+ * de vez — quem ainda não tem conta confirmada no Auth (PR2, já concluído:
+ * 41/41 confirmados) não consegue mais entrar por aqui. Publicado fora do
+ * horário de expediente, com aviso prévio aos servidores (regra do dono).
  */
 
 // Converte a linha crua da tabela 'users' (snake_case, vinda do Supabase)
@@ -17,17 +23,52 @@ function normalizeUser(row) {
     };
 }
 
+// Resolve o perfil (public.users) de uma sessão de Auth já estabelecida,
+// aplicando a mesma regra de aprovado/ativo nos dois pontos que precisam
+// dela (login e retomada de sessão) — extraído para não duplicar a
+// checagem entre os dois. Sessão sem linha correspondente, desativada ou
+// ainda não aprovada: desloga e devolve mensagem específica, nunca deixa
+// a pessoa "meio logada".
+async function resolverPerfilOuFalhar(userId) {
+    const { data, error } = await supabase.from('users').select('*').eq('id', userId).single();
+    if (error || !data) {
+        window.signOutFoiVoluntario = true;
+        await supabase.auth.signOut();
+        return { error: 'Sessão sem cadastro correspondente. Contate o administrador.' };
+    }
+    if (data.ativo === false) {
+        window.signOutFoiVoluntario = true;
+        await supabase.auth.signOut();
+        return { error: 'Sua conta foi desativada. Contate o administrador.' };
+    }
+    if (!data.approved) {
+        window.signOutFoiVoluntario = true;
+        await supabase.auth.signOut();
+        return { error: 'Sua conta aguarda aprovação do administrador.' };
+    }
+    return { user: normalizeUser(data) };
+}
+
 const authService = {
-    // Cadastro de novo usuário
+    // Cadastro de novo usuário. A linha em public.users nasce sozinha pelo
+    // trigger criar_perfil_usuario (PR1) assim que a conta é criada no
+    // Auth — sempre role='user_restricted'/approved=false, mesmo que a
+    // metadata diga outra coisa. Este método só grava a senha depois
+    // (update estreito, não upsert com os demais campos — escrever de
+    // novo role/approved/allowed_documents aqui reabriria exatamente a
+    // brecha que o trigger fecha). password em public.users é
+    // compatibilidade temporária, até o PR6 apagar a coluna.
     async signUp(userData) {
-        // 1. Criar usuário no Auth do Supabase
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email: userData.email,
             password: userData.password,
             options: {
                 data: {
                     name: userData.name,
-                    username: userData.username
+                    username: userData.username,
+                    cargo: userData.cargo,
+                    setor: userData.setor,
+                    secretaria: userData.secretaria
                 }
             }
         });
@@ -36,107 +77,63 @@ const authService = {
             console.error('Erro no Supabase Auth:', authError);
             return { error: authError.message };
         }
-
         if (!authData.user) {
             return { error: "Erro desconhecido ao criar usuário." };
         }
 
-        // 2. Inserir dados na tabela pública 'users'
-        // O ID deve ser o mesmo do Auth para linkagem
-        const publicUser = {
-            id: authData.user.id,
-            email: userData.email,
-            username: userData.username,
-            password: userData.password, // TODO: Em produção, não salvar senha aqui ou usar hash. Mantido por compatibilidade legado.
-            name: userData.name,
-            cargo: userData.cargo,
-            setor: userData.setor,
-            secretaria: userData.secretaria,
-            role: 'user_restricted', // Padrão: restrito até aprovação
-            allowed_documents: userData.allowedDocuments || [], // Padrão da secretaria escolhida (se configurado)
-            approved: false // Pendente de aprovação
-        };
-
-        // upsert (não insert): a futura migration do plano de auth
-        // (docs/PLANO_MIGRACAO_AUTH.md, PR1) cria um trigger que já insere
-        // essa linha assim que a conta nasce no Auth — sem upsert, este
-        // insert colidiria com a linha do trigger e o cadastro quebraria.
-        // Hoje, sem o trigger ainda existir, upsert se comporta como
-        // insert normal (nenhuma linha em conflito) — nenhuma mudança de
-        // comportamento agora, só compatibilidade futura.
         const { error: dbError } = await supabase
             .from('users')
-            .upsert([publicUser], { onConflict: 'id' });
-
+            .update({ password: userData.password })
+            .eq('id', authData.user.id);
         if (dbError) {
-            console.error('Erro ao salvar detalhes do usuário:', dbError);
-            // Opcional: Desfazer criação no Auth?
-            return { error: "Usuário criado, mas falha ao salvar detalhes. Contate o suporte." };
+            console.error('Erro ao salvar senha (compatibilidade legada):', dbError);
         }
 
-        return { user: publicUser, message: "Cadastro realizado com sucesso! Aguarde aprovação do administrador." };
+        return { message: "Cadastro realizado com sucesso! Aguarde aprovação do administrador." };
     },
 
-    // Login (Híbrido)
-    async signIn(emailOrUsername, password) {
-        const isEmail = emailOrUsername.includes('@');
+    // Login — só pelo Supabase Auth. "Usuário ou e-mail" continua
+    // funcionando: quando o campo digitado não parece um e-mail, resolve
+    // primeiro pelo Hub (função no servidor, não RPC pública — não expõe
+    // a lista de usernames/e-mails para quem tentar adivinhar).
+    async signIn(identificador, password) {
+        let email = identificador;
 
-        // Tentativa 1: Supabase Auth (apenas se for email)
-        if (isEmail) {
-            const { data, error } = await supabase.auth.signInWithPassword({
-                email: emailOrUsername,
-                password: password
-            });
-
-            if (!error && data.user) {
-                // Buscar dados completos na tabela 'users'
-                const { data: userDetails, error: userError } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('id', data.user.id)
-                    .single();
-
-                if (userDetails) {
-                    if (userDetails.approved === false) {
-                        await supabase.auth.signOut();
-                        return { error: "Sua conta aguarda aprovação do administrador." };
-                    }
-                    localStorage.setItem('currentUserId', userDetails.id);
-                    return { user: normalizeUser(userDetails) };
-                }
+        if (!identificador.includes('@')) {
+            try {
+                const resp = await fetch('https://centraltech-liard.vercel.app/api/numera/resolver-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: identificador })
+                });
+                const data = await resp.json().catch(() => ({}));
+                email = data.email;
+            } catch (e) {
+                console.error('Erro ao resolver login pelo Hub:', e);
+                email = null;
+            }
+            if (!email) {
+                return { error: 'Usuário ou senha incorretos.' };
             }
         }
 
-        // Tentativa 2: Fallback Legado (Busca direta na tabela)
-        // Útil para usuários antigos sem email ou username
-        const { data: legacyUser, error: legacyError } = await supabase
-            .from('users')
-            .select('*')
-            .or(`username.eq.${emailOrUsername},email.eq.${emailOrUsername}`)
-            .eq('password', password) // Nota: Em produção, usar hash
-            .single();
-
-        if (legacyUser) {
-            localStorage.setItem('currentUserId', legacyUser.id);
-            return { user: normalizeUser(legacyUser) };
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error || !data.user) {
+            return { error: 'Usuário ou senha incorretos.' };
         }
 
-        return { error: "Usuário ou senha incorretos." };
+        return resolverPerfilOuFalhar(data.user.id);
     },
 
-    // Recuperação de senha (não existia até aqui — só o e-mail/senha do
-    // Supabase Auth suporta este fluxo; contas legadas sem conta no Auth
-    // (só linha em `users`, sem par em `auth.users`) não têm como
-    // recuperar por aqui e continuam precisando falar com o admin).
-    //
-    // NÃO chama mais `supabase.auth.resetPasswordForEmail` diretamente:
-    // o SMTP nativo do Supabase tem um bug confirmado de plataforma neste
-    // projeto (credenciais Brevo válidas e testadas fora do Supabase com
-    // sucesso — só o envio disparado pelo GoTrue nunca chega; suporte já
-    // acionado). Em vez disso, chama o Hub (`centraltech`), que gera o
-    // link pela Admin API (nunca depende de SMTP) e envia o e-mail direto
-    // via HTTPS à Brevo. Resposta sempre genérica, então nenhum erro de
-    // rede aqui deve ser tratado como "e-mail não existe".
+    // Recuperação de senha — não chama mais `supabase.auth.
+    // resetPasswordForEmail` diretamente: o SMTP nativo do Supabase tem um
+    // bug confirmado de plataforma neste projeto (credenciais Brevo
+    // válidas e testadas fora do Supabase com sucesso — só o envio
+    // disparado pelo GoTrue nunca chega; suporte já acionado). Em vez
+    // disso, chama o Hub (centraltech), que gera o link pela Admin API
+    // (nunca depende de SMTP) e envia o e-mail direto via HTTPS à Brevo.
+    // Resposta sempre genérica, então nenhum erro de rede aqui deve ser
+    // tratado como "e-mail não existe".
     async requestPasswordReset(email) {
         try {
             await fetch('https://centraltech-liard.vercel.app/api/numera/recuperar-senha', {
@@ -147,8 +144,6 @@ const authService = {
         } catch (e) {
             console.error('Erro ao solicitar recuperação de senha (Hub):', e);
         }
-        // Mesma resposta sempre — o endpoint do Hub já não revela se a
-        // conta existe, e uma falha de rede não deve dar pistas diferentes.
         return { ok: true };
     },
 
@@ -165,40 +160,22 @@ const authService = {
 
     // Logout
     async signOut() {
+        window.signOutFoiVoluntario = true;
         await supabase.auth.signOut();
-        localStorage.removeItem('currentUserId');
-        // Limpar estado global se necessário
         if (typeof state !== 'undefined') {
             state.currentUser = null;
         }
     },
 
-    // Verificar sessão atual
+    // Verificar sessão atual — só Supabase Auth, sem fallback via
+    // localStorage. Mesma checagem de aprovado/ativo do login (ver
+    // resolverPerfilOuFalhar): uma sessão válida cujo cadastro foi
+    // desativado depois de logar não continua "meio logada" até a
+    // próxima ação falhar — é encerrada aqui, no boot.
     async getCurrentUser() {
-        // 1. Checar sessão Supabase
         const { data: { session } } = await supabase.auth.getSession();
-
-        if (session?.user) {
-            const { data } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', session.user.id)
-                .single();
-            return normalizeUser(data);
-        }
-
-        // 2. Checar localStorage (Legado)
-        const savedId = localStorage.getItem('currentUserId');
-        if (savedId) {
-            const { data } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', savedId)
-                .single();
-            return normalizeUser(data);
-        }
-
-        return null;
+        if (!session?.user) return { user: null };
+        return resolverPerfilOuFalhar(session.user.id);
     }
 };
 
