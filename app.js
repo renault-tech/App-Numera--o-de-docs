@@ -404,21 +404,45 @@ function mapUserRow(u) {
     };
 }
 
+// Busca todas as reservas em páginas de 1000 (limite por pedido do PostgREST).
+async function carregarTodasReservas() {
+    const pagina = 1000;
+    const todas = [];
+    for (let de = 0; ; de += pagina) {
+        const { data, error } = await supabase.from('reservations').select('*')
+            .order('timestamp', { ascending: false }).range(de, de + pagina - 1);
+        if (error) throw error;
+        todas.push(...(data || []));
+        if (!data || data.length < pagina) break;
+    }
+    return todas;
+}
+
 async function loadData() {
     if (!supabase) return;
     state.loading = true;
     try {
-        const { data: docs, error: e1 } = await supabase.from('documents').select('*').order('name');
-        if (e1) throw e1;
-        state.documents = (docs || []).map(mapDoc);
+        // As 6 leituras são independentes: em paralelo (antes, em série — a
+        // tela inicial esperava a soma dos tempos). Reservas paginadas: o
+        // PostgREST devolve no máximo 1000 linhas por pedido e já há mais que
+        // isso, então o histórico antigo sumia sem aviso.
+        const [docsRes, countersRes, configsRes, usersRes, reservations, logsRes] = await Promise.all([
+            supabase.from('documents').select('*').order('name'),
+            supabase.from('document_counters').select('doc_id,secretaria,year,current_number'),
+            supabase.from('app_config').select('*'),
+            supabase.from('users').select('*'),
+            carregarTodasReservas(),
+            supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(500),
+        ]);
+        if (docsRes.error) throw docsRes.error;
+        state.documents = (docsRes.data || []).map(mapDoc);
 
         // Contadores por bucket (migração 0003)
         state.counters = {};
-        const { data: counters } = await supabase.from('document_counters').select('doc_id,secretaria,year,current_number');
-        if (counters) counters.forEach(c => { state.counters[`${c.doc_id}|${c.secretaria}|${c.year}`] = c.current_number; });
+        if (countersRes.data) countersRes.data.forEach(c => { state.counters[`${c.doc_id}|${c.secretaria}|${c.year}`] = c.current_number; });
 
         // Config (secretarias + permissões padrão)
-        const { data: configs } = await supabase.from('app_config').select('*');
+        const configs = configsRes.data;
         if (configs) {
             const secList = configs.find(c => c.key === 'secretaria_list');
             if (secList && Array.isArray(secList.value)) state.secretariats = [...secList.value].sort();
@@ -428,17 +452,9 @@ async function loadData() {
             state.loginDiretoBloqueado = !!(bloqueio && bloqueio.value === true);
         }
 
-        // Usuários
-        const { data: users } = await supabase.from('users').select('*');
-        if (users) state.users = users.map(mapUserRow);
-
-        // Reservas
-        const { data: reservations } = await supabase.from('reservations').select('*').order('timestamp', { ascending: false }).limit(1000);
+        if (usersRes.data) state.users = usersRes.data.map(mapUserRow);
         if (reservations) state.reservations = reservations.map(mapReservationRow);
-
-        // Logs
-        const { data: logs } = await supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(500);
-        if (logs) state.logs = logs.map(l => ({ id: l.id, type: l.type, action: l.action, details: l.details, userId: l.user_id, userName: l.user_name, timestamp: l.timestamp }));
+        if (logsRes.data) state.logs = logsRes.data.map(l => ({ id: l.id, type: l.type, action: l.action, details: l.details, userId: l.user_id, userName: l.user_name, timestamp: l.timestamp }));
     } catch (err) {
         console.error('Erro ao carregar dados:', err);
         showToast('Erro ao carregar dados. Verifique o console.', 'error', 0);
@@ -766,7 +782,7 @@ function createDemoClient(demoDb) {
         return filters.every(f => f.type === 'eq' ? row[f.col] == f.val : f.conds.some(c => row[c.col] == c.val));
     }
     function builder(table) {
-        let filters = [], single = false, orderCol = null, asc = true, lim = null, updateVals = null, doDelete = false, insertedRows = null;
+        let filters = [], single = false, orderCol = null, asc = true, lim = null, offset = 0, updateVals = null, doDelete = false, insertedRows = null;
         const b = {
             select() { return b; },
             eq(col, val) { filters.push({ type: 'eq', col, val }); return b; },
@@ -780,6 +796,7 @@ function createDemoClient(demoDb) {
             },
             order(col, opts) { orderCol = col; asc = !(opts && opts.ascending === false); return b; },
             limit(n) { lim = n; return b; },
+            range(de, ate) { offset = de; lim = ate - de + 1; return b; },
             single() { single = true; return b; },
             insert(rows) {
                 const arr = (Array.isArray(rows) ? rows : [rows]).map(r => ({ id: r.id || demoNextId(), ...r }));
@@ -809,7 +826,7 @@ function createDemoClient(demoDb) {
                 }
                 if (updateVals) rows.forEach(r => Object.assign(r, updateVals));
                 if (orderCol) rows = [...rows].sort((a, z) => (a[orderCol] < z[orderCol] ? -1 : 1) * (asc ? 1 : -1));
-                if (lim != null) rows = rows.slice(0, lim);
+                if (lim != null) rows = rows.slice(offset, offset + lim);
                 resolve(single ? { data: rows[0] || null, error: rows[0] ? null : { code: 'PGRST116' } } : { data: rows, error: null });
             }
         };
