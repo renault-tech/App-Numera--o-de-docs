@@ -486,9 +486,6 @@ function onUsersRealtime({ eventType, new: newRow, old: oldRow }) {
         const idx = state.users.findIndex(u => u.id === mapped.id);
         if (idx < 0) state.users.push(mapped); else state.users[idx] = mapped;
         if (state.currentUser && mapped.id === state.currentUser.id) Object.assign(state.currentUser, mapped);
-        if (eventType === 'INSERT' && !mapped.approved && state.currentUser?.role === 'admin' && mapped.id !== state.currentUser?.id) {
-            notifyNewRegistration(mapped);
-        }
     }
     scheduleRerender();
 }
@@ -1113,7 +1110,7 @@ function showLoginView() {
             <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Entrar</button>
           </form>
           <button type="button" class="login-link" onclick="openForgotPasswordModal()">Esqueci minha senha</button>
-          <button type="button" class="login-link" onclick="openRegisterModal()">Não tem conta? <b>Criar conta</b></button>
+          <a class="login-link" style="display:block;text-align:center;" href="${URL_CENTRAL_CATAGUASES}/solicitar-acesso" target="_blank" rel="noreferrer">Não tem acesso? <b>Solicitar pela Central Cataguases</b></a>
           <button type="button" class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="enterDemoMode()">${icon('eye', 15, 2)} Ver demonstração</button>
         </div>
       </div>`;
@@ -1227,89 +1224,6 @@ async function confirmResetPassword(e) {
 }
 
 // ============================================================
-// Cadastro de novo usuário (a partir da tela de login)
-// ============================================================
-async function openRegisterModal() {
-    // Busca a lista real de secretarias mesmo sem sessão (best-effort;
-    // sem isso o formulário mostraria só a lista padrão de fallback).
-    try {
-        const { data } = await supabase.from('app_config').select('*').eq('key', 'secretaria_list').single();
-        if (data && Array.isArray(data.value) && data.value.length) state.secretariats = [...data.value].sort();
-    } catch (e) { /* mantém o fallback em state.secretariats */ }
-    renderRegisterModal();
-}
-
-function renderRegisterModal() {
-    const secOptions = state.secretariats.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
-    openModal(`
-      <div class="reserve-modal">
-        <div class="reserve-eyebrow brand-wordmark" style="font-weight:800;">Numera</div>
-        <div class="reserve-name">Criar conta</div>
-        <div class="field"><label class="field-label">Nome completo *</label>
-          <input id="regName" class="field-input" placeholder="Ex: Maria Souza"></div>
-        <div class="grid-2-mini">
-          <div class="field"><label class="field-label">E-mail *</label>
-            <input id="regEmail" type="email" class="field-input" placeholder="maria@exemplo.com"></div>
-          <div class="field"><label class="field-label">Usuário *</label>
-            <input id="regUsername" class="field-input" placeholder="maria.souza"></div>
-        </div>
-        <div class="grid-2-mini">
-          <div class="field"><label class="field-label">Senha *</label>
-            <input id="regPassword" type="password" class="field-input" placeholder="Mínimo 6 caracteres"></div>
-          <div class="field"><label class="field-label">Confirmar senha *</label>
-            <input id="regPassword2" type="password" class="field-input" placeholder="Repita a senha"></div>
-        </div>
-        <div class="grid-2-mini">
-          <div class="field"><label class="field-label">Cargo *</label>
-            <input id="regCargo" class="field-input" placeholder="Ex: Assistente Administrativo"></div>
-          <div class="field"><label class="field-label">Setor *</label>
-            <input id="regSetor" class="field-input" placeholder="Ex: Protocolo"></div>
-        </div>
-        <div class="field"><label class="field-label">Secretaria *</label>
-          <select id="regSecretaria" class="field-input"><option value="">Selecione...</option>${secOptions}</select></div>
-        <div class="reserve-actions">
-          <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-          <button class="btn btn-primary" style="flex:1.4" onclick="confirmRegister()">Criar conta</button>
-        </div>
-      </div>`, { width: 460 });
-}
-
-async function confirmRegister() {
-    const val = (id) => document.getElementById(id).value.trim();
-    const name = val('regName'), email = val('regEmail'), username = val('regUsername');
-    const p1 = document.getElementById('regPassword').value, p2 = document.getElementById('regPassword2').value;
-    const cargo = val('regCargo'), setor = val('regSetor'), secretaria = document.getElementById('regSecretaria').value;
-    const invalid = (id) => document.getElementById(id).classList.add('field-input--invalid');
-    let bad = false;
-    [['regName', name], ['regEmail', email], ['regUsername', username], ['regCargo', cargo], ['regSetor', setor]]
-        .forEach(([id, v]) => { if (!v) { invalid(id); bad = true; } });
-    if (!secretaria) { invalid('regSecretaria'); bad = true; }
-    if (!p1) invalid('regPassword');
-    if (!p2) invalid('regPassword2');
-    if (!p1 || !p2) bad = true;
-    if (bad) { showToast('Preencha todos os campos.', 'warning'); return; }
-    if (p1 !== p2) { invalid('regPassword'); invalid('regPassword2'); showToast('As senhas não coincidem.', 'warning'); return; }
-    if (p1.length < 6) { invalid('regPassword'); showToast('A senha deve ter pelo menos 6 caracteres.', 'warning'); return; }
-
-    const btn = document.querySelector('#overlay-root .reserve-actions .btn-primary');
-    const original = btn.textContent; btn.textContent = 'Cadastrando...'; btn.disabled = true;
-
-    // Já nasce com os documentos padrão da secretaria escolhida (editável
-    // depois pelo admin em Configurações → Usuários).
-    const allowedDocuments = state.secretariaPermissions[secretaria] || [];
-    const result = await authService.signUp({ name, email, username, password: p1, cargo, setor, secretaria, allowedDocuments });
-    if (result.error) {
-        showToast('Erro no cadastro: ' + result.error, 'error', 0);
-        btn.textContent = original; btn.disabled = false;
-    } else {
-        closeModal();
-        showToast(result.message || 'Cadastro realizado! Aguarde aprovação do administrador.', 'success', 6000);
-        const loginField = document.getElementById('loginUsername');
-        if (loginField) loginField.value = email;
-    }
-}
-
-// ============================================================
 // Shell (sidebar + main) e navegação
 // ============================================================
 function setView(v) { if (v === 'config') state.configSection = null; state.view = v; render(); }
@@ -1331,7 +1245,8 @@ function applyZoom() {
 }
 
 function pendingUsersCount() {
-    return state.currentUser?.role === 'admin' ? state.users.filter(u => !u.approved).length : 0;
+    // Acesso é aprovado só no Hub; não há mais fila de aprovação dentro do Numera.
+    return 0;
 }
 
 function navItemsFor(user) {
@@ -1517,7 +1432,7 @@ const TUTORIAL_STEPS = {
     ],
     'config:usuarios': [
         { id: 'cfgusu-add', selector: '.adm-add', title: 'Buscar ou criar usuário', text: 'Encontre um usuário existente ou crie uma conta nova diretamente por aqui.' },
-        { id: 'cfgusu-aprovar', selector: '.adm-row', title: 'Aprovar cadastros', text: 'Quem se cadastra sozinho fica pendente até um admin aprovar — o selo de aviso aparece até isso acontecer.' }
+        { id: 'cfgusu-aprovar', selector: '.adm-row', title: 'Acesso pelo Hub', text: 'Quem pode entrar é definido na Central Cataguases; aqui você ajusta perfil e documentos.' }
     ],
     'config:logs': [
         { id: 'cfglogs-filtro', selector: '.logs-filter', title: 'Filtrar por tipo de ação', text: 'Reserva, edição, anulação, cadastro ou sistema — filtre a auditoria pelo que você procura.' },
@@ -2807,7 +2722,7 @@ function renderUsersListInner() {
             ${u.secretaria ? `<span class="meta-chip">${esc(u.secretaria)}</span>` : '<span class="meta-chip meta-chip--warn">sem secretaria</span>'}
             <span class="meta-chip">@${esc(u.username)}</span></div></div>
         <div class="row-actions">
-          ${u.approved ? '' : `<button class="icon-btn-sm approve" title="Aprovar" onclick="approveUser('${u.id}')">${icon('check', 15, 2)}</button>`}
+          
           ${u.id !== state.currentUser.id ? `<button class="icon-btn-sm" title="Editar" onclick="openUserModal('${u.id}')">${icon('edit', 15, 2)}</button>
           ${inativo
             ? `<button class="icon-btn-sm approve" title="Reativar" onclick="reativarUsuario('${u.id}')">${icon('check', 15, 2)}</button>`
@@ -2892,19 +2807,6 @@ async function saveUser() {
         closeModal(); render();
         showToast('Usuário salvo.', 'success');
     } catch (err) { showToast('Erro ao salvar: ' + err.message, 'error', 0); }
-}
-
-async function approveUser(id) {
-    const u = state.users.find(x => x.id === id); if (!u) return;
-    const res = await showConfirmDialog({ title: 'Aprovar usuário', confirmText: 'Aprovar', message: `Aprovar ${u.name}? Terá acesso imediato.` });
-    if (!res.confirmed) return;
-    try {
-        const { data, error } = await supabase.rpc('admin_aprovar_usuario', { p_user_id: id });
-        if (error) throw error;
-        Object.assign(u, mapUserRow(data));
-        render();
-        showToast('Usuário aprovado.', 'success');
-    } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 
 // Desativar/reativar (admin_desativar_usuario/admin_reativar_usuario,
