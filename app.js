@@ -185,6 +185,7 @@ function icon(name, size = 18, stroke = 1.9) {
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
         list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
         grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01'],
+        megaphone: ['M3 11l18-5v12L3 14v-3z', 'M11.6 16.8a3 3 0 1 1-5.8-1.6'],
         grid: ['M3 3h8v8H3z', 'M13 3h8v8h-8z', 'M3 13h8v8H3z', 'M13 13h8v8h-8z']
     };
     const paths = (P[name] || []).map(d => `<path d="${d}"></path>`).join('');
@@ -1223,6 +1224,92 @@ async function confirmResetPassword(e) {
     await checkAutoLogin();
 }
 
+
+// ============================================================
+// Feedback (central no Hub)
+// ============================================================
+// Mesmo botão/ícone dos outros apps. O feedback NÃO fica no Numera: vai para
+// a tabela central do Hub (app = numera), que o Numera alcança pelo token da
+// própria sessão. Aqui só há enviar e "Meus envios" (histórico + status).
+const FEEDBACK_API = `${URL_CENTRAL_CATAGUASES}/api/feedback`;
+const FEEDBACK_STATUS = { novo: 'Recebido', lido: 'Em análise', resolvido: 'Resolvido', nao_possivel: 'Não possível' };
+let feedbackArquivos = [];
+
+async function feedbackToken() {
+    const { data } = await supabase.auth.getSession();
+    return data?.session?.access_token || null;
+}
+
+function openFeedbackModal(aba = 'enviar') {
+    if (state.demoMode || !state.currentUser) { showToast('Disponível só com login real.', 'info'); return; }
+    feedbackArquivos = [];
+    const tab = (id, label) => `<button type="button" class="fb-tab ${aba === id ? 'fb-tab--on' : ''}" onclick="openFeedbackModal('${id}')">${label}</button>`;
+    const corpo = aba === 'meus'
+        ? '<div id="fbLista" class="fb-lista">Carregando…</div>'
+        : `<div class="field"><label class="field-label">Tipo</label>
+             <select id="fbTipo" class="field-input"><option value="sugestao">Sugestão</option><option value="suporte">Suporte</option></select></div>
+           <div class="field"><label class="field-label">Mensagem</label>
+             <textarea id="fbMsg" class="field-input" rows="4" maxlength="4000" placeholder="Conte o que aconteceu ou o que você gostaria de ver..."></textarea></div>
+           <div class="field"><label class="field-label" for="fbArq" style="cursor:pointer;color:var(--blue)">${icon('plus', 13, 2)} Anexar screenshot</label>
+             <input id="fbArq" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" style="display:none" onchange="feedbackEscolheuArquivos(this)">
+             <div id="fbArqLista" style="font-size:12px;color:#64748b"></div></div>
+           <div id="fbErro" role="alert" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:8px"></div>
+           <div class="reserve-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+             <button id="fbEnviar" class="btn btn-primary" style="flex:1.4" onclick="enviarFeedback()">Enviar</button></div>`;
+    openModal(`<div class="reserve-modal"><div class="reserve-name">Enviar feedback</div>
+        <div class="fb-tabs">${tab('enviar', 'Enviar')}${tab('meus', 'Meus envios')}</div>${corpo}</div>`, { width: 440 });
+    if (aba === 'meus') carregarMeusFeedbacks();
+}
+
+function feedbackEscolheuArquivos(input) {
+    const novos = Array.from(input.files || []); input.value = '';
+    const ok = novos.filter(f => f.size <= 3 * 1024 * 1024);
+    const avisos = [];
+    if (ok.length < novos.length) avisos.push('Anexos de até 3MB.');
+    feedbackArquivos = [...feedbackArquivos, ...ok].slice(0, 5);
+    if (feedbackArquivos.length === 5 && ok.length + 0 > 0 && novos.length > ok.length) avisos.push('Máximo de 5.');
+    document.getElementById('fbArqLista').innerHTML = feedbackArquivos.map(f => esc(f.name)).join('<br>') + (avisos.length ? `<br><span style="color:#b91c1c">${avisos.join(' ')}</span>` : '');
+}
+
+async function enviarFeedback() {
+    const msg = document.getElementById('fbMsg').value.trim();
+    const erro = document.getElementById('fbErro');
+    const mostrar = (t) => { erro.textContent = t; erro.style.display = 'block'; };
+    if (msg.length < 5) { mostrar('Escreva um pouco mais.'); return; }
+    const btn = document.getElementById('fbEnviar'); btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+        const token = await feedbackToken();
+        if (!token) throw new Error('Sessão expirada — entre novamente.');
+        const fd = new FormData();
+        fd.append('tipo', document.getElementById('fbTipo').value);
+        fd.append('mensagem', msg);
+        fd.append('pagina', state.view || '');
+        feedbackArquivos.forEach(f => fd.append('anexos', f));
+        const res = await fetch(FEEDBACK_API, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.erro || 'Não foi possível enviar.');
+        closeModal();
+        showToast('Recebido, obrigado! Sua mensagem chega direto a quem cuida da plataforma.', 'success', 5000);
+    } catch (e) {
+        mostrar(e.message || 'Não foi possível enviar.');
+        btn.disabled = false; btn.textContent = 'Enviar';
+    }
+}
+
+async function carregarMeusFeedbacks() {
+    const el = document.getElementById('fbLista');
+    try {
+        const token = await feedbackToken();
+        const res = await fetch(FEEDBACK_API, { headers: { Authorization: `Bearer ${token}` } });
+        const json = await res.json();
+        if (!res.ok) throw new Error();
+        el.innerHTML = (json.itens || []).length ? json.itens.map(i => `
+            <div class="fb-item"><div class="fb-item-head"><span>${new Date(i.criado_em).toLocaleDateString('pt-BR')} · ${i.tipo === 'suporte' ? 'Suporte' : 'Sugestão'}</span>
+            <span class="fb-chip">${FEEDBACK_STATUS[i.status] || i.status}</span></div><div class="fb-item-msg">${esc(i.mensagem)}</div></div>`).join('')
+            : 'Você ainda não enviou nenhum feedback.';
+    } catch (e) { el.textContent = 'Não foi possível carregar seus envios.'; }
+}
+
 // ============================================================
 // Shell (sidebar + main) e navegação
 // ============================================================
@@ -1285,6 +1372,7 @@ function render() {
     document.getElementById('app-root').innerHTML = `
       ${demoBanner()}
       ${plataformaConsolidadaBanner()}
+      <button class="feedback-btn" onclick="openFeedbackModal()" title="Enviar feedback" aria-label="Enviar feedback">${icon('megaphone', 17, 1.9)}</button>
       <button class="tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela">?</button>
       <div class="app-shell">
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
