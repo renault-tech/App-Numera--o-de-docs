@@ -489,17 +489,6 @@ select.field-input { cursor: pointer; }
 /* ============================================================
    Tutorial guiado (balões contextuais + botão "?")
    ============================================================ */
-.tutorial-help-btn {
-    position: fixed; top: 16px; right: 4px; z-index: 3500;
-    width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--glass-border);
-    background: var(--glass-strong); backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
-    box-shadow: 0 8px 24px rgba(30, 50, 90, 0.16);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 800; color: var(--blue); cursor: pointer;
-    font-family: inherit; transition: transform .15s ease, box-shadow .15s ease;
-}
-.tutorial-help-btn:hover { transform: scale(1.08); box-shadow: 0 10px 28px rgba(30, 50, 90, 0.22); }
-body.demo-mode .tutorial-help-btn { top: 56px; }
 
 /* Recorte iluminado sobre o elemento explicado; o box-shadow gigante
    escurece o resto da tela sem precisar de um overlay full-screen à parte. */
@@ -633,8 +622,6 @@ body.demo-mode .tutorial-help-btn { top: 56px; }
     .confirm-dialog { width: 420px; max-width: 100%; }
 
     /* Botão de ajuda "?" e balão do tutorial também respeitam o notch */
-    .tutorial-help-btn { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; }
-    body.demo-mode .tutorial-help-btn { top: calc(52px + env(safe-area-inset-top, 0px)); }
     .tutorial-balloon { width: calc(100vw - 24px); }
 
     /* Botões um pouco maiores para o toque */
@@ -651,20 +638,6 @@ body.demo-mode .tutorial-help-btn { top: 56px; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
-/* Feedback (megafone ao lado do "?") */
-.feedback-btn {
-    position: fixed; top: 16px; right: 44px; z-index: 3500;
-    width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--glass-border);
-    background: var(--glass-strong); backdrop-filter: blur(24px) saturate(1.5); -webkit-backdrop-filter: blur(24px) saturate(1.5);
-    box-shadow: 0 8px 24px rgba(30, 50, 90, 0.16); color: var(--blue); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; font-family: inherit;
-}
-.feedback-btn:hover { transform: scale(1.08); }
-body.demo-mode .feedback-btn { top: 56px; }
-@media (max-width: 760px) {
-    .feedback-btn { top: calc(12px + env(safe-area-inset-top, 0px)); right: 52px; }
-    body.demo-mode .feedback-btn { top: calc(52px + env(safe-area-inset-top, 0px)); }
-}
 .fb-tabs { display: flex; gap: 4px; border-bottom: 1px solid rgba(0,0,0,.08); margin-bottom: 12px; }
 .fb-tab { border: 0; background: none; padding: 6px 12px; font: inherit; font-size: 13px; color: #64748b; border-bottom: 2px solid transparent; cursor: pointer; }
 .fb-tab--on { color: var(--blue); border-bottom-color: var(--blue); font-weight: 600; }
@@ -674,5 +647,33 @@ body.demo-mode .feedback-btn { top: 56px; }
 .fb-chip { border: 1px solid rgba(0,0,0,.12); border-radius: 999px; padding: 1px 8px; font-weight: 600; }
 .fb-item-msg { margin-top: 4px; color: #334155; white-space: pre-wrap; }
 
-/* Faixa na cor de identidade do app (padrão de header dos apps da Central). */
-.sidebar { border-top: 3px solid #0071e3; }
+/* ============================================================
+   Cabeçalho padrão dos apps da Central Cataguases: faixa de 3px na cor do
+   app, marca à esquerda; à direita Central → feedback → ajuda → usuário → Sair.
+   ============================================================ */
+:root { --topbar-h: 59px; }
+.topbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 30; height: var(--topbar-h); box-sizing: border-box;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 16px;
+    background: #0C1D33; border-top: 3px solid #0071e3; color: #fff;
+}
+.topbar-brand { display: flex; align-items: center; gap: 12px; cursor: pointer; min-width: 0; border-radius: 10px; transition: opacity .15s ease; }
+.topbar-brand:hover { opacity: .85; }
+.topbar-logo { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; object-position: 50% 38%; flex-shrink: 0; }
+.topbar-id { line-height: 1.15; min-width: 0; }
+.topbar-name { font-size: 14px; font-weight: 600; color: #fff; white-space: nowrap; }
+.topbar-sub { font-size: 11px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-nav { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.topbar-link { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 6px; font-size: 14px; color: #e2e8f0; text-decoration: none; transition: background .15s ease; }
+.topbar-link:hover, .topbar-btn:hover, .topbar-sair:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.topbar-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 6px; background: none; color: #e2e8f0; cursor: pointer; font-family: inherit; }
+.topbar-user { margin-left: 8px; font-size: 12px; color: #cbd5e1; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topbar-sair { height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: none; color: #e2e8f0; font-family: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+.sidebar { top: var(--topbar-h); }
+.main { top: var(--topbar-h); }
+@media (max-width: 720px) {
+    .topbar { padding: 0 10px; }
+    .topbar-sub, .topbar-link-txt, .topbar-user { display: none; }
+    .topbar-link { padding: 6px; }
+    .view { padding-top: 16px !important; }
+}

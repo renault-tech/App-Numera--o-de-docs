@@ -185,6 +185,7 @@ function icon(name, size = 18, stroke = 1.9) {
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
         list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
         grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01'],
+        help: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3', 'M12 17h.01'],
         megaphone: ['M3 11l18-5v12L3 14v-3z', 'M11.6 16.8a3 3 0 1 1-5.8-1.6'],
         grid: ['M3 3h8v8H3z', 'M13 3h8v8h-8z', 'M3 13h8v8H3z', 'M13 13h8v8h-8z']
     };
@@ -1372,28 +1373,27 @@ function render() {
     document.getElementById('app-root').innerHTML = `
       ${demoBanner()}
       ${plataformaConsolidadaBanner()}
-      <button class="feedback-btn" onclick="openFeedbackModal()" title="Enviar feedback" aria-label="Enviar feedback">${icon('megaphone', 17, 1.9)}</button>
-      <button class="tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela">?</button>
       <div class="app-shell">
+        <header class="topbar">
+          <div class="topbar-brand" onclick="setView('inicio')" role="button" tabindex="0" title="Início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
+            <img src="logo.png" alt="Prefeitura" class="topbar-logo">
+            <div class="topbar-id"><div class="topbar-name">Numera</div><div class="topbar-sub">${esc(institutionName())}</div></div>
+          </div>
+          <nav class="topbar-nav">
+            <a class="topbar-link" href="${URL_CENTRAL_CATAGUASES}" title="Central Cataguases">${icon('grid', 15, 2)}<span class="topbar-link-txt">Central Cataguases</span></a>
+            <button class="topbar-btn" onclick="openFeedbackModal()" title="Enviar feedback" aria-label="Enviar feedback">${icon('megaphone', 19, 1.8)}</button>
+            <button class="topbar-btn tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela" aria-label="Ajuda">${icon('help', 19, 1.8)}</button>
+            <span class="topbar-user" title="${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}">${esc(u.name)}</span>
+            <button class="topbar-sair" onclick="handleLogout()">Sair</button>
+          </nav>
+        </header>
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
 
         <aside class="sidebar ${collapsed ? 'sidebar--collapsed' : ''}" style="width:${asideW}px">
-          <div class="brand ${collapsed ? 'brand--center' : ''} brand--clicavel" onclick="setView('inicio')" role="button" tabindex="0" title="Início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
-            <img src="logo.png" alt="Prefeitura" class="brand-logo">
-            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">${esc(institutionName())}</div></div>`}
-          </div>
-          <a class="hub-link-btn ${collapsed ? 'hub-link-btn--center' : ''}" href="${URL_CENTRAL_CATAGUASES}" title="Central Cataguases">
-            ${icon('grid', 16, 2)}${collapsed ? '' : '<span>Central Cataguases</span>'}
-          </a>
           <button class="collapse-btn ${collapsed ? 'collapse-btn--center' : ''}" onclick="toggleCollapse()" title="Recolher menu">
             <span class="collapse-chevron ${collapsed ? 'collapse-chevron--flip' : ''}">${icon('chevron', 18, 2)}</span>${collapsed ? '' : '<span>Recolher</span>'}
           </button>
           <nav class="nav">${nav}</nav>
-          <div class="user-chip ${collapsed ? 'user-chip--center' : ''}" title="${esc(u.name)}">
-            <div class="avatar">${esc(initials(u.name))}</div>
-            ${collapsed ? '' : `<div class="user-meta"><div class="user-name">${esc(u.name)}</div><div class="user-role">${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}</div></div>
-            <button class="logout-btn" onclick="handleLogout()" title="Sair">${icon('logout', 16, 2)}</button>`}
-          </div>
         </aside>
 
         <main class="main" style="left:${asideW}px">

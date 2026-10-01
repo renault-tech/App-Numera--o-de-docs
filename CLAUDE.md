@@ -512,3 +512,6 @@ de aplicar de verdade — os outros 3 repos deste ecossistema documentam essa
 disciplina em detalhe. Testes de RPC/policy ficam em `supabase/tests/`,
 scripts de rollback testados em `supabase/rollbacks/` (convenção iniciada
 junto do plano em `docs/PLANO_MIGRACAO_AUTH.md`).
+
+## Cabeçalho padrão (01/10/2026)
+O Numera passou a ter um cabeçalho no topo como os demais apps da Central Cataguases (`.topbar` em `app.js`/`styles.css`): faixa de 3px azul `#0071e3`, marca à esquerda; à direita Central Cataguases → megafone de feedback → ajuda (`.tutorial-help-btn`, usado pelo tour) → usuário → Sair. A marca, o link do Hub e o chip de usuário saíram da barra lateral; os botões flutuantes antigos (`?` e megafone) foram removidos. Altura em `--topbar-h`.
