@@ -673,3 +673,6 @@ body.demo-mode .feedback-btn { top: 56px; }
 .fb-item-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #64748b; }
 .fb-chip { border: 1px solid rgba(0,0,0,.12); border-radius: 999px; padding: 1px 8px; font-weight: 600; }
 .fb-item-msg { margin-top: 4px; color: #334155; white-space: pre-wrap; }
+
+/* Faixa na cor de identidade do app (padrão de header dos apps da Central). */
+.sidebar { border-top: 3px solid #0071e3; }
