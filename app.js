@@ -1053,6 +1053,7 @@ async function checkAutoLogin() {
             marcarOrigemHubSeAplicavel();
             subscribeRealtime();
             if (result.user.role === 'admin') requestNotificationPermission();
+            avisarMudancasFeedback();
         } else {
             tentarSsoSilenciosoOuMostrarLogin();
         }
@@ -1096,6 +1097,7 @@ async function handleLogin(e) {
         render();
         subscribeRealtime();
         if (result.user.role === 'admin') requestNotificationPermission();
+        avisarMudancasFeedback();
     } else {
         showToast(result.error || 'Credenciais inválidas.', 'error');
         btn.textContent = original; btn.disabled = false;
@@ -1348,6 +1350,40 @@ async function carregarMeusFeedbacks() {
             : 'Você ainda não enviou nenhum feedback.';
     } catch (e) { el.textContent = 'Não foi possível carregar seus envios.'; }
 }
+
+// Avisa quem mandou feedback quando o status mudou (em análise, resolvido,
+// não possível). O Numera é outro projeto Supabase, então a Central não
+// consegue gravar aviso aqui: o app consulta "Meus envios" ao abrir (e ao
+// voltar para a aba) e compara com o último status que a pessoa já viu.
+const FEEDBACK_VISTO_CHAVE = 'feedbackStatusVisto';
+let feedbackChecando = false;
+async function avisarMudancasFeedback() {
+    if (state.demoMode || !state.currentUser || feedbackChecando) return;
+    feedbackChecando = true;
+    try {
+        const token = await feedbackToken();
+        if (!token) return;
+        const res = await fetch(FEEDBACK_API, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const itens = (await res.json()).itens || [];
+        const chave = `${FEEDBACK_VISTO_CHAVE}:${state.currentUser.id}`;
+        let visto = {};
+        try { visto = JSON.parse(localStorage.getItem(chave) || '{}'); } catch (e) { visto = {}; }
+        const mudados = itens.filter(i => i.status !== 'novo' && (visto[i.id] || 'novo') !== i.status);
+        const novoVisto = { ...visto };
+        itens.forEach(i => { novoVisto[i.id] = i.status; });
+        try { localStorage.setItem(chave, JSON.stringify(novoVisto)); } catch (e) { /* sem armazenamento: avisa de novo na próxima */ }
+        if (mudados.length) {
+            const um = mudados.length === 1;
+            const msg = um
+                ? `Seu feedback "${String(mudados[0].mensagem).slice(0, 50)}" agora está: ${FEEDBACK_STATUS[mudados[0].status] || mudados[0].status}.`
+                : `${mudados.length} dos seus feedbacks tiveram novidades.`;
+            showToast(msg, 'info', 0, { label: 'Ver', onClick: () => openFeedbackModal('meus') });
+        }
+    } catch (e) { /* aviso é cortesia: nunca atrapalha o app */ }
+    finally { feedbackChecando = false; }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') avisarMudancasFeedback(); });
 
 // ============================================================
 // Shell (sidebar + main) e navegação
