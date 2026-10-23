@@ -677,3 +677,8 @@ select.field-input { cursor: pointer; }
     .topbar-link { padding: 6px; }
     .view { padding-top: 16px !important; }
 }
+
+/* Janela flutuante (feedback): sem fundo, página atrás utilizável, arrastável pelo título. */
+.modal-backdrop.modal-backdrop--float { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; align-items: flex-start; justify-content: flex-end; padding: 76px 24px 0; }
+.modal-backdrop--float .modal-card { pointer-events: auto; }
+.fb-drag { cursor: move; user-select: none; touch-action: none; }

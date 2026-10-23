@@ -349,16 +349,37 @@ async function copyToClipboard(text) {
 // Modal genérico (overlay-root) para formulários ricos (admin).
 // sheet:true força o formato de bottom-sheet (usado no menu "Mais" do celular);
 // no celular, qualquer modal já vira bottom-sheet pelo CSS.
-function openModal(innerHtml, { width = 460, sheet = false } = {}) {
+function openModal(innerHtml, { width = 460, sheet = false, floating = false } = {}) {
     // Um modal nunca pode ficar bloqueado por um balão do tutorial por cima
     // (openModal não passa pelo render() principal, então o guard de lá não
     // alcança este caminho — precisa ser feito aqui também).
     if (state.tutorialTour) clearTutorialDom();
     const root = overlayRoot();
-    root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
+    root.innerHTML = `<div class="modal-backdrop ${floating ? 'modal-backdrop--float' : ''}" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
     const back = document.getElementById('modalBackdrop');
-    back.onclick = closeModal;
+    // Janela flutuante: a página atrás continua visível e utilizável, e a
+    // caixa se arrasta pelo título (.fb-drag) — não fecha ao clicar fora.
+    if (floating) tornarArrastavel(back.querySelector('.modal-card'));
+    else back.onclick = closeModal;
     requestAnimationFrame(() => back.classList.add('modal-backdrop--visible'));
+}
+function tornarArrastavel(card) {
+    const alca = card && card.querySelector('.fb-drag');
+    if (!alca) return;
+    alca.addEventListener('pointerdown', (e) => {
+        const r = card.getBoundingClientRect();
+        const dx = e.clientX - r.left, dy = e.clientY - r.top;
+        card.style.position = 'fixed'; card.style.margin = '0';
+        card.style.left = r.left + 'px'; card.style.top = r.top + 'px';
+        e.preventDefault();
+        const mover = (ev) => {
+            card.style.left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - 80) + 'px';
+            card.style.top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 48) + 'px';
+        };
+        const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); };
+        window.addEventListener('pointermove', mover);
+        window.addEventListener('pointerup', soltar);
+    });
 }
 function closeModal() {
     const root = overlayRoot();
@@ -1274,8 +1295,8 @@ function openFeedbackModal(aba = 'enviar') {
            <div id="fbErro" role="alert" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:8px"></div>
            <div class="reserve-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
              <button id="fbEnviar" class="btn btn-primary" style="flex:1.4" onclick="enviarFeedback()">Enviar</button></div>`;
-    openModal(`<div class="reserve-modal"><div class="reserve-name">Enviar feedback</div>
-        <div class="fb-tabs">${tab('enviar', 'Enviar')}${tab('meus', 'Meus envios')}</div>${corpo}</div>`, { width: 440 });
+    openModal(`<div class="reserve-modal"><div class="reserve-name fb-drag" title="Arraste para mover">Enviar feedback</div>
+        <div class="fb-tabs">${tab('enviar', 'Enviar')}${tab('meus', 'Meus envios')}</div>${corpo}</div>`, { width: 440, floating: true });
     if (aba === 'meus') carregarMeusFeedbacks();
 }
 
