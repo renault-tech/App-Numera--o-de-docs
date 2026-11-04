@@ -682,3 +682,25 @@ select.field-input { cursor: pointer; }
 .modal-backdrop.modal-backdrop--float { background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; align-items: flex-start; justify-content: flex-end; padding: 76px 24px 0; }
 .modal-backdrop--float .modal-card { pointer-events: auto; }
 .fb-drag { cursor: move; user-select: none; touch-action: none; }
+
+/* Cabeçalho padrão da Central (o mesmo de todos os módulos): logo, "← Central" e o nome do
+   módulo com a cor dele à esquerda; à direita feedback → ajuda · usuário → Sair. Controles de
+   40 px (44 px no celular) e foco dourado. */
+.topbar-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.topbar-voltar { display: inline-flex; align-items: center; gap: 4px; height: 40px; padding: 0 12px 0 8px; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; color: #e2e8f0; font-size: 14px; text-decoration: none; transition: background .15s ease; }
+.topbar-voltar:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.topbar-sep { width: 1px; height: 24px; background: rgba(255,255,255,0.18); flex-shrink: 0; }
+.topbar-modulo { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; font-size: 16px; font-weight: 600; color: #fff; }
+.topbar-ponto { width: 10px; height: 10px; border-radius: 999px; background: #0071e3; flex-shrink: 0; }
+.topbar-modulo-nome { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-btn { width: 40px; height: 40px; border-radius: 8px; }
+.topbar-sair { height: 40px; padding: 0 12px; border-radius: 8px; font-size: 14px; }
+.topbar-user { font-size: 14px; color: #e2e8f0; padding: 0 8px; margin-left: 0; max-width: 14rem; }
+.topbar :is(a, button, [role="button"]):focus-visible { outline: 2px solid #E9A63B; outline-offset: 2px; }
+@media (max-width: 720px) {
+    .topbar-left { gap: 6px; }
+    .topbar-sep { display: none; }
+    .topbar-voltar, .topbar-sair { height: 44px; }
+    .topbar-btn { width: 44px; height: 44px; }
+    .topbar-modulo { font-size: 15px; }
+}

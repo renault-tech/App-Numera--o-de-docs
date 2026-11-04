@@ -181,6 +181,7 @@ function icon(name, size = 18, stroke = 1.9) {
         check: ['M20 6L9 17l-5-5'],
         logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
         chevron: ['M15 18l-6-6 6-6'],
+        arrowLeft: ['M19 12H5', 'M12 19l-7-7 7-7'],
         users: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
         list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
@@ -1449,14 +1450,18 @@ function render() {
       ${plataformaConsolidadaBanner()}
       <div class="app-shell">
         <header class="topbar">
-          <div class="topbar-brand" onclick="setView('inicio')" role="button" tabindex="0" title="Início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
-            <img src="logo.png" alt="Prefeitura" class="topbar-logo">
-            <div class="topbar-id"><div class="topbar-name">Numera</div><div class="topbar-sub">${esc(institutionName())}</div></div>
+          <div class="topbar-left">
+            <div class="topbar-brand" onclick="setView('inicio')" role="button" tabindex="0" title="Início do Numera" aria-label="Numera, início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
+              <img src="logo.png" alt="" class="topbar-logo">
+            </div>
+            <a class="topbar-voltar" href="${URL_CENTRAL_CATAGUASES}" aria-label="Voltar para a Central">${icon('arrowLeft', 16, 2)}<span>Central</span></a>
+            <span class="topbar-sep" aria-hidden="true"></span>
+            <p class="topbar-modulo"><span class="topbar-ponto" aria-hidden="true"></span><span class="topbar-modulo-nome">Numera</span></p>
           </div>
-          <nav class="topbar-nav">
-            <a class="topbar-link" href="${URL_CENTRAL_CATAGUASES}" title="Central Cataguases">${icon('grid', 15, 2)}<span class="topbar-link-txt">Central Cataguases</span></a>
+          <nav class="topbar-nav" aria-label="Avisos e conta">
             <button class="topbar-btn" onclick="openFeedbackModal()" title="Enviar feedback" aria-label="Enviar feedback">${icon('megaphone', 19, 1.8)}</button>
             <button class="topbar-btn tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela" aria-label="Ajuda">${icon('help', 19, 1.8)}</button>
+            <span class="topbar-sep" aria-hidden="true"></span>
             <span class="topbar-user" title="${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}">${esc(u.name)}</span>
             <button class="topbar-sair" onclick="handleLogout()">Sair</button>
           </nav>
