@@ -704,3 +704,105 @@ select.field-input { cursor: pointer; }
     .topbar-btn { width: 44px; height: 44px; }
     .topbar-modulo { font-size: 15px; }
 }
+
+/* ============================================================
+   Modo escuro (o mesmo esquema dos demais módulos da Central:
+   localStorage "tema" = claro|escuro; sem valor, segue o sistema).
+   Camada de variáveis + os poucos seletores com branco fixo.
+   ============================================================ */
+:root { color-scheme: light; }
+html.dark { color-scheme: dark; }
+html.dark {
+    --bg: linear-gradient(155deg, #08111f 0%, #0a1627 45%, #0c1424 100%);
+    --glass: rgba(24, 38, 62, 0.6);
+    --glass-strong: rgba(20, 33, 55, 0.92);
+    --glass-border: rgba(150, 175, 215, 0.16);
+    --text: #eef3fa;
+    --text-2: #c5d1e1;
+    --text-3: #93a4bd;
+    --placeholder: #7184a0;
+    --blue: #5aa2f2;
+    --blue-grad: linear-gradient(180deg, #4a95f0, #2b6cb8);
+    --blue-soft: rgba(90, 162, 242, 0.16);
+    --green: #4cd080;
+    --red: #ff7a7f;
+    --line: rgba(150, 175, 215, 0.14);
+    --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+html.dark .sidebar { border-right-color: rgba(150, 175, 215, 0.14); }
+html.dark .brand--clicavel:hover,
+html.dark .table-row:hover { background: rgba(150, 175, 215, 0.08); }
+html.dark .zoom-pill,
+html.dark .doc-card,
+html.dark .log-item,
+html.dark .user-chip,
+html.dark .field-input,
+html.dark .search-box,
+html.dark .zoom-inline button,
+html.dark .icon-btn-sm,
+html.dark .btn-ghost { background: rgba(150, 175, 215, 0.09); }
+html.dark .btn-ghost:hover { background: rgba(150, 175, 215, 0.16); }
+html.dark .modal-card { border-color: rgba(150, 175, 215, 0.18); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55); }
+html.dark .table-head,
+html.dark .table-row { border-bottom-color: rgba(150, 175, 215, 0.12); }
+html.dark .field-input,
+html.dark .search-box { border-color: rgba(150, 175, 215, 0.25); color: var(--text); }
+html.dark .badge--purple { color: #b3b1ff; }
+html.dark .meta-chip--warn { color: #f0b04f; }
+html.dark .rc--admin { color: #d8b4fe; }
+html.dark .rc--full { color: #6ee7b7; }
+html.dark .rc--readonly { color: #aebdd2; }
+html.dark .icon-btn-sm.approve { color: #4cd080; }
+html.dark .fb-tab, html.dark .fb-lista, html.dark .fb-item-head { color: var(--text-3); }
+html.dark .fb-item-msg { color: var(--text-2); }
+html.dark .ios-knob { background: #fff; }
+/* Outros arquivos de estilo (permissões, logs, telas de admin) */
+html.dark [style*="color:#64748b"] { color: var(--text-3) !important; }
+html.dark [style*="color:#b91c1c"] { color: #ff8a82 !important; }
+
+/* Botão de claro/escuro do cabeçalho (mesmas medidas dos outros controles: 40 px, 44 px no celular) */
+.topbar-tema { width: 40px; height: 40px; }
+@media (max-width: 720px) { .topbar-tema { width: 44px; height: 44px; } }
+
+/* ============================================================
+   Estilo Clássico (opcional, em Minha conta → Aparência): o mesmo que o "Clássico" dos outros
+   módulos da Central — cartões sólidos, sem vidro, cantos menores, fundo liso. O padrão é o
+   Apple (vidro), que é o visual original do Numera.
+   ============================================================ */
+html.estilo-classico {
+    --bg: #f4f6fa;
+    --glass: #ffffff;
+    --glass-strong: #ffffff;
+    --glass-border: #e2e8f0;
+    --blur: none;
+    --radius: 10px;
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+html.estilo-classico.dark {
+    --bg: #08111f;
+    --glass: #111c2e;
+    --glass-strong: #111c2e;
+    --glass-border: rgba(150, 175, 215, 0.18);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+html.estilo-classico :is(.sidebar, .zoom-pill, .card, .doc-card, .modal-card, .search-box, .field-input) {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+html.estilo-classico .sidebar { background: #ffffff; border-right-color: #e2e8f0; }
+html.estilo-classico.dark .sidebar { background: #0d1829; border-right-color: rgba(150, 175, 215, 0.14); }
+html.estilo-classico :is(.doc-card, .log-item, .user-chip, .zoom-pill, .search-box, .field-input, .btn-ghost, .icon-btn-sm, .zoom-inline button) { background: #ffffff; }
+html.estilo-classico.dark :is(.doc-card, .log-item, .user-chip, .zoom-pill, .search-box, .field-input, .btn-ghost, .icon-btn-sm, .zoom-inline button) { background: rgba(150, 175, 215, 0.09); }
+html.estilo-classico :is(.modal-card, .doc-card, .card, .table-card) { border-radius: 10px; }
+html.estilo-classico .modal-card { box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25); }
+
+/* Janela "Aparência" */
+.ap-opcoes { display: grid; gap: 8px; margin-top: 8px; }
+.ap-opcao { display: flex; flex-direction: column; gap: 2px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; background: var(--glass); }
+.ap-opcao:hover { background: var(--blue-soft); }
+.ap-opcao--on { border-color: var(--blue); background: var(--blue-soft); }
+.ap-opcao b { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.ap-opcao span { font-size: 12.5px; color: var(--text-3); padding-left: 24px; }
+.topbar-user { background: none; border: 0; font-family: inherit; cursor: pointer; border-radius: 8px; height: 40px; }
+.topbar-user:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+@media (max-width: 720px) { .topbar-user { display: none; } }
