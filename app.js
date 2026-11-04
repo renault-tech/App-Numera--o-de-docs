@@ -903,6 +903,48 @@ function alternarTema() {
 }
 window.alternarTema = alternarTema;
 
+// Estilo (Apple padrão / Clássico) e modo de cor — iguais aos dos outros módulos da Central.
+function estiloClassico() {
+    return document.documentElement.classList.contains('estilo-classico');
+}
+function definirEstilo(classico) {
+    try { if (classico) localStorage.setItem('estilo', 'classico'); else localStorage.removeItem('estilo'); } catch (e) { /* vale só nesta visita */ }
+    document.documentElement.classList.toggle('estilo-classico', classico);
+    abrirAparencia();
+}
+function definirModoCor(modo) {
+    try { if (modo === 'auto') localStorage.removeItem('tema'); else localStorage.setItem('tema', modo); } catch (e) { /* idem */ }
+    const escuro = modo === 'escuro' || (modo === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    document.documentElement.classList.toggle('dark', escuro);
+    document.querySelectorAll('.topbar-tema').forEach(function (b) {
+        b.innerHTML = icon(escuro ? 'sun' : 'moon', 17, 1.8);
+        b.setAttribute('aria-checked', String(escuro));
+        b.title = escuro ? 'Mudar para o modo claro' : 'Mudar para o modo escuro';
+    });
+    abrirAparencia();
+}
+function abrirAparencia() {
+    let modoSalvo = 'auto';
+    try { const m = localStorage.getItem('tema'); if (m === 'claro' || m === 'escuro') modoSalvo = m; } catch (e) { /* auto */ }
+    const classico = estiloClassico();
+    const op = (on, acao, titulo, detalhe) => `<div class="ap-opcao ${on ? 'ap-opcao--on' : ''}" role="radio" aria-checked="${on}" tabindex="0" onclick="${acao}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${acao}}"><b>${on ? '●' : '○'} ${titulo}</b><span>${detalhe}</span></div>`;
+    openModal(`
+        <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="font-size:17px">Aparência</h3><button class="icon-btn-sm" onclick="closeModal()" aria-label="Fechar">✕</button></div>
+        <p style="font-size:12.5px;color:var(--text-3)">A escolha fica guardada neste navegador. Para trocar a senha, use a Central Cataguases.</p>
+        <div><b style="font-size:13px">Estilo</b><div class="ap-opcoes">
+            ${op(!classico, 'definirEstilo(false)', 'Apple', 'Vidro translúcido e cantos arredondados (padrão)')}
+            ${op(classico, 'definirEstilo(true)', 'Clássico', 'Cartões sólidos e cantos mais retos')}
+        </div></div>
+        <div><b style="font-size:13px">Modo de cor</b><div class="ap-opcoes">
+            ${op(modoSalvo === 'auto', "definirModoCor('auto')", 'Automático', 'Segue o tema do seu aparelho')}
+            ${op(modoSalvo === 'claro', "definirModoCor('claro')", 'Claro', 'Fundo claro')}
+            ${op(modoSalvo === 'escuro', "definirModoCor('escuro')", 'Escuro', 'Fundo escuro, mais confortável à noite')}
+        </div></div>`, { width: 420 });
+}
+window.abrirAparencia = abrirAparencia;
+window.definirEstilo = definirEstilo;
+window.definirModoCor = definirModoCor;
+
 const URL_CENTRAL_CATAGUASES = 'https://centraltech-liard.vercel.app';
 
 // Aviso da plataforma consolidada (Central Cataguases): card flutuante
@@ -1483,7 +1525,7 @@ function render() {
             <button class="topbar-btn tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela" aria-label="Ajuda">${icon('help', 19, 1.8)}</button>
             <button class="topbar-btn topbar-tema" onclick="alternarTema()" role="switch" aria-checked="${temaEscuro()}" aria-label="Modo escuro" title="${temaEscuro() ? 'Mudar para o modo claro' : 'Mudar para o modo escuro'}">${icon(temaEscuro() ? 'sun' : 'moon', 17, 1.8)}</button>
             <span class="topbar-sep" aria-hidden="true"></span>
-            <span class="topbar-user" title="${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}">${esc(u.name)}</span>
+            <button class="topbar-user" onclick="abrirAparencia()" title="Minha conta · Aparência — ${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}">${esc(u.name)}</button>
             <button class="topbar-sair" onclick="handleLogout()">Sair</button>
           </nav>
         </header>
