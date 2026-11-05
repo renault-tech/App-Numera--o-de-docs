@@ -88,15 +88,7 @@ incluindo o e-mail de Majella Mazini (`majella@cataguases.mg.gov.br`,
 informado no mesmo dia) — nenhum dado pendente resta para fechar a
 migração de contas.
 
-**Regra do dono, válida a partir de 24/09/2026: qualquer mudança que possa
-afetar o uso dos usuários (qualquer deploy que toque `app.js`/
-`auth-service.js`/`index.html`, já que este repo publica na Vercel a cada
-push) só pode acontecer depois das 17h, horário de Cataguases/MG
-(`America/Sao_Paulo`, sem horário de verão desde 2019).** Mudança só de
-documentação/planejamento (como este arquivo, `docs/`) não entra nessa
-restrição. Antes de publicar qualquer commit que toque o app em produção,
-conferir o horário local (`TZ=America/Sao_Paulo date`) e não prosseguir
-antes das 17h sem confirmação explícita do dono.
+**Regra de horário CANCELADA pelo dono em 05/11/2026**: a restrição "só publicar depois das 17h" (válida de 24/09 a 05/11/2026) não vale mais — o app pode ser publicado a qualquer hora. As menções à janela das 17h mais abaixo são histórico do que foi feito na época.
 
 ## PR1 do plano de migração de auth: CONCLUÍDO (24/09/2026)
 
