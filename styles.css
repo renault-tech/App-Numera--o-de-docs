@@ -806,3 +806,18 @@ html.estilo-classico .modal-card { box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25
 .topbar-user { background: none; border: 0; font-family: inherit; cursor: pointer; border-radius: 8px; height: 40px; }
 .topbar-user:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 @media (max-width: 720px) { .topbar-user { display: none; } }
+
+/* ===== Escuro no celular: mais legível (06/11/2026) =====
+   O vidro a 60% deixa o degradê do fundo passar por baixo do texto e o cinza terciário ficava no limite;
+   `antialiased` afina texto claro sobre escuro. No celular o cartão fica quase opaco, sem desfoque. */
+html.dark body { -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+@media (max-width: 767px) {
+    html.dark {
+        --glass: rgba(24, 38, 62, 0.95);
+        --text-3: #a9b8cf;
+        --placeholder: #8c9db8;
+    }
+    html.dark .card, html.dark .doc-card, html.dark .sidebar {
+        -webkit-backdrop-filter: none; backdrop-filter: none;
+    }
+}

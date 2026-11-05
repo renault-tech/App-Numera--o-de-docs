@@ -885,6 +885,32 @@ async function enterDemoMode() {
 
 function exitDemoMode() { location.reload(); }
 
+// Preferências de aparência no banco (public.users.pref_tema/pref_estilo): acompanham a conta entre
+// computadores. localStorage segue como cache para a primeira pintura e para a tela de login.
+function salvarPreferenciaRemota(tema, estilo) {
+    if (!state.currentUser || !supabase) return;
+    supabase.rpc('salvar_preferencias', { p_tema: tema, p_estilo: estilo }).then(function () {}, function () { /* só conveniência */ });
+}
+function aplicarPreferenciasDoBanco(user) {
+    if (!user) return;
+    let modoLocal = 'auto';
+    try { const m = localStorage.getItem('tema'); if (m === 'claro' || m === 'escuro') modoLocal = m; } catch (e) { /* auto */ }
+    const estiloLocal = estiloClassico() ? 'classico' : 'apple';
+    if (user.pref_tema || user.pref_estilo) {
+        const modo = user.pref_tema || modoLocal;
+        const estilo = user.pref_estilo || estiloLocal;
+        try {
+            if (modo === 'auto') localStorage.removeItem('tema'); else localStorage.setItem('tema', modo);
+            if (estilo === 'classico') localStorage.setItem('estilo', 'classico'); else localStorage.removeItem('estilo');
+        } catch (e) { /* vale só nesta visita */ }
+        const escuro = modo === 'escuro' || (modo === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.classList.toggle('dark', escuro);
+        document.documentElement.classList.toggle('estilo-classico', estilo === 'classico');
+    } else if (modoLocal !== 'auto' || estiloLocal !== 'apple') {
+        salvarPreferenciaRemota(modoLocal, estiloLocal);
+    }
+}
+
 // Modo claro/escuro — mesmo esquema dos outros módulos da Central (localStorage "tema" =
 // claro|escuro; sem valor, segue o sistema). O <head> aplica a classe antes da pintura.
 function temaEscuro() {
@@ -894,6 +920,7 @@ function alternarTema() {
     const escuro = !temaEscuro();
     try { localStorage.setItem('tema', escuro ? 'escuro' : 'claro'); } catch (e) { /* vale só nesta visita */ }
     document.documentElement.classList.toggle('dark', escuro);
+    salvarPreferenciaRemota(escuro ? 'escuro' : 'claro', null);
     // Só troca o ícone do botão: não refaz a tela (preserva formulários e janelas abertas).
     document.querySelectorAll('.topbar-tema').forEach(function (b) {
         b.innerHTML = icon(escuro ? 'sun' : 'moon', 17, 1.8);
@@ -910,12 +937,14 @@ function estiloClassico() {
 function definirEstilo(classico) {
     try { if (classico) localStorage.setItem('estilo', 'classico'); else localStorage.removeItem('estilo'); } catch (e) { /* vale só nesta visita */ }
     document.documentElement.classList.toggle('estilo-classico', classico);
+    salvarPreferenciaRemota(null, classico ? 'classico' : 'apple');
     abrirAparencia();
 }
 function definirModoCor(modo) {
     try { if (modo === 'auto') localStorage.removeItem('tema'); else localStorage.setItem('tema', modo); } catch (e) { /* idem */ }
     const escuro = modo === 'escuro' || (modo === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
     document.documentElement.classList.toggle('dark', escuro);
+    salvarPreferenciaRemota(modo, null);
     document.querySelectorAll('.topbar-tema').forEach(function (b) {
         b.innerHTML = icon(escuro ? 'sun' : 'moon', 17, 1.8);
         b.setAttribute('aria-checked', String(escuro));
@@ -1110,6 +1139,7 @@ async function checkAutoLogin() {
         }
         if (result.user) {
             state.currentUser = result.user;
+            aplicarPreferenciasDoBanco(result.user);
             await loadData();
             await ensureCardOrderSynced();
             render();
@@ -1152,6 +1182,7 @@ async function handleLogin(e) {
     const result = await authService.signIn(id, pw);
     if (result.user) {
         state.currentUser = result.user;
+        aplicarPreferenciasDoBanco(result.user);
         marcarOrigemHubSeAplicavel();
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         await loadData();
