@@ -9,36 +9,6 @@ const SUPABASE_URL = 'https://uxdjhdnsnditivvjktzf.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_VAfgn59xk4fN4e3gPSMmLg_OXx6xAjf';
 var supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-// Verdadeiro enquanto a tela de "definir nova senha" (link de recuperação)
-// está no ar — impede que checkAutoLogin()/render() troquem essa tela por
-// engano assim que a sessão temporária do link é detectada.
-let inPasswordRecovery = false;
-if (supabase) {
-    supabase.auth.onAuthStateChange((event) => {
-        if (event === 'PASSWORD_RECOVERY') {
-            inPasswordRecovery = true;
-            showResetPasswordView();
-        }
-        // PR3: "sessão expirada" traduzida. window.signOutFoiVoluntario é
-        // ligada por auth-service.js sempre que O PRÓPRIO APP pede o
-        // signOut (logout manual, ou resolverPerfilOuFalhar barrando
-        // conta desativada/pendente/sem cadastro — casos que já mostram
-        // sua própria mensagem específica). Sem essa flag, um SIGNED_OUT
-        // disparado sozinho pelo Supabase (token expirado/revogado
-        // enquanto a pessoa estava logada) cairia aqui sem explicação.
-        if (event === 'SIGNED_OUT') {
-            if (window.signOutFoiVoluntario) {
-                window.signOutFoiVoluntario = false;
-            } else if (state.currentUser) {
-                state.currentUser = null;
-                unsubscribeRealtime();
-                showToast('Sua sessão expirou. Faça login novamente.', 'warning', 0);
-                showLoginView();
-            }
-        }
-    });
-}
-
 const DEST_EXTERNO = 'Externo / Outro órgão';
 // Valor sentinela (mesmo padrão do DEST_EXTERNO): gravado literalmente na
 // lista de destinos em vez de expandir para os nomes das secretarias do
@@ -108,7 +78,6 @@ let state = {
     logs: [],
     secretariats: [...DEFAULT_SECRETARIATS],
     secretariaPermissions: {}, // { secretaria: [docIds] }
-    loginDiretoBloqueado: false, // app_config.loginDiretoBloqueado — ver plataforma-banner e showLoginView
     filters: { search: '', tipo: '', sec: '', from: '', to: '' },
     reportFilters: { tipo: '', sec: '', from: '', to: '', status: '' },
     logFilter: 'todos',
@@ -181,16 +150,10 @@ function icon(name, size = 18, stroke = 1.9) {
         check: ['M20 6L9 17l-5-5'],
         logout: ['M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4', 'M16 17l5-5-5-5', 'M21 12H9'],
         chevron: ['M15 18l-6-6 6-6'],
-        arrowLeft: ['M19 12H5', 'M12 19l-7-7 7-7'],
-        moon: ['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'],
-        sun: ['M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
         users: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
         building: ['M3 21h18', 'M5 21V7l7-4 7 4v14', 'M9 9h.01', 'M9 13h.01', 'M9 17h.01', 'M15 9h.01', 'M15 13h.01', 'M15 17h.01'],
         list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
-        grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01'],
-        help: ['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z', 'M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3', 'M12 17h.01'],
-        megaphone: ['M3 11l18-5v12L3 14v-3z', 'M11.6 16.8a3 3 0 1 1-5.8-1.6'],
-        grid: ['M3 3h8v8H3z', 'M13 3h8v8h-8z', 'M3 13h8v8H3z', 'M13 13h8v8h-8z']
+        grip: ['M9 5h.01', 'M9 12h.01', 'M9 19h.01', 'M15 5h.01', 'M15 12h.01', 'M15 19h.01']
     };
     const paths = (P[name] || []).map(d => `<path d="${d}"></path>`).join('');
     return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">${paths}</svg>`;
@@ -352,37 +315,16 @@ async function copyToClipboard(text) {
 // Modal genérico (overlay-root) para formulários ricos (admin).
 // sheet:true força o formato de bottom-sheet (usado no menu "Mais" do celular);
 // no celular, qualquer modal já vira bottom-sheet pelo CSS.
-function openModal(innerHtml, { width = 460, sheet = false, floating = false } = {}) {
+function openModal(innerHtml, { width = 460, sheet = false } = {}) {
     // Um modal nunca pode ficar bloqueado por um balão do tutorial por cima
     // (openModal não passa pelo render() principal, então o guard de lá não
     // alcança este caminho — precisa ser feito aqui também).
     if (state.tutorialTour) clearTutorialDom();
     const root = overlayRoot();
-    root.innerHTML = `<div class="modal-backdrop ${floating ? 'modal-backdrop--float' : ''}" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
+    root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal-card ${sheet ? 'modal-card--sheet' : ''}" style="width:${width}px" onclick="event.stopPropagation()">${innerHtml}</div></div>`;
     const back = document.getElementById('modalBackdrop');
-    // Janela flutuante: a página atrás continua visível e utilizável, e a
-    // caixa se arrasta pelo título (.fb-drag) — não fecha ao clicar fora.
-    if (floating) tornarArrastavel(back.querySelector('.modal-card'));
-    else back.onclick = closeModal;
+    back.onclick = closeModal;
     requestAnimationFrame(() => back.classList.add('modal-backdrop--visible'));
-}
-function tornarArrastavel(card) {
-    const alca = card && card.querySelector('.fb-drag');
-    if (!alca) return;
-    alca.addEventListener('pointerdown', (e) => {
-        const r = card.getBoundingClientRect();
-        const dx = e.clientX - r.left, dy = e.clientY - r.top;
-        card.style.position = 'fixed'; card.style.margin = '0';
-        card.style.left = r.left + 'px'; card.style.top = r.top + 'px';
-        e.preventDefault();
-        const mover = (ev) => {
-            card.style.left = Math.min(Math.max(0, ev.clientX - dx), window.innerWidth - 80) + 'px';
-            card.style.top = Math.min(Math.max(0, ev.clientY - dy), window.innerHeight - 48) + 'px';
-        };
-        const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); };
-        window.addEventListener('pointermove', mover);
-        window.addEventListener('pointerup', soltar);
-    });
 }
 function closeModal() {
     const root = overlayRoot();
@@ -423,62 +365,55 @@ function mapUserRow(u) {
     return {
         id: u.id, name: u.name, username: u.username, email: u.email, password: u.password,
         cargo: u.cargo, setor: u.setor, secretaria: u.secretaria, role: u.role,
-        allowedDocuments: u.allowed_documents || [], approved: u.approved, ativo: u.ativo,
-        createdAt: u.created_at
+        allowedDocuments: u.allowed_documents || [], approved: u.approved, createdAt: u.created_at
     };
-}
-
-// Busca todas as reservas em páginas de 1000 (limite por pedido do PostgREST).
-async function carregarTodasReservas() {
-    const pagina = 1000;
-    const todas = [];
-    for (let de = 0; ; de += pagina) {
-        const { data, error } = await supabase.from('reservations').select('*')
-            .order('timestamp', { ascending: false }).range(de, de + pagina - 1);
-        if (error) throw error;
-        todas.push(...(data || []));
-        if (!data || data.length < pagina) break;
-    }
-    return todas;
 }
 
 async function loadData() {
     if (!supabase) return;
     state.loading = true;
     try {
-        // As 6 leituras são independentes: em paralelo (antes, em série — a
-        // tela inicial esperava a soma dos tempos). Reservas paginadas: o
-        // PostgREST devolve no máximo 1000 linhas por pedido e já há mais que
-        // isso, então o histórico antigo sumia sem aviso.
-        const [docsRes, countersRes, configsRes, usersRes, reservations, logsRes] = await Promise.all([
-            supabase.from('documents').select('*').order('name'),
-            supabase.from('document_counters').select('doc_id,secretaria,year,current_number'),
-            supabase.from('app_config').select('*'),
-            supabase.from('users').select('*'),
-            carregarTodasReservas(),
-            supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(500),
-        ]);
-        if (docsRes.error) throw docsRes.error;
-        state.documents = (docsRes.data || []).map(mapDoc);
+        const { data: docs, error: e1 } = await supabase.from('documents').select('*').order('name');
+        if (e1) throw e1;
+        state.documents = (docs || []).map(mapDoc);
+
+        if (state.documents.length === 0) {
+            const yr = new Date().getFullYear();
+            const seed = [
+                ['Ofício', 'Of.', true], ['Memorando', 'Mem.', true], ['Portaria', 'Port.', true],
+                ['Decreto', 'Dec.', true], ['Contrato', 'Contr.', true], ['Resolução', 'Res.', true],
+                ['Circular', 'Circ.', true], ['Edital', 'Ed.', true], ['Parecer', 'Par.', true],
+                ['Ata', '', true], ['Lei', 'L.', true], ['Processo', 'Proc.', false], ['Protocolo', 'Prot.', false]
+            ].map(([name, prefix, yearly]) => ({ name, prefix, start_number: 1, current_number: 1, yearly_reset: yearly, last_reset_year: yr, enabled: true }));
+            const { data: nd } = await supabase.from('documents').insert(seed).select();
+            if (nd) state.documents = nd.map(mapDoc);
+        }
 
         // Contadores por bucket (migração 0003)
         state.counters = {};
-        if (countersRes.data) countersRes.data.forEach(c => { state.counters[`${c.doc_id}|${c.secretaria}|${c.year}`] = c.current_number; });
+        const { data: counters } = await supabase.from('document_counters').select('doc_id,secretaria,year,current_number');
+        if (counters) counters.forEach(c => { state.counters[`${c.doc_id}|${c.secretaria}|${c.year}`] = c.current_number; });
 
         // Config (secretarias + permissões padrão)
-        const configs = configsRes.data;
+        const { data: configs } = await supabase.from('app_config').select('*');
         if (configs) {
             const secList = configs.find(c => c.key === 'secretaria_list');
             if (secList && Array.isArray(secList.value)) state.secretariats = [...secList.value].sort();
             const perms = configs.find(c => c.key === 'secretariaPermissions');
             if (perms && perms.value) state.secretariaPermissions = perms.value;
-            const bloqueio = configs.find(c => c.key === 'loginDiretoBloqueado');
-            state.loginDiretoBloqueado = !!(bloqueio && bloqueio.value === true);
         }
 
-        if (usersRes.data) state.users = usersRes.data.map(mapUserRow);
+        // Usuários
+        const { data: users } = await supabase.from('users').select('*');
+        if (users) state.users = users.map(mapUserRow);
+
+        // Reservas
+        const { data: reservations } = await supabase.from('reservations').select('*').order('timestamp', { ascending: false }).limit(1000);
         if (reservations) state.reservations = reservations.map(mapReservationRow);
-        if (logsRes.data) state.logs = logsRes.data.map(l => ({ id: l.id, type: l.type, action: l.action, details: l.details, userId: l.user_id, userName: l.user_name, timestamp: l.timestamp }));
+
+        // Logs
+        const { data: logs } = await supabase.from('logs').select('*').order('timestamp', { ascending: false }).limit(500);
+        if (logs) state.logs = logs.map(l => ({ id: l.id, type: l.type, action: l.action, details: l.details, userId: l.user_id, userName: l.user_name, timestamp: l.timestamp }));
     } catch (err) {
         console.error('Erro ao carregar dados:', err);
         showToast('Erro ao carregar dados. Verifique o console.', 'error', 0);
@@ -528,6 +463,9 @@ function onUsersRealtime({ eventType, new: newRow, old: oldRow }) {
         const idx = state.users.findIndex(u => u.id === mapped.id);
         if (idx < 0) state.users.push(mapped); else state.users[idx] = mapped;
         if (state.currentUser && mapped.id === state.currentUser.id) Object.assign(state.currentUser, mapped);
+        if (eventType === 'INSERT' && !mapped.approved && state.currentUser?.role === 'admin' && mapped.id !== state.currentUser?.id) {
+            notifyNewRegistration(mapped);
+        }
     }
     scheduleRerender();
 }
@@ -806,7 +744,7 @@ function createDemoClient(demoDb) {
         return filters.every(f => f.type === 'eq' ? row[f.col] == f.val : f.conds.some(c => row[c.col] == c.val));
     }
     function builder(table) {
-        let filters = [], single = false, orderCol = null, asc = true, lim = null, offset = 0, updateVals = null, doDelete = false, insertedRows = null;
+        let filters = [], single = false, orderCol = null, asc = true, lim = null, updateVals = null, doDelete = false, insertedRows = null;
         const b = {
             select() { return b; },
             eq(col, val) { filters.push({ type: 'eq', col, val }); return b; },
@@ -820,7 +758,6 @@ function createDemoClient(demoDb) {
             },
             order(col, opts) { orderCol = col; asc = !(opts && opts.ascending === false); return b; },
             limit(n) { lim = n; return b; },
-            range(de, ate) { offset = de; lim = ate - de + 1; return b; },
             single() { single = true; return b; },
             insert(rows) {
                 const arr = (Array.isArray(rows) ? rows : [rows]).map(r => ({ id: r.id || demoNextId(), ...r }));
@@ -850,7 +787,7 @@ function createDemoClient(demoDb) {
                 }
                 if (updateVals) rows.forEach(r => Object.assign(r, updateVals));
                 if (orderCol) rows = [...rows].sort((a, z) => (a[orderCol] < z[orderCol] ? -1 : 1) * (asc ? 1 : -1));
-                if (lim != null) rows = rows.slice(offset, offset + lim);
+                if (lim != null) rows = rows.slice(0, lim);
                 resolve(single ? { data: rows[0] || null, error: rows[0] ? null : { code: 'PGRST116' } } : { data: rows, error: null });
             }
         };
@@ -884,125 +821,6 @@ async function enterDemoMode() {
 }
 
 function exitDemoMode() { location.reload(); }
-
-// Preferências de aparência no banco (public.users.pref_tema/pref_estilo): acompanham a conta entre
-// computadores. localStorage segue como cache para a primeira pintura e para a tela de login.
-function salvarPreferenciaRemota(tema, estilo) {
-    if (!state.currentUser || !supabase) return;
-    supabase.rpc('salvar_preferencias', { p_tema: tema, p_estilo: estilo }).then(function () {}, function () { /* só conveniência */ });
-}
-function aplicarPreferenciasDoBanco(user) {
-    if (!user) return;
-    let modoLocal = 'auto';
-    try { const m = localStorage.getItem('tema'); if (m === 'claro' || m === 'escuro') modoLocal = m; } catch (e) { /* auto */ }
-    const estiloLocal = estiloClassico() ? 'classico' : 'apple';
-    if (user.pref_tema || user.pref_estilo) {
-        const modo = user.pref_tema || modoLocal;
-        const estilo = user.pref_estilo || estiloLocal;
-        try {
-            if (modo === 'auto') localStorage.removeItem('tema'); else localStorage.setItem('tema', modo);
-            if (estilo === 'classico') localStorage.setItem('estilo', 'classico'); else localStorage.removeItem('estilo');
-        } catch (e) { /* vale só nesta visita */ }
-        const escuro = modo === 'escuro' || (modo === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-        document.documentElement.classList.toggle('dark', escuro);
-        document.documentElement.classList.toggle('estilo-classico', estilo === 'classico');
-    } else if (modoLocal !== 'auto' || estiloLocal !== 'apple') {
-        salvarPreferenciaRemota(modoLocal, estiloLocal);
-    }
-}
-
-// Modo claro/escuro — mesmo esquema dos outros módulos da Central (localStorage "tema" =
-// claro|escuro; sem valor, segue o sistema). O <head> aplica a classe antes da pintura.
-function temaEscuro() {
-    return document.documentElement.classList.contains('dark');
-}
-function alternarTema() {
-    const escuro = !temaEscuro();
-    try { localStorage.setItem('tema', escuro ? 'escuro' : 'claro'); } catch (e) { /* vale só nesta visita */ }
-    document.documentElement.classList.toggle('dark', escuro);
-    salvarPreferenciaRemota(escuro ? 'escuro' : 'claro', null);
-    // Só troca o ícone do botão: não refaz a tela (preserva formulários e janelas abertas).
-    document.querySelectorAll('.topbar-tema').forEach(function (b) {
-        b.innerHTML = icon(escuro ? 'sun' : 'moon', 17, 1.8);
-        b.setAttribute('aria-checked', String(escuro));
-        b.title = escuro ? 'Mudar para o modo claro' : 'Mudar para o modo escuro';
-    });
-}
-window.alternarTema = alternarTema;
-
-// Estilo (Apple padrão / Clássico) e modo de cor — iguais aos dos outros módulos da Central.
-function estiloClassico() {
-    return document.documentElement.classList.contains('estilo-classico');
-}
-function definirEstilo(classico) {
-    try { if (classico) localStorage.setItem('estilo', 'classico'); else localStorage.removeItem('estilo'); } catch (e) { /* vale só nesta visita */ }
-    document.documentElement.classList.toggle('estilo-classico', classico);
-    salvarPreferenciaRemota(null, classico ? 'classico' : 'apple');
-    abrirAparencia();
-}
-function definirModoCor(modo) {
-    try { if (modo === 'auto') localStorage.removeItem('tema'); else localStorage.setItem('tema', modo); } catch (e) { /* idem */ }
-    const escuro = modo === 'escuro' || (modo === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', escuro);
-    salvarPreferenciaRemota(modo, null);
-    document.querySelectorAll('.topbar-tema').forEach(function (b) {
-        b.innerHTML = icon(escuro ? 'sun' : 'moon', 17, 1.8);
-        b.setAttribute('aria-checked', String(escuro));
-        b.title = escuro ? 'Mudar para o modo claro' : 'Mudar para o modo escuro';
-    });
-    abrirAparencia();
-}
-function abrirAparencia() {
-    let modoSalvo = 'auto';
-    try { const m = localStorage.getItem('tema'); if (m === 'claro' || m === 'escuro') modoSalvo = m; } catch (e) { /* auto */ }
-    const classico = estiloClassico();
-    const op = (on, acao, titulo, detalhe) => `<div class="ap-opcao ${on ? 'ap-opcao--on' : ''}" role="radio" aria-checked="${on}" tabindex="0" onclick="${acao}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${acao}}"><b>${on ? '●' : '○'} ${titulo}</b><span>${detalhe}</span></div>`;
-    openModal(`
-        <div style="display:flex;justify-content:space-between;align-items:center"><h3 style="font-size:17px">Aparência</h3><button class="icon-btn-sm" onclick="closeModal()" aria-label="Fechar">✕</button></div>
-        <p style="font-size:12.5px;color:var(--text-3)">A escolha fica guardada neste navegador. Para trocar a senha, use a Central Cataguases.</p>
-        <div><b style="font-size:13px">Estilo</b><div class="ap-opcoes">
-            ${op(!classico, 'definirEstilo(false)', 'Apple', 'Vidro translúcido e cantos arredondados (padrão)')}
-            ${op(classico, 'definirEstilo(true)', 'Clássico', 'Cartões sólidos e cantos mais retos')}
-        </div></div>
-        <div><b style="font-size:13px">Modo de cor</b><div class="ap-opcoes">
-            ${op(modoSalvo === 'auto', "definirModoCor('auto')", 'Automático', 'Segue o tema do seu aparelho')}
-            ${op(modoSalvo === 'claro', "definirModoCor('claro')", 'Claro', 'Fundo claro')}
-            ${op(modoSalvo === 'escuro', "definirModoCor('escuro')", 'Escuro', 'Fundo escuro, mais confortável à noite')}
-        </div></div>`, { width: 420 });
-}
-window.abrirAparencia = abrirAparencia;
-window.definirEstilo = definirEstilo;
-window.definirModoCor = definirModoCor;
-
-const URL_CENTRAL_CATAGUASES = 'https://centraltech-liard.vercel.app';
-
-// Aviso da plataforma consolidada (Central Cataguases): card flutuante
-// (não mais tarja full-width no topo — não precisa mais empurrar o
-// .app-shell nem compensar altura). Mesmo padrão de "não mostrar de novo"
-// já usado pelo tutorial (tutorialSeen em localStorage), reaproveitado com
-// um id próprio em vez de um mecanismo novo. Não aparece junto do banner
-// de demonstração (evita dois avisos flutuantes ao mesmo tempo), se a
-// pessoa já dispensou antes, ou se a navegação já veio do próprio Hub
-// (?origem=hub, anexado pelos cards de módulo da Central Cataguases —
-// quem clicou lá dentro já sabe que ela existe).
-function plataformaConsolidadaBanner() {
-    if (state.demoMode) return '';
-    if (new URLSearchParams(location.search).get('origem') === 'hub') {
-        markTutorialSeen(['plataforma-consolidada-dispensado']);
-        return '';
-    }
-    if (getTutorialSeenIds().has('plataforma-consolidada-dispensado')) return '';
-    return `<div class="plataforma-banner">
-      <button class="plataforma-banner-fechar" onclick="dispensarBannerPlataforma()" title="Não mostrar novamente" aria-label="Dispensar aviso">✕</button>
-      <p class="plataforma-banner-text">✨ <b>Nova plataforma disponível:</b> a Central Cataguases reúne Numera, Compras e Requerimentos com um só login — acesso e permissões dos 3 agora também podem ser pedidos e liberados por lá. Sua conta do Numera continua sendo esta; se precisar trocar a senha, use "Esqueci minha senha" aqui mesmo, na tela de entrada.</p>
-      <a class="btn plataforma-banner-cta" href="${URL_CENTRAL_CATAGUASES}" target="_blank" rel="noreferrer">Ir para a Central Cataguases</a>
-    </div>`;
-}
-
-function dispensarBannerPlataforma() {
-    markTutorialSeen(['plataforma-consolidada-dispensado']);
-    render();
-}
 
 function demoBanner() {
     if (!state.demoMode) return '';
@@ -1117,10 +935,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!supabase) throw new Error('Falha ao inicializar Supabase');
         const savedZoom = parseInt(localStorage.getItem('zoomLevel') || '100', 10);
         if (savedZoom >= 80 && savedZoom <= 150) state.zoom = savedZoom;
-        // PR3: loadData só roda depois de confirmar sessão (dentro de
-        // checkAutoLogin) — antes disso, `documents`/`users`/`reservations`
-        // eram buscados com a chave anônima mesmo sem ninguém logado,
-        // expostos no estado do navegador antes de qualquer autenticação.
+        await loadData();
         await checkAutoLogin();
     } catch (e) {
         console.error('Fatal:', e);
@@ -1129,48 +944,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function checkAutoLogin() {
-    if (inPasswordRecovery) return;
     try {
-        const result = await authService.getCurrentUser();
-        if (result.error) {
-            showToast(result.error, 'error', 0);
-            showLoginView();
-            return;
-        }
-        if (result.user) {
-            state.currentUser = result.user;
-            aplicarPreferenciasDoBanco(result.user);
-            await loadData();
-            await ensureCardOrderSynced();
-            render();
-            marcarOrigemHubSeAplicavel();
+        const user = await authService.getCurrentUser();
+        if (user) {
+            state.currentUser = user; await ensureCardOrderSynced(); render();
             subscribeRealtime();
-            if (result.user.role === 'admin') requestNotificationPermission();
-            avisarMudancasFeedback();
-        } else {
-            tentarSsoSilenciosoOuMostrarLogin();
+            if (user.role === 'admin') requestNotificationPermission();
         }
+        else showLoginView();
     } catch (e) { console.error(e); showLoginView(); }
-}
-
-// Login unificado pelo Hub (pedido do usuário: logar uma vez, em qualquer
-// lugar, e entrar direto em qualquer app liberado sem digitar senha de
-// novo). Sem sessão própria aqui — mesmo entrando DIRETO pela URL do
-// Numera, sem passar pelo Hub — navega (página inteira, nunca fetch: o
-// cookie de sessão do Hub é first-party só numa navegação de verdade) pra
-// `/sso/silencioso` antes de mostrar o formulário de senha deste app. Se a
-// pessoa já está autenticada no Hub e tem acesso ao Numera, volta já
-// logada, sem digitar nada; sem sessão nenhuma (nem no Hub), a própria
-// rota do Hub manda logar por lá; autenticada no Hub mas sem acesso, ou
-// falha ao gerar o link, devolve pra cá com `ssoFalhou=1` — guarda de loop
-// que também mostra o formulário normal.
-function tentarSsoSilenciosoOuMostrarLogin() {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('ssoFalhou') === '1') {
-        showLoginView();
-        return;
-    }
-    window.location.href = `${URL_CENTRAL_CATAGUASES}/sso/silencioso?app=numera`;
 }
 
 async function handleLogin(e) {
@@ -1182,8 +964,6 @@ async function handleLogin(e) {
     const result = await authService.signIn(id, pw);
     if (result.user) {
         state.currentUser = result.user;
-        aplicarPreferenciasDoBanco(result.user);
-        marcarOrigemHubSeAplicavel();
         addLog('sistema', 'Login realizado', `${result.user.name} acessou o sistema`);
         await loadData();
         await ensureCardOrderSynced();
@@ -1191,7 +971,6 @@ async function handleLogin(e) {
         render();
         subscribeRealtime();
         if (result.user.role === 'admin') requestNotificationPermission();
-        avisarMudancasFeedback();
     } else {
         showToast(result.error || 'Credenciais inválidas.', 'error');
         btn.textContent = original; btn.disabled = false;
@@ -1204,31 +983,10 @@ async function handleLogout() {
     if (state.currentUser) addLog('sistema', 'Logout realizado', `${state.currentUser.name} saiu`);
     await authService.signOut();
     state.currentUser = null;
-    // Navega de verdade (não só re-renderiza) pra gravar `ssoFalhou=1` na
-    // URL — sem isso, um F5 logo depois do "Sair" tentaria o SSO
-    // silencioso de novo e, com a sessão do Hub ainda de pé, relogaria na
-    // hora ("Sair" deixaria de sair de verdade). Sair aqui é local (só
-    // deste app); para sair de tudo, a pessoa usa o "Sair" do próprio Hub.
-    window.location.href = `${window.location.pathname}?ssoFalhou=1`;
+    showLoginView();
 }
 
 function showLoginView() {
-    if (state.loginDiretoBloqueado) {
-        document.getElementById('app-root').innerHTML = `
-          <div class="login-wrap">
-            <div class="login-blob login-blob--1"></div>
-            <div class="login-blob login-blob--2"></div>
-            <div class="login-card">
-              <img src="logo.png" alt="Prefeitura de Cataguases" class="login-logo">
-              <div class="login-title brand-wordmark">Numera</div>
-              <div class="login-sub" style="margin-top:8px;">
-                O login direto foi desativado. Acesse pela Central Cataguases.
-              </div>
-              <a class="btn btn-primary btn-block" style="margin-top:16px;" href="${URL_CENTRAL_CATAGUASES}">Ir para a Central Cataguases</a>
-            </div>
-          </div>`;
-        return;
-    }
     document.getElementById('app-root').innerHTML = `
       <div class="login-wrap">
         <div class="login-blob login-blob--1"></div>
@@ -1245,239 +1003,94 @@ function showLoginView() {
             <input id="loginPassword" type="password" class="field-input" required autocomplete="current-password" placeholder="••••••••">
             <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Entrar</button>
           </form>
-          <button type="button" class="login-link" onclick="openForgotPasswordModal()">Esqueci minha senha</button>
-          <a class="login-link" style="display:block;text-align:center;" href="${URL_CENTRAL_CATAGUASES}/solicitar-acesso" target="_blank" rel="noreferrer">Não tem acesso? <b>Solicitar pela Central Cataguases</b></a>
+          <button type="button" class="login-link" onclick="openRegisterModal()">Não tem conta? <b>Criar conta</b></button>
           <button type="button" class="btn btn-ghost btn-block" style="margin-top:8px;" onclick="enterDemoMode()">${icon('eye', 15, 2)} Ver demonstração</button>
         </div>
       </div>`;
 }
 
-// Grava de onde veio este login, só quando a navegação carregou com
-// ?origem=hub (anexado pelos cards da Central Cataguases) — alimenta o
-// sinal de adoção no painel "Login direto por aplicativo" do Hub. PR3:
-// via RPC (marcar_login_origem, identidade sempre auth.uid()) em vez de
-// update direto na tabela — não depende mais da RLS aberta continuar
-// permissiva depois do PR5.
-async function marcarOrigemHubSeAplicavel() {
-    const origem = new URLSearchParams(location.search).get('origem') === 'hub' ? 'hub' : null;
-    if (!origem) return;
+// ============================================================
+// Cadastro de novo usuário (a partir da tela de login)
+// ============================================================
+async function openRegisterModal() {
+    // Busca a lista real de secretarias mesmo sem sessão (best-effort;
+    // sem isso o formulário mostraria só a lista padrão de fallback).
     try {
-        await supabase.rpc('marcar_login_origem', { p_origem: origem });
-    } catch (e) {
-        console.error('marcarOrigemHubSeAplicavel:', e);
-    }
+        const { data } = await supabase.from('app_config').select('*').eq('key', 'secretaria_list').single();
+        if (data && Array.isArray(data.value) && data.value.length) state.secretariats = [...data.value].sort();
+    } catch (e) { /* mantém o fallback em state.secretariats */ }
+    renderRegisterModal();
 }
 
-// ============================================================
-// Recuperação de senha (não existia até esta versão — a única conta que
-// não tem como usar este fluxo é uma conta legada, sem par em auth.users,
-// criada antes da integração com o Supabase Auth).
-// ============================================================
-function openForgotPasswordModal() {
+function renderRegisterModal() {
+    const secOptions = state.secretariats.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
     openModal(`
       <div class="reserve-modal">
         <div class="reserve-eyebrow brand-wordmark" style="font-weight:800;">Numera</div>
-        <div class="reserve-name">Esqueci minha senha</div>
-        <p style="font-size:13px;color:var(--muted,#64748b);margin:0 0 12px;">
-          Informe o e-mail da sua conta. Se ele estiver cadastrado, enviaremos um link para você definir uma nova senha.
-        </p>
-        <div class="field"><label class="field-label">E-mail</label>
-          <input id="forgotEmail" type="email" class="field-input" placeholder="seu@email.com"></div>
+        <div class="reserve-name">Criar conta</div>
+        <div class="field"><label class="field-label">Nome completo *</label>
+          <input id="regName" class="field-input" placeholder="Ex: Maria Souza"></div>
+        <div class="grid-2-mini">
+          <div class="field"><label class="field-label">E-mail *</label>
+            <input id="regEmail" type="email" class="field-input" placeholder="maria@exemplo.com"></div>
+          <div class="field"><label class="field-label">Usuário *</label>
+            <input id="regUsername" class="field-input" placeholder="maria.souza"></div>
+        </div>
+        <div class="grid-2-mini">
+          <div class="field"><label class="field-label">Senha *</label>
+            <input id="regPassword" type="password" class="field-input" placeholder="Mínimo 6 caracteres"></div>
+          <div class="field"><label class="field-label">Confirmar senha *</label>
+            <input id="regPassword2" type="password" class="field-input" placeholder="Repita a senha"></div>
+        </div>
+        <div class="grid-2-mini">
+          <div class="field"><label class="field-label">Cargo *</label>
+            <input id="regCargo" class="field-input" placeholder="Ex: Assistente Administrativo"></div>
+          <div class="field"><label class="field-label">Setor *</label>
+            <input id="regSetor" class="field-input" placeholder="Ex: Protocolo"></div>
+        </div>
+        <div class="field"><label class="field-label">Secretaria *</label>
+          <select id="regSecretaria" class="field-input"><option value="">Selecione...</option>${secOptions}</select></div>
         <div class="reserve-actions">
           <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-          <button class="btn btn-primary" style="flex:1.4" onclick="confirmForgotPassword()">Enviar link</button>
+          <button class="btn btn-primary" style="flex:1.4" onclick="confirmRegister()">Criar conta</button>
         </div>
-      </div>`, { width: 420 });
+      </div>`, { width: 460 });
 }
 
-async function confirmForgotPassword() {
-    const email = document.getElementById('forgotEmail').value.trim();
-    if (!email || !email.includes('@')) {
-        document.getElementById('forgotEmail').classList.add('field-input--invalid');
-        showToast('Informe um e-mail válido.', 'warning');
-        return;
-    }
+async function confirmRegister() {
+    const val = (id) => document.getElementById(id).value.trim();
+    const name = val('regName'), email = val('regEmail'), username = val('regUsername');
+    const p1 = document.getElementById('regPassword').value, p2 = document.getElementById('regPassword2').value;
+    const cargo = val('regCargo'), setor = val('regSetor'), secretaria = document.getElementById('regSecretaria').value;
+    const invalid = (id) => document.getElementById(id).classList.add('field-input--invalid');
+    let bad = false;
+    [['regName', name], ['regEmail', email], ['regUsername', username], ['regCargo', cargo], ['regSetor', setor]]
+        .forEach(([id, v]) => { if (!v) { invalid(id); bad = true; } });
+    if (!secretaria) { invalid('regSecretaria'); bad = true; }
+    if (!p1) invalid('regPassword');
+    if (!p2) invalid('regPassword2');
+    if (!p1 || !p2) bad = true;
+    if (bad) { showToast('Preencha todos os campos.', 'warning'); return; }
+    if (p1 !== p2) { invalid('regPassword'); invalid('regPassword2'); showToast('As senhas não coincidem.', 'warning'); return; }
+    if (p1.length < 6) { invalid('regPassword'); showToast('A senha deve ter pelo menos 6 caracteres.', 'warning'); return; }
+
     const btn = document.querySelector('#overlay-root .reserve-actions .btn-primary');
-    const original = btn.textContent; btn.textContent = 'Enviando...'; btn.disabled = true;
-    await authService.requestPasswordReset(email);
-    // Mensagem sempre igual, exista ou não a conta — não dá pra confirmar
-    // por e-mail se alguém tem cadastro ou não (mesmo cuidado já usado no
-    // "esqueci minha senha" da Central Cataguases e do Compras).
-    closeModal();
-    showToast('Se este e-mail estiver cadastrado, você vai receber um link para definir uma nova senha.', 'success', 8000);
-}
+    const original = btn.textContent; btn.textContent = 'Cadastrando...'; btn.disabled = true;
 
-// Tela dedicada de nova senha, mostrada quando o link do e-mail de
-// recuperação chega de volta ao app (evento PASSWORD_RECOVERY do Supabase
-// Auth) — independe de haver ou não uma sessão "normal" ativa.
-function showResetPasswordView() {
-    document.getElementById('app-root').innerHTML = `
-      <div class="login-wrap">
-        <div class="login-blob login-blob--1"></div>
-        <div class="login-blob login-blob--2"></div>
-        <div class="login-card">
-          <img src="logo.png" alt="Prefeitura de Cataguases" class="login-logo">
-          <div class="login-title brand-wordmark">Numera</div>
-          <div class="login-sub">Defina sua nova senha</div>
-          <form onsubmit="confirmResetPassword(event)" class="login-form">
-            <label class="field-label">Nova senha</label>
-            <input id="resetPassword1" type="password" class="field-input" required autocomplete="new-password" placeholder="Mínimo 6 caracteres">
-            <label class="field-label">Confirmar nova senha</label>
-            <input id="resetPassword2" type="password" class="field-input" required autocomplete="new-password" placeholder="Repita a senha">
-            <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Salvar nova senha</button>
-          </form>
-        </div>
-      </div>`;
-}
-
-async function confirmResetPassword(e) {
-    e.preventDefault();
-    const p1 = document.getElementById('resetPassword1').value;
-    const p2 = document.getElementById('resetPassword2').value;
-    if (!p1 || p1.length < 6) {
-        showToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
-        return;
-    }
-    if (p1 !== p2) {
-        showToast('As senhas não coincidem.', 'warning');
-        return;
-    }
-    const btn = e.target.querySelector('button[type="submit"]');
-    const original = btn.textContent; btn.textContent = 'Salvando...'; btn.disabled = true;
-    const result = await authService.updatePassword(p1);
+    // Já nasce com os documentos padrão da secretaria escolhida (editável
+    // depois pelo admin em Configurações → Usuários).
+    const allowedDocuments = state.secretariaPermissions[secretaria] || [];
+    const result = await authService.signUp({ name, email, username, password: p1, cargo, setor, secretaria, allowedDocuments });
     if (result.error) {
-        showToast('Não foi possível definir a nova senha: ' + result.error, 'error', 0);
+        showToast('Erro no cadastro: ' + result.error, 'error', 0);
         btn.textContent = original; btn.disabled = false;
-        return;
-    }
-    showToast('Senha definida com sucesso!', 'success');
-    // A troca de senha já deixa uma sessão válida ativa (o link de
-    // recuperação autentica antes de disparar PASSWORD_RECOVERY) — reusa o
-    // fluxo normal de login para carregar o cadastro em `users` (e barrar
-    // se ainda não aprovado), em vez de duplicar essa checagem aqui.
-    inPasswordRecovery = false;
-    await checkAutoLogin();
-}
-
-
-// ============================================================
-// Feedback (central no Hub)
-// ============================================================
-// Mesmo botão/ícone dos outros apps. O feedback NÃO fica no Numera: vai para
-// a tabela central do Hub (app = numera), que o Numera alcança pelo token da
-// própria sessão. Aqui só há enviar e "Meus envios" (histórico + status).
-const FEEDBACK_API = `${URL_CENTRAL_CATAGUASES}/api/feedback`;
-const FEEDBACK_STATUS = { novo: 'Recebido', lido: 'Em análise', resolvido: 'Resolvido', nao_possivel: 'Não possível' };
-let feedbackArquivos = [];
-
-async function feedbackToken() {
-    const { data } = await supabase.auth.getSession();
-    return data?.session?.access_token || null;
-}
-
-function openFeedbackModal(aba = 'enviar') {
-    if (state.demoMode || !state.currentUser) { showToast('Disponível só com login real.', 'info'); return; }
-    feedbackArquivos = [];
-    const tab = (id, label) => `<button type="button" class="fb-tab ${aba === id ? 'fb-tab--on' : ''}" onclick="openFeedbackModal('${id}')">${label}</button>`;
-    const corpo = aba === 'meus'
-        ? '<div id="fbLista" class="fb-lista">Carregando…</div>'
-        : `<div class="field"><label class="field-label">Tipo</label>
-             <select id="fbTipo" class="field-input"><option value="sugestao">Sugestão</option><option value="suporte">Suporte</option></select></div>
-           <div class="field"><label class="field-label">Mensagem</label>
-             <textarea id="fbMsg" class="field-input" rows="4" maxlength="4000" placeholder="Conte o que aconteceu ou o que você gostaria de ver..."></textarea></div>
-           <div class="field"><label class="field-label" for="fbArq" style="cursor:pointer;color:var(--blue)">${icon('plus', 13, 2)} Anexar screenshot</label>
-             <input id="fbArq" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,text/plain" style="display:none" onchange="feedbackEscolheuArquivos(this)">
-             <div id="fbArqLista" style="font-size:12px;color:#64748b"></div></div>
-           <div id="fbErro" role="alert" style="display:none;color:#b91c1c;font-size:12px;margin-bottom:8px"></div>
-           <div class="reserve-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-             <button id="fbEnviar" class="btn btn-primary" style="flex:1.4" onclick="enviarFeedback()">Enviar</button></div>`;
-    openModal(`<div class="reserve-modal"><div class="reserve-name fb-drag" title="Arraste para mover">Enviar feedback</div>
-        <div class="fb-tabs">${tab('enviar', 'Enviar')}${tab('meus', 'Meus envios')}</div>${corpo}</div>`, { width: 440, floating: true });
-    if (aba === 'meus') carregarMeusFeedbacks();
-}
-
-function feedbackEscolheuArquivos(input) {
-    const novos = Array.from(input.files || []); input.value = '';
-    const ok = novos.filter(f => f.size <= 3 * 1024 * 1024);
-    const avisos = [];
-    if (ok.length < novos.length) avisos.push('Anexos de até 3MB.');
-    feedbackArquivos = [...feedbackArquivos, ...ok].slice(0, 5);
-    if (feedbackArquivos.length === 5 && ok.length + 0 > 0 && novos.length > ok.length) avisos.push('Máximo de 5.');
-    document.getElementById('fbArqLista').innerHTML = feedbackArquivos.map(f => esc(f.name)).join('<br>') + (avisos.length ? `<br><span style="color:#b91c1c">${avisos.join(' ')}</span>` : '');
-}
-
-async function enviarFeedback() {
-    const msg = document.getElementById('fbMsg').value.trim();
-    const erro = document.getElementById('fbErro');
-    const mostrar = (t) => { erro.textContent = t; erro.style.display = 'block'; };
-    if (msg.length < 5) { mostrar('Escreva um pouco mais.'); return; }
-    const btn = document.getElementById('fbEnviar'); btn.disabled = true; btn.textContent = 'Enviando…';
-    try {
-        const token = await feedbackToken();
-        if (!token) throw new Error('Sessão expirada — entre novamente.');
-        const fd = new FormData();
-        fd.append('tipo', document.getElementById('fbTipo').value);
-        fd.append('mensagem', msg);
-        fd.append('pagina', state.view || '');
-        feedbackArquivos.forEach(f => fd.append('anexos', f));
-        const res = await fetch(FEEDBACK_API, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd });
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(json.erro || 'Não foi possível enviar.');
+    } else {
         closeModal();
-        showToast('Recebido, obrigado! Sua mensagem chega direto a quem cuida da plataforma.', 'success', 5000);
-    } catch (e) {
-        mostrar(e.message || 'Não foi possível enviar.');
-        btn.disabled = false; btn.textContent = 'Enviar';
+        showToast(result.message || 'Cadastro realizado! Aguarde aprovação do administrador.', 'success', 6000);
+        const loginField = document.getElementById('loginUsername');
+        if (loginField) loginField.value = email;
     }
 }
-
-async function carregarMeusFeedbacks() {
-    const el = document.getElementById('fbLista');
-    try {
-        const token = await feedbackToken();
-        const res = await fetch(FEEDBACK_API, { headers: { Authorization: `Bearer ${token}` } });
-        const json = await res.json();
-        if (!res.ok) throw new Error();
-        el.innerHTML = (json.itens || []).length ? json.itens.map(i => `
-            <div class="fb-item"><div class="fb-item-head"><span>${new Date(i.criado_em).toLocaleDateString('pt-BR')} · ${i.tipo === 'suporte' ? 'Suporte' : 'Sugestão'}</span>
-            <span class="fb-chip">${FEEDBACK_STATUS[i.status] || i.status}</span></div><div class="fb-item-msg">${esc(i.mensagem)}</div></div>`).join('')
-            : 'Você ainda não enviou nenhum feedback.';
-    } catch (e) { el.textContent = 'Não foi possível carregar seus envios.'; }
-}
-
-// Avisa quem mandou feedback quando o status mudou (em análise, resolvido,
-// não possível). O Numera é outro projeto Supabase, então a Central não
-// consegue gravar aviso aqui: o app consulta "Meus envios" ao abrir (e ao
-// voltar para a aba) e compara com o último status que a pessoa já viu.
-const FEEDBACK_VISTO_CHAVE = 'feedbackStatusVisto';
-let feedbackChecando = false;
-async function avisarMudancasFeedback() {
-    if (state.demoMode || !state.currentUser || feedbackChecando) return;
-    feedbackChecando = true;
-    try {
-        const token = await feedbackToken();
-        if (!token) return;
-        const res = await fetch(FEEDBACK_API, { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) return;
-        const itens = (await res.json()).itens || [];
-        const chave = `${FEEDBACK_VISTO_CHAVE}:${state.currentUser.id}`;
-        let visto = {};
-        try { visto = JSON.parse(localStorage.getItem(chave) || '{}'); } catch (e) { visto = {}; }
-        const mudados = itens.filter(i => i.status !== 'novo' && (visto[i.id] || 'novo') !== i.status);
-        const novoVisto = { ...visto };
-        itens.forEach(i => { novoVisto[i.id] = i.status; });
-        try { localStorage.setItem(chave, JSON.stringify(novoVisto)); } catch (e) { /* sem armazenamento: avisa de novo na próxima */ }
-        if (mudados.length) {
-            const um = mudados.length === 1;
-            const msg = um
-                ? `Seu feedback "${String(mudados[0].mensagem).slice(0, 50)}" agora está: ${FEEDBACK_STATUS[mudados[0].status] || mudados[0].status}.`
-                : `${mudados.length} dos seus feedbacks tiveram novidades.`;
-            showToast(msg, 'info', 0, { label: 'Ver', onClick: () => openFeedbackModal('meus') });
-        }
-    } catch (e) { /* aviso é cortesia: nunca atrapalha o app */ }
-    finally { feedbackChecando = false; }
-}
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') avisarMudancasFeedback(); });
 
 // ============================================================
 // Shell (sidebar + main) e navegação
@@ -1501,8 +1114,7 @@ function applyZoom() {
 }
 
 function pendingUsersCount() {
-    // Acesso é aprovado só no Hub; não há mais fila de aprovação dentro do Numera.
-    return 0;
+    return state.currentUser?.role === 'admin' ? state.users.filter(u => !u.approved).length : 0;
 }
 
 function navItemsFor(user) {
@@ -1517,7 +1129,6 @@ function navItemsFor(user) {
 }
 
 function render() {
-    if (inPasswordRecovery) return;
     if (!state.currentUser) { showLoginView(); return; }
     const u = state.currentUser;
     const collapsed = state.collapsed;
@@ -1540,33 +1151,24 @@ function render() {
 
     document.getElementById('app-root').innerHTML = `
       ${demoBanner()}
-      ${plataformaConsolidadaBanner()}
+      <button class="tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela">?</button>
       <div class="app-shell">
-        <header class="topbar">
-          <div class="topbar-left">
-            <div class="topbar-brand" onclick="setView('inicio')" role="button" tabindex="0" title="Início do Numera" aria-label="Numera, início" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();setView('inicio');}">
-              <img src="logo.png" alt="" class="topbar-logo">
-            </div>
-            <a class="topbar-voltar" href="${URL_CENTRAL_CATAGUASES}" aria-label="Voltar para a Central">${icon('arrowLeft', 16, 2)}<span>Central</span></a>
-            <span class="topbar-sep" aria-hidden="true"></span>
-            <p class="topbar-modulo"><span class="topbar-ponto" aria-hidden="true"></span><span class="topbar-modulo-nome">Numera</span></p>
-          </div>
-          <nav class="topbar-nav" aria-label="Avisos e conta">
-            <button class="topbar-btn" onclick="openFeedbackModal()" title="Enviar feedback" aria-label="Enviar feedback">${icon('megaphone', 19, 1.8)}</button>
-            <button class="topbar-btn tutorial-help-btn" onclick="startTutorial()" title="Ajuda — tutorial desta tela" aria-label="Ajuda">${icon('help', 19, 1.8)}</button>
-            <button class="topbar-btn topbar-tema" onclick="alternarTema()" role="switch" aria-checked="${temaEscuro()}" aria-label="Modo escuro" title="${temaEscuro() ? 'Mudar para o modo claro' : 'Mudar para o modo escuro'}">${icon(temaEscuro() ? 'sun' : 'moon', 17, 1.8)}</button>
-            <span class="topbar-sep" aria-hidden="true"></span>
-            <button class="topbar-user" onclick="abrirAparencia()" title="Minha conta · Aparência — ${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}">${esc(u.name)}</button>
-            <button class="topbar-sair" onclick="handleLogout()">Sair</button>
-          </nav>
-        </header>
         <div class="blob blob--1"></div><div class="blob blob--2"></div><div class="blob blob--3"></div>
 
         <aside class="sidebar ${collapsed ? 'sidebar--collapsed' : ''}" style="width:${asideW}px">
+          <div class="brand ${collapsed ? 'brand--center' : ''}">
+            <img src="logo.png" alt="Prefeitura" class="brand-logo">
+            ${collapsed ? '' : `<div class="brand-text"><div class="brand-name brand-wordmark">Numera</div><div class="brand-sub">${esc(institutionName())}</div></div>`}
+          </div>
           <button class="collapse-btn ${collapsed ? 'collapse-btn--center' : ''}" onclick="toggleCollapse()" title="Recolher menu">
             <span class="collapse-chevron ${collapsed ? 'collapse-chevron--flip' : ''}">${icon('chevron', 18, 2)}</span>${collapsed ? '' : '<span>Recolher</span>'}
           </button>
           <nav class="nav">${nav}</nav>
+          <div class="user-chip ${collapsed ? 'user-chip--center' : ''}" title="${esc(u.name)}">
+            <div class="avatar">${esc(initials(u.name))}</div>
+            ${collapsed ? '' : `<div class="user-meta"><div class="user-name">${esc(u.name)}</div><div class="user-role">${esc(u.secretaria || PERMISSION_LEVELS[u.role]?.label || '')}</div></div>
+            <button class="logout-btn" onclick="handleLogout()" title="Sair">${icon('logout', 16, 2)}</button>`}
+          </div>
         </aside>
 
         <main class="main" style="left:${asideW}px">
@@ -1693,7 +1295,7 @@ const TUTORIAL_STEPS = {
     ],
     'config:usuarios': [
         { id: 'cfgusu-add', selector: '.adm-add', title: 'Buscar ou criar usuário', text: 'Encontre um usuário existente ou crie uma conta nova diretamente por aqui.' },
-        { id: 'cfgusu-aprovar', selector: '.adm-row', title: 'Acesso pelo Hub', text: 'Quem pode entrar é definido na Central Cataguases; aqui você ajusta perfil e documentos.' }
+        { id: 'cfgusu-aprovar', selector: '.adm-row', title: 'Aprovar cadastros', text: 'Quem se cadastra sozinho fica pendente até um admin aprovar — o selo de aviso aparece até isso acontecer.' }
     ],
     'config:logs': [
         { id: 'cfglogs-filtro', selector: '.logs-filter', title: 'Filtrar por tipo de ação', text: 'Reserva, edição, anulação, cadastro ou sistema — filtre a auditoria pelo que você procura.' },
@@ -1891,15 +1493,8 @@ function renderInicio() {
     const byMonth = Array(month + 1).fill(0);
     noAno.forEach(r => { const m = new Date(r.timestamp).getMonth(); if (m <= month) byMonth[m]++; });
     const maxM = Math.max(1, ...byMonth);
-    // Achado real (diretora, via feedback): "tem barra com o mesmo tamanho
-    // e números diferentes". Causa: o piso de 28% + faixa de só 72 pontos
-    // (28% a 100%) comprimia a diferença visual entre valores baixos num
-    // mês de pico alto — ex.: 3 e 5 num ano com um mês de 40 viravam
-    // 28+5.4=33.4% e 28+9=37%, quase indistinguíveis a olho nu mesmo sendo
-    // 66% maior um que o outro. Trocado para piso mínimo (só pra um mês
-    // zerado não sumir de vez) + quase toda a faixa 0-100% de verdade.
     const bars = byMonth.map((v, i) => {
-        const h = v === 0 ? 2 : 4 + (v / maxM) * 96;
+        const h = (28 + (v / maxM) * 72);
         const fill = i === month ? 'linear-gradient(180deg,#1a86ff,#0071e3)' : 'linear-gradient(180deg,#8fc3ff,#4a9dff)';
         return `<div class="bar-col"><div class="bar-val">${v}</div><div class="bar" style="height:${h}%;background:${fill}"></div><div class="bar-label">${monthsPt[i]}</div></div>`;
     }).join('');
@@ -1982,18 +1577,17 @@ function getCardOrder() {
 }
 function hasCustomOrder() { return getCardOrder().length > 0; }
 
-// Salva a ordem no banco via RPC (salvar_ordem_cards, identidade
-// auth.uid() — PR3, não mais update direto na tabela). Atualiza o estado
-// local na hora e, se a chamada falhar, cai no localStorage.
+// Salva a ordem no banco (users.card_order). Atualiza o estado local na hora
+// e, se o banco falhar (coluna ausente antes da 0007), cai no localStorage.
 async function saveCardOrder(ids) {
     if (state.currentUser) state.currentUser.cardOrder = ids;
     try {
         if (!state.currentUser) throw new Error('sem usuário');
-        const { error } = await supabase.rpc('salvar_ordem_cards', { p_ids: ids });
+        const { error } = await supabase.from('users').update({ card_order: ids }).eq('id', state.currentUser.id);
         if (error) throw error;
         localStorage.removeItem(cardOrderKey()); // fonte agora é o banco
     } catch (e) {
-        console.warn('Ordem dos cards salva localmente:', e.message);
+        console.warn('Ordem dos cards salva localmente (aplique a migração 0007):', e.message);
         localStorage.setItem(cardOrderKey(), JSON.stringify(ids));
     }
 }
@@ -2022,17 +1616,23 @@ function orderedGerarDocs() {
 // Reordenação por ponteiro (mouse + toque) iniciada por uma alça dedicada,
 // para funcionar bem no celular sem conflitar com a rolagem.
 let _drag = null;
+// pointermove/pointerup/pointercancel vão em document, não no botão-alça: o
+// próprio cardHandleMove reposiciona o card (e a alça dentro dele) no DOM via
+// insertBefore, e mover um elemento que detém pointer capture faz o navegador
+// liberar essa captura — o pointerup de soltar então vai para o que estiver
+// embaixo do cursor, não mais para a alça, e cardHandleUp() nunca roda (bug:
+// o card visualmente se move durante o arrasto, mas nada é salvo e o estado
+// de arrasto fica preso). document nunca se move, então sempre recebe.
 function cardHandleDown(e, id) {
     e.preventDefault(); e.stopPropagation();
     const grid = document.getElementById('docGrid');
     const card = grid && grid.querySelector(`.doc-card[data-docid="${id}"]`);
     if (!card) return;
-    _drag = { card, handle: e.currentTarget };
+    _drag = { card };
     card.classList.add('dragging');
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { }
-    e.currentTarget.addEventListener('pointermove', cardHandleMove);
-    e.currentTarget.addEventListener('pointerup', cardHandleUp);
-    e.currentTarget.addEventListener('pointercancel', cardHandleUp);
+    document.addEventListener('pointermove', cardHandleMove);
+    document.addEventListener('pointerup', cardHandleUp);
+    document.addEventListener('pointercancel', cardHandleUp);
 }
 function cardHandleMove(e) {
     if (!_drag) return;
@@ -2048,8 +1648,9 @@ function cardHandleMove(e) {
     grid.insertBefore(_drag.card, before ? target : target.nextSibling);
 }
 function cardHandleUp() {
-    const h = _drag && _drag.handle;
-    if (h) { h.removeEventListener('pointermove', cardHandleMove); h.removeEventListener('pointerup', cardHandleUp); h.removeEventListener('pointercancel', cardHandleUp); }
+    document.removeEventListener('pointermove', cardHandleMove);
+    document.removeEventListener('pointerup', cardHandleUp);
+    document.removeEventListener('pointercancel', cardHandleUp);
     if (!_drag) return;
     _drag.card.classList.remove('dragging');
     _drag = null;
@@ -2919,18 +2520,15 @@ async function applyDefaultsToUsers(sec) {
     const res = await showConfirmDialog({ title: 'Aplicar padrão', variant: 'danger', confirmText: 'Aplicar', message: `Substituir permissões de ${targets.length} usuário(s) de "${sec}" pelos ${selected.length} documento(s) marcados agora?` });
     if (!res.confirmed) return;
     try {
-        // RPC admin_aplicar_padrao_secretaria (PR1) salva o padrão da
-        // secretaria e aplica a todos os usuários dela numa transação só, e
-        // já grava o próprio log — antes disso, este trecho escrevia direto
-        // em app_config/users (2 updates diretos, um em loop), o que para de
-        // funcionar assim que a RLS fechar de verdade (PR5, RLS só libera
-        // escrita de "users" por RPC). Mesma razão de marcar_login_origem/
-        // salvar_ordem_cards terem virado RPC no PR3.
-        const { data: count, error } = await supabase.rpc('admin_aplicar_padrao_secretaria', { p_secretaria: sec, p_docs: selected });
-        if (error) throw error;
-        state.secretariaPermissions = { ...state.secretariaPermissions, [sec]: selected };
-        targets.forEach(u => { u.allowedDocuments = selected; });
-        showToast(`Padrão salvo e aplicado a ${count} usuário(s).`, 'success');
+        // Salva o que está marcado como padrão da secretaria também — senão o
+        // padrão salvo ficaria diferente do que acabou de valer pros usuários.
+        const perms = { ...state.secretariaPermissions, [sec]: selected };
+        const { error: permErr } = await supabase.from('app_config').upsert({ key: 'secretariaPermissions', value: perms });
+        if (permErr) throw permErr;
+        state.secretariaPermissions = perms;
+        for (const u of targets) { await supabase.from('users').update({ allowed_documents: selected }).eq('id', u.id); u.allowedDocuments = selected; }
+        showToast(`Padrão salvo e aplicado a ${targets.length} usuário(s).`, 'success');
+        addLog('cadastro', `Aplicou padrão de ${sec}`, `${targets.length} usuário(s)`);
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 
@@ -2947,25 +2545,11 @@ async function saveCounter(docId, sec, inputId) {
 }
 
 // ---- Admin: Usuários ----
-// PR3: criar conta nova saiu do painel do Numera — precisa da Admin API
-// (auth.admin.createUser), que só o Hub tem acesso via service_role
-// (decisão do plano, P4: "criar usuário, redefinir senha... centralizadas
-// no Hub"). O botão abaixo só orienta pra lá; o restante (aprovar, editar,
-// desativar/reativar) continua aqui, agora via RPC (admin_*, PR1) em vez
-// de escrita direta na tabela.
 function renderUsersPanel() {
     return `<div class="card">
       <div class="adm-add"><div class="search-box" style="flex:1;">${icon('search', 15, 2)}<input id="userSearch" oninput="renderUsersList()" placeholder="Buscar nome, login ou secretaria"></div>
-        <button class="btn btn-primary" onclick="orientarCriarPeloHub()">Novo usuário</button></div>
+        <button class="btn btn-primary" onclick="openUserModal()">Novo usuário</button></div>
       <div id="usersList">${renderUsersListInner()}</div></div>`;
-}
-async function orientarCriarPeloHub() {
-    const res = await showConfirmDialog({
-        title: 'Criar novo usuário',
-        confirmText: 'Ir para a Central Cataguases',
-        message: 'Contas novas do Numera agora são criadas pela Central Cataguases (Hub) — em Configurações → Usuários e acessos, dá pra conceder acesso ao Numera mesmo para quem nunca teve conta em nenhum módulo. Abrir agora?'
-    });
-    if (res.confirmed) window.open(URL_CENTRAL_CATAGUASES, '_blank', 'noreferrer');
 }
 function renderUsersList() { const c = document.getElementById('usersList'); if (c) c.innerHTML = renderUsersListInner(); }
 function renderUsersListInner() {
@@ -2974,37 +2558,29 @@ function renderUsersListInner() {
     users = [...users].sort((a, b) => (!a.approved !== !b.approved) ? (a.approved ? 1 : -1) : (a.name || '').localeCompare(b.name || '', 'pt-BR'));
     if (!users.length) return '<div class="empty-mini">Nenhum usuário.</div>';
     const roleChip = { admin: 'rc--admin', user_full: 'rc--full', user_restricted: 'rc--restricted', user_readonly: 'rc--readonly' };
-    return users.map(u => {
-        const inativo = u.ativo === false;
-        return `<div class="adm-row ${u.approved ? '' : 'adm-row--pending'} ${inativo ? 'adm-row--pending' : ''}">
+    return users.map(u => `<div class="adm-row ${u.approved ? '' : 'adm-row--pending'}">
         <div class="avatar avatar--sm">${esc(initials(u.name))}</div>
-        <div class="adm-info"><div class="adm-name">${esc(u.name)} ${u.id === state.currentUser.id ? '<span class="meta-chip">Você</span>' : ''} ${u.approved ? '' : '<span class="meta-chip meta-chip--warn">Pendente</span>'} ${inativo ? '<span class="meta-chip meta-chip--warn">Inativo</span>' : ''}</div>
+        <div class="adm-info"><div class="adm-name">${esc(u.name)} ${u.id === state.currentUser.id ? '<span class="meta-chip">Você</span>' : ''} ${u.approved ? '' : '<span class="meta-chip meta-chip--warn">Pendente</span>'}</div>
           <div class="adm-chips"><span class="role-chip ${roleChip[u.role] || ''}">${esc(PERMISSION_LEVELS[u.role]?.label || u.role)}</span>
             ${u.secretaria ? `<span class="meta-chip">${esc(u.secretaria)}</span>` : '<span class="meta-chip meta-chip--warn">sem secretaria</span>'}
             <span class="meta-chip">@${esc(u.username)}</span></div></div>
         <div class="row-actions">
-          
+          ${u.approved ? '' : `<button class="icon-btn-sm approve" title="Aprovar" onclick="approveUser('${u.id}')">${icon('check', 15, 2)}</button>`}
           ${u.id !== state.currentUser.id ? `<button class="icon-btn-sm" title="Editar" onclick="openUserModal('${u.id}')">${icon('edit', 15, 2)}</button>
-          ${inativo
-            ? `<button class="icon-btn-sm approve" title="Reativar" onclick="reativarUsuario('${u.id}')">${icon('check', 15, 2)}</button>`
-            : `<button class="icon-btn-sm danger" title="Desativar" onclick="desativarUsuario('${u.id}')">${icon('trash', 15, 2)}</button>`}` : ''}
-        </div></div>`;
-    }).join('');
+          <button class="icon-btn-sm danger" title="Excluir" onclick="deleteUser('${u.id}')">${icon('trash', 15, 2)}</button>` : ''}
+        </div></div>`).join('');
 }
 
-// Edição de um usuário já existente — a senha não aparece mais aqui
-// (redefinir senha também é centralizado no Hub; "Esqueci minha senha"
-// cobre o caso da própria pessoa).
 function openUserModal(userId) {
-    const u = state.users.find(x => x.id === userId);
-    if (!u) return;
-    state.editingUserId = userId;
+    const editing = !!userId;
+    const u = editing ? state.users.find(x => x.id === userId) : { name: '', cargo: '', setor: '', secretaria: '', username: '', password: '', role: 'user_restricted', allowedDocuments: [] };
+    state.editingUserId = userId || null;
     const secOpts = ['<option value="">Selecione...</option>', ...state.secretariats.map(s => `<option value="${esc(s)}" ${u.secretaria === s ? 'selected' : ''}>${esc(s)}</option>`)].join('');
     const roleOpts = Object.entries(PERMISSION_LEVELS).map(([k, v]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('');
     const docChecks = [...state.documents].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(d =>
         `<label class="check-row"><input type="checkbox" class="ucheck" value="${d.id}" ${u.allowedDocuments.includes(d.id) ? 'checked' : ''}> <span>${esc(d.name)}</span></label>`).join('');
     openModal(`
-      <div class="modal-title">Editar usuário</div>
+      <div class="modal-title">${editing ? 'Editar' : 'Novo'} usuário</div>
       <div class="field"><label class="field-label">Nome completo *</label><input id="ufName" class="field-input" value="${esc(u.name)}"></div>
       <div class="grid-2-mini">
         <div class="field"><label class="field-label">Cargo</label><input id="ufCargo" class="field-input" value="${esc(u.cargo || '')}"></div>
@@ -3012,7 +2588,10 @@ function openUserModal(userId) {
       </div>
       <div class="field"><label class="field-label">Secretaria *</label><select id="ufSec" class="field-input" onchange="onUserSecChange()">${secOpts}</select>
         <div class="hint" id="ufSecHint" style="display:none;"></div></div>
-      <div class="field"><label class="field-label">Usuário (login) *</label><input id="ufUser" class="field-input" value="${esc(u.username)}"></div>
+      <div class="grid-2-mini">
+        <div class="field"><label class="field-label">Usuário (login) *</label><input id="ufUser" class="field-input" value="${esc(u.username)}"></div>
+        <div class="field"><label class="field-label">Senha *</label><input id="ufPass" type="text" class="field-input" value="${esc(u.password || '')}"></div>
+      </div>
       <div class="field"><label class="field-label">Nível de permissão *</label><select id="ufRole" class="field-input" onchange="onUserRoleChange()">${roleOpts}</select></div>
       <div id="ufDocsSection" class="field" style="${(u.role === 'user_restricted' || u.role === 'user_readonly') ? '' : 'display:none;'}">
         <label class="field-label">Documentos permitidos <button type="button" class="link-btn" onclick="applyUserDefaults()">restaurar padrão da secretaria</button></label>
@@ -3039,9 +2618,6 @@ function applyUserDefaults(fromButton = true) {
     if (hint) { hint.textContent = `Padrão da secretaria aplicado (${defaults.length} doc).`; hint.style.display = 'block'; }
 }
 
-// Salva a edição via admin_atualizar_usuario (PR1) — a RPC já valida
-// permissão (eh_admin()) e a proteção do último admin, e já grava o log
-// com a identidade real de quem chamou.
 async function saveUser() {
     const role = document.getElementById('ufRole').value;
     let allowed = [];
@@ -3049,53 +2625,59 @@ async function saveUser() {
         allowed = Array.from(document.querySelectorAll('.ucheck:checked')).map(cb => cb.value);
         if (!allowed.length) return showToast('Selecione ao menos um documento.', 'warning');
     }
-    const name = document.getElementById('ufName').value.trim();
-    const username = document.getElementById('ufUser').value.trim();
-    if (!name || !username) return showToast('Preencha nome e login.', 'warning');
+    const payload = {
+        name: document.getElementById('ufName').value.trim(),
+        cargo: document.getElementById('ufCargo').value.trim(),
+        setor: document.getElementById('ufSetor').value.trim(),
+        secretaria: document.getElementById('ufSec').value,
+        username: document.getElementById('ufUser').value.trim(),
+        password: document.getElementById('ufPass').value,
+        role, allowed_documents: allowed
+    };
+    if (!payload.name || !payload.username || !payload.password) return showToast('Preencha nome, login e senha.', 'warning');
     try {
-        const { data, error } = await supabase.rpc('admin_atualizar_usuario', {
-            p_user_id: state.editingUserId,
-            p_name: name,
-            p_cargo: document.getElementById('ufCargo').value.trim(),
-            p_setor: document.getElementById('ufSetor').value.trim(),
-            p_secretaria: document.getElementById('ufSec').value,
-            p_username: username,
-            p_role: role,
-            p_allowed_documents: allowed
-        });
-        if (error) throw error;
-        Object.assign(state.users.find(u => u.id === state.editingUserId), mapUserRow(data));
+        if (state.editingUserId) {
+            const { error } = await supabase.from('users').update(payload).eq('id', state.editingUserId);
+            if (error) throw error;
+            Object.assign(state.users.find(u => u.id === state.editingUserId), { ...payload, allowedDocuments: allowed });
+            addLog('cadastro', 'Editou usuário', payload.name);
+        } else {
+            const { data, error } = await supabase.from('users').insert([{ ...payload, approved: false }]).select().single();
+            if (error) throw error;
+            state.users.push({ id: data.id, name: data.name, username: data.username, cargo: data.cargo, setor: data.setor, secretaria: data.secretaria, role: data.role, allowedDocuments: data.allowed_documents || [], approved: data.approved, password: data.password });
+            addLog('cadastro', 'Criou usuário', payload.name);
+        }
         closeModal(); render();
         showToast('Usuário salvo.', 'success');
     } catch (err) { showToast('Erro ao salvar: ' + err.message, 'error', 0); }
 }
 
-// Desativar/reativar (admin_desativar_usuario/admin_reativar_usuario,
-// PR1) — soft, nunca apaga a linha: as reservas da pessoa continuam
-// atribuídas a ela no histórico, e reativar não exige recriar a conta.
-async function desativarUsuario(id) {
+async function approveUser(id) {
     const u = state.users.find(x => x.id === id); if (!u) return;
-    const res = await showConfirmDialog({ title: 'Desativar usuário', variant: 'danger', confirmText: 'Desativar', message: `Desativar ${u.name}? A pessoa não conseguirá mais entrar, mas o histórico de reservas permanece.` });
+    const res = await showConfirmDialog({ title: 'Aprovar usuário', confirmText: 'Aprovar', message: `Aprovar ${u.name}? Terá acesso imediato.` });
     if (!res.confirmed) return;
     try {
-        const { data, error } = await supabase.rpc('admin_desativar_usuario', { p_user_id: id });
+        const updates = { approved: true };
+        const hasCustom = Array.isArray(u.allowedDocuments) && u.allowedDocuments.length > 0;
+        const defaults = state.secretariaPermissions[u.secretaria] || [];
+        if (!hasCustom && defaults.length) { updates.allowed_documents = defaults; u.allowedDocuments = defaults; }
+        const { error } = await supabase.from('users').update(updates).eq('id', id);
         if (error) throw error;
-        Object.assign(u, mapUserRow(data));
-        render();
-        showToast('Usuário desativado.', 'success');
+        u.approved = true; render();
+        addLog('cadastro', 'Aprovou usuário', u.name);
+        showToast('Usuário aprovado.', 'success');
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 
-async function reativarUsuario(id) {
+async function deleteUser(id) {
     const u = state.users.find(x => x.id === id); if (!u) return;
-    const res = await showConfirmDialog({ title: 'Reativar usuário', confirmText: 'Reativar', message: `Reativar ${u.name}? A pessoa volta a conseguir entrar.` });
+    const res = await showConfirmDialog({ title: 'Excluir usuário', variant: 'danger', confirmText: 'Excluir', message: `Excluir ${u.name}? As reservas dele permanecem no histórico.` });
     if (!res.confirmed) return;
     try {
-        const { data, error } = await supabase.rpc('admin_reativar_usuario', { p_user_id: id });
+        const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) throw error;
-        Object.assign(u, mapUserRow(data));
-        render();
-        showToast('Usuário reativado.', 'success');
+        state.users = state.users.filter(x => x.id !== id); render();
+        addLog('cadastro', 'Excluiu usuário', u.name);
     } catch (err) { showToast('Erro: ' + err.message, 'error'); }
 }
 
