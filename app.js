@@ -2022,17 +2022,23 @@ function orderedGerarDocs() {
 // Reordenação por ponteiro (mouse + toque) iniciada por uma alça dedicada,
 // para funcionar bem no celular sem conflitar com a rolagem.
 let _drag = null;
+// pointermove/pointerup/pointercancel vão em document, não no botão-alça: o
+// próprio cardHandleMove reposiciona o card (e a alça dentro dele) no DOM via
+// insertBefore, e mover um elemento que detém pointer capture faz o navegador
+// liberar essa captura — o pointerup de soltar então vai para o que estiver
+// embaixo do cursor, não mais para a alça, e cardHandleUp() nunca roda (bug:
+// o card visualmente se move durante o arrasto, mas nada é salvo e o estado
+// de arrasto fica preso). document nunca se move, então sempre recebe.
 function cardHandleDown(e, id) {
     e.preventDefault(); e.stopPropagation();
     const grid = document.getElementById('docGrid');
     const card = grid && grid.querySelector(`.doc-card[data-docid="${id}"]`);
     if (!card) return;
-    _drag = { card, handle: e.currentTarget };
+    _drag = { card };
     card.classList.add('dragging');
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { }
-    e.currentTarget.addEventListener('pointermove', cardHandleMove);
-    e.currentTarget.addEventListener('pointerup', cardHandleUp);
-    e.currentTarget.addEventListener('pointercancel', cardHandleUp);
+    document.addEventListener('pointermove', cardHandleMove);
+    document.addEventListener('pointerup', cardHandleUp);
+    document.addEventListener('pointercancel', cardHandleUp);
 }
 function cardHandleMove(e) {
     if (!_drag) return;
@@ -2048,8 +2054,9 @@ function cardHandleMove(e) {
     grid.insertBefore(_drag.card, before ? target : target.nextSibling);
 }
 function cardHandleUp() {
-    const h = _drag && _drag.handle;
-    if (h) { h.removeEventListener('pointermove', cardHandleMove); h.removeEventListener('pointerup', cardHandleUp); h.removeEventListener('pointercancel', cardHandleUp); }
+    document.removeEventListener('pointermove', cardHandleMove);
+    document.removeEventListener('pointerup', cardHandleUp);
+    document.removeEventListener('pointercancel', cardHandleUp);
     if (!_drag) return;
     _drag.card.classList.remove('dragging');
     _drag = null;
